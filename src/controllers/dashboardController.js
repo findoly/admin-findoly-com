@@ -8,6 +8,7 @@ async function index(req, res, next) {
     res.render('dashboard/index', {
       title: 'Dashboard',
       dashboard,
+      showNewBookings: req.query.showNew === '1' || req.query.section === 'new-bookings',
       humanize,
       formatDate
     });

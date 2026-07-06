@@ -27,6 +27,8 @@ async function getDashboard() {
   const openFollowUps = followUps.filter((item) => item.status === 'open');
   const revenue = invoices.filter((invoice) => invoice.status === 'paid').reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
 
+  const newBookingEnquiries = enquiries.filter((enquiry) => enquiry.status === 'new').slice(0, 12);
+
   return {
     counts: {
       enquiries: enquiries.length,
@@ -40,6 +42,7 @@ async function getDashboard() {
       categories: categories.length
     },
     recentEnquiries: enquiries.slice(0, 8),
+    newBookingEnquiries,
     openFollowUps: openFollowUps.slice(0, 8),
     queueCounts,
     byStatus,

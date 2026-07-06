@@ -408,3 +408,7 @@ GET /api/communications/:id
 GET /api/invoices
 GET /api/invoices/:id
 ```
+
+## Simple internal UI skin
+
+The admin UI uses a calm internal-operations skin: neutral navigation, white cards, subtle status accents, and clearer tables with hover rows, compact spacing, status badges, and visible action buttons. Heavy gradients are intentionally avoided because the app is for employees, not customer-facing marketing.

@@ -4,7 +4,7 @@
   <% const queueColor = { new: 'primary', contacted: 'info', assigned: 'warning', completed: 'success', cancelled: 'danger' }; %>
   <% enquiryQueues.forEach((queue) => { const color = queueColor[queue.key] || 'secondary'; %>
     <div class="col-sm-6 col-xl">
-      <div class="card bg-<%= color %> text-white">
+      <div class="card crm-queue-card queue-<%= queue.key %> bg-<%= color %> text-white">
         <div class="card-body">
           <div class="d-flex align-items-start">
             <div>
@@ -12,16 +12,86 @@
               <div class="fw-semibold"><%= queue.label %></div>
               <div class="fs-sm opacity-75"><%= queue.description %></div>
             </div>
-            <div class="ms-auto opacity-75"><i class="<%= queue.icon %> ph-2x"></i></div>
+            <div class="ms-auto crm-queue-icon"><i class="<%= queue.icon %> ph-2x"></i></div>
           </div>
         </div>
         <div class="card-footer border-white border-opacity-10 d-flex justify-content-between align-items-center py-2">
-          <a href="/enquiries/queue/<%= queue.key %>" class="text-white text-decoration-none">View details</a>
+          <% if (queue.key === 'new') { %>
+            <a href="#dashboard_new_bookings" class="text-white text-decoration-none" data-bs-toggle="collapse" data-crm-scroll-target="#new-bookings-section" aria-controls="dashboard_new_bookings">Show table below</a>
+          <% } else { %>
+            <a href="/enquiries/queue/<%= queue.key %>" class="text-white text-decoration-none">View details</a>
+          <% } %>
           <i class="ph-caret-right"></i>
         </div>
       </div>
     </div>
   <% }) %>
+</div>
+
+<div class="card crm-dashboard-panel" id="new-bookings-section">
+  <div class="card-header d-flex align-items-center flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0">New booking table</h5>
+      <div class="text-muted fs-sm">Fresh enquiries that need first action from the team.</div>
+    </div>
+    <span class="badge status-new rounded-pill ms-sm-2"><%= dashboard.queueCounts.new || 0 %> New</span>
+    <div class="ms-sm-auto d-flex gap-2 flex-wrap">
+      <a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create enquiry</a>
+      <a href="/enquiries/queue/new" class="btn btn-light btn-sm"><i class="ph-list-checks me-2"></i>Open full queue</a>
+      <a href="#dashboard_new_bookings" class="btn btn-light btn-sm" data-bs-toggle="collapse" aria-controls="dashboard_new_bookings">Show / hide table</a>
+    </div>
+  </div>
+
+  <div id="dashboard_new_bookings" class="collapse <%= showNewBookings ? 'show' : '' %>">
+    <div class="table-responsive">
+      <table class="table table-hover text-nowrap mb-0 crm-action-table">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Service</th>
+            <th>Source</th>
+            <th>Priority</th>
+            <th>Created</th>
+            <th class="text-center" style="width: 140px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% dashboard.newBookingEnquiries.forEach((enquiry) => { %>
+            <tr>
+              <td>
+                <div class="fw-semibold"><%= enquiry.customer?.name || '-' %></div>
+                <div class="text-muted fs-sm"><%= enquiry.customer?.mobile || '' %></div>
+              </td>
+              <td>
+                <div class="fw-semibold"><%= humanize(enquiry.categorySlug || enquiry.serviceType) %></div>
+                <div class="text-muted fs-sm"><%= humanize(enquiry.formType) %></div>
+              </td>
+              <td>
+                <div><%= enquiry.sourceWebsite || '-' %></div>
+                <div class="text-muted fs-sm"><%= enquiry.source?.channel || '-' %></div>
+              </td>
+              <td><%- include('../partials/statusBadge', { value: enquiry.priority || 'normal', humanize }) %></td>
+              <td><%= formatDate(enquiry.createdAt) %></td>
+              <td class="text-center">
+                <div class="btn-group btn-group-sm">
+                  <a href="/enquiries/<%= enquiry.id %>" class="btn btn-light"><i class="ph-eye me-1"></i>View</a>
+                  <a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-light"><i class="ph-pencil me-1"></i>Edit</a>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (!dashboard.newBookingEnquiries.length) { %>
+            <tr><td colspan="6" class="text-muted text-center py-4">No new bookings waiting right now.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <% if ((dashboard.queueCounts.new || 0) > dashboard.newBookingEnquiries.length) { %>
+      <div class="card-body border-top py-2 text-end">
+        <a href="/enquiries/queue/new" class="btn btn-light btn-sm">View all <%= dashboard.queueCounts.new %> new bookings</a>
+      </div>
+    <% } %>
+  </div>
 </div>
 
 <div class="row">

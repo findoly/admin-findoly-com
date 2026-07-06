@@ -283,6 +283,30 @@
     });
   }
 
+
+  function dashboardNewBookings() {
+    const section = document.querySelector('#new-bookings-section');
+    const table = document.querySelector('#dashboard_new_bookings');
+    if (!section || !table) return;
+
+    const openAndScroll = () => {
+      table.classList.add('show');
+      window.setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+      window.setTimeout(() => section.classList.add('crm-panel-highlight'), 160);
+      window.setTimeout(() => section.classList.remove('crm-panel-highlight'), 1400);
+    };
+
+    if (window.location.hash === '#new-bookings-section' || window.location.hash === '#dashboard_new_bookings') {
+      openAndScroll();
+    }
+
+    document.querySelectorAll('[data-crm-scroll-target="#new-bookings-section"]').forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        window.setTimeout(openAndScroll, 80);
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     sidebar();
     submenuAccordion();
@@ -291,5 +315,6 @@
     fieldBuilder();
     autoslugCategory();
     globalSearch();
+    dashboardNewBookings();
   });
 })();
