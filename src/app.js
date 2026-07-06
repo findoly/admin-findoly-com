@@ -30,12 +30,12 @@ const app = express();
 app.set('views', path.join(__dirname, '..', 'views'));
 app.set('view engine', 'ejs');
 
-app.use(rateLimit({
-  windowMs: 60 * 1000,
-  limit: 500,
-  standardHeaders: true,
-  legacyHeaders: false
-}));
+// app.use(rateLimit({
+//   windowMs: 60 * 1000,
+//   limit: 500,
+//   standardHeaders: true,
+//   legacyHeaders: false
+// }));
 
 app.use(cors());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
