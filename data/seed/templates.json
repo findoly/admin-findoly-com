@@ -1,0 +1,577 @@
+[
+  {
+    "id": "tpl_vet",
+    "name": "Veterinary enquiry",
+    "categorySlug": "veterinary-care",
+    "sourceWebsite": "vetskart.com",
+    "description": "Pet consultation/home visit fields.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "petType",
+        "label": "Pet type",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "petAge",
+        "label": "Pet age",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "symptoms",
+        "label": "Symptoms / concern",
+        "type": "textarea",
+        "required": true
+      },
+      {
+        "name": "consultationMode",
+        "label": "Consultation mode",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "source": {
+      "website": "vetskart.com",
+      "channel": "website",
+      "metadata": {}
+    },
+    "slug": "vet",
+    "formType": "default"
+  },
+  {
+    "id": "tpl_carpentry",
+    "name": "Carpentry enquiry",
+    "categorySlug": "carpentry",
+    "sourceWebsite": "any",
+    "description": "Furniture and woodwork fields.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "workType",
+        "label": "Work type",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "material",
+        "label": "Material",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "measurements",
+        "label": "Measurements",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "issueDescription",
+        "label": "Issue description",
+        "type": "textarea",
+        "required": true
+      }
+    ],
+    "source": {
+      "website": "any",
+      "channel": "website",
+      "metadata": {}
+    },
+    "slug": "carpentry",
+    "formType": "default"
+  },
+  {
+    "id": "tpl_painting",
+    "name": "Painting enquiry",
+    "categorySlug": "painting",
+    "sourceWebsite": "any",
+    "description": "Painting job fields.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "propertyType",
+        "label": "Property type",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "rooms",
+        "label": "Number of rooms",
+        "type": "number",
+        "required": false
+      },
+      {
+        "name": "paintType",
+        "label": "Paint type",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "wallCondition",
+        "label": "Wall condition",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "source": {
+      "website": "any",
+      "channel": "website",
+      "metadata": {}
+    },
+    "slug": "painting",
+    "formType": "default"
+  },
+  {
+    "id": "tpl_general",
+    "name": "General service enquiry",
+    "categorySlug": "general-services",
+    "sourceWebsite": "any",
+    "description": "Fallback dynamic fields.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "problem",
+        "label": "Problem / requirement",
+        "type": "textarea",
+        "required": true
+      },
+      {
+        "name": "urgencyReason",
+        "label": "Urgency reason",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "source": {
+      "website": "any",
+      "channel": "website",
+      "metadata": {}
+    },
+    "slug": "general",
+    "formType": "default"
+  },
+  {
+    "id": "tpl_woodoly_wardrobe",
+    "name": "Woodoly wardrobe repair",
+    "slug": "woodoly_wardrobe",
+    "categorySlug": "furniture-repair",
+    "formType": "wardrobe-repair",
+    "sourceWebsite": "woodoly.com",
+    "description": "Wardrobe, cabinet and furniture repair lead form.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "workType",
+        "label": "Work type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Wardrobe repair",
+          "Cabinet repair",
+          "Bed repair",
+          "Table repair",
+          "Hinge replacement"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "furnitureItem",
+        "label": "Furniture item",
+        "type": "text",
+        "required": true,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "material",
+        "label": "Material",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Plywood",
+          "MDF",
+          "Solid wood",
+          "Particle board",
+          "Unknown"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "measurements",
+        "label": "Measurements",
+        "type": "text",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "issueDescription",
+        "label": "Issue description",
+        "type": "textarea",
+        "required": true,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "photos",
+        "label": "Photo/file URL",
+        "type": "file_url",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      }
+    ],
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "formId": "wardrobe-repair",
+      "metadata": {}
+    }
+  },
+  {
+    "id": "tpl_woodoly_kitchen",
+    "name": "Woodoly modular kitchen",
+    "slug": "woodoly_kitchen",
+    "categorySlug": "modular-kitchen",
+    "formType": "kitchen-installation",
+    "sourceWebsite": "woodoly.com",
+    "description": "Kitchen enquiry with site and material details.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "kitchenType",
+        "label": "Kitchen type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "L-shape",
+          "U-shape",
+          "Straight",
+          "Parallel",
+          "Island"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "scope",
+        "label": "Scope",
+        "type": "select",
+        "required": true,
+        "options": [
+          "New installation",
+          "Repair",
+          "Shutter replacement",
+          "Channel/hardware"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "areaSize",
+        "label": "Approx area/size",
+        "type": "text",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "preferredMaterial",
+        "label": "Preferred material",
+        "type": "select",
+        "required": false,
+        "options": [
+          "BWP ply",
+          "HDHMR",
+          "MDF",
+          "Laminate",
+          "Acrylic"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "siteReady",
+        "label": "Site ready?",
+        "type": "radio",
+        "required": false,
+        "options": [
+          "Yes",
+          "No",
+          "Need inspection"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "requirement",
+        "label": "Requirement",
+        "type": "textarea",
+        "required": true,
+        "options": [],
+        "group": "Details"
+      }
+    ],
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "formId": "kitchen-installation",
+      "metadata": {}
+    }
+  },
+  {
+    "id": "tpl_woodoly_door_window",
+    "name": "Woodoly door/window repair",
+    "slug": "woodoly_door_window",
+    "categorySlug": "door-window-repair",
+    "formType": "door-window-repair",
+    "sourceWebsite": "woodoly.com",
+    "description": "Door and window repair details.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "itemType",
+        "label": "Item type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Door",
+          "Window",
+          "Frame",
+          "Lock",
+          "Handle"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "problemType",
+        "label": "Problem type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Alignment issue",
+          "Broken frame",
+          "Lock issue",
+          "Noise",
+          "Water seepage",
+          "Other"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "material",
+        "label": "Material",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Wood",
+          "UPVC",
+          "Aluminium",
+          "Unknown"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "count",
+        "label": "Number of items",
+        "type": "number",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "options": [],
+        "group": "Details"
+      }
+    ],
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "formId": "door-window-repair",
+      "metadata": {}
+    }
+  },
+  {
+    "id": "tpl_woodoly_painting",
+    "name": "Woodoly painting quote",
+    "slug": "woodoly_painting",
+    "categorySlug": "wall-painting",
+    "formType": "painting-quote",
+    "sourceWebsite": "woodoly.com",
+    "description": "Painting quotation form.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "propertyType",
+        "label": "Property type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Apartment",
+          "Villa",
+          "Office",
+          "Shop",
+          "Other"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "workArea",
+        "label": "Work area",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Interior",
+          "Exterior",
+          "Both",
+          "Single room"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "rooms",
+        "label": "Number of rooms",
+        "type": "number",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "paintType",
+        "label": "Paint type",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Regular",
+          "Washable",
+          "Premium",
+          "Texture",
+          "Waterproof"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "wallCondition",
+        "label": "Wall condition",
+        "type": "textarea",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      },
+      {
+        "name": "photos",
+        "label": "Photo/file URL",
+        "type": "file_url",
+        "required": false,
+        "options": [],
+        "group": "Details"
+      }
+    ],
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "formId": "painting-quote",
+      "metadata": {}
+    }
+  },
+  {
+    "id": "tpl_woodoly_waterproofing",
+    "name": "Woodoly waterproofing",
+    "slug": "woodoly_waterproofing",
+    "categorySlug": "waterproofing",
+    "formType": "waterproofing-quote",
+    "sourceWebsite": "woodoly.com",
+    "description": "Waterproofing diagnosis form.",
+    "active": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z",
+    "fields": [
+      {
+        "name": "leakageArea",
+        "label": "Leakage area",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Bathroom",
+          "Terrace",
+          "External wall",
+          "Basement",
+          "Kitchen",
+          "Other"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "severity",
+        "label": "Severity",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Low",
+          "Medium",
+          "High",
+          "Severe"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "visibleDamage",
+        "label": "Visible damage",
+        "type": "checkbox",
+        "required": false,
+        "options": [
+          "Damp patch",
+          "Paint peel",
+          "Fungus",
+          "Dripping water",
+          "Cracks"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "propertyType",
+        "label": "Property type",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Apartment",
+          "Villa",
+          "Office",
+          "Shop"
+        ],
+        "group": "Details"
+      },
+      {
+        "name": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "options": [],
+        "group": "Details"
+      }
+    ],
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "formId": "waterproofing-quote",
+      "metadata": {}
+    }
+  }
+]

@@ -1,0 +1,44 @@
+<%- include('../partials/pageStart', { subtitle: 'Search invoices and billing records' }) %>
+<%- include('../partials/searchTabs') %>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
+    <div>
+      <h5 class="py-sm-2 my-sm-1 mb-0">Invoice Search</h5>
+      <div class="text-muted fs-sm">Search only invoices and billing records. Open View to inspect invoice details and update status.</div>
+    </div>
+    <div class="mt-2 mt-sm-0 ms-sm-auto"><span class="badge bg-primary rounded-pill"><%= pagination.total %> found</span></div>
+  </div>
+  <div class="card-body border-top">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-xl-5 col-lg-6"><label class="form-label">Search text</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Invoice no, customer, provider, enquiry ID..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Enquiry ID</label><input class="form-control" name="enquiryId" placeholder="enq_..." value="<%= filters.enquiryId || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table text-nowrap">
+      <thead><tr><th>Invoice</th><th>Customer</th><th>Provider</th><th>Enquiry</th><th>Status</th><th>Issue date</th><th>Total</th><th class="text-center" style="width:120px">Action</th></tr></thead>
+      <tbody>
+        <% records.forEach((invoice) => { %>
+          <tr>
+            <td><div class="fw-semibold"><%= invoice.invoiceNo %></div><div class="text-muted fs-sm"><%= invoice.id %></div></td>
+            <td><%= invoice.customerName || '-' %></td>
+            <td><%= invoice.providerName || '-' %></td>
+            <td><% if (invoice.enquiryId) { %><a href="/enquiries/<%= invoice.enquiryId %>"><%= invoice.enquiryId %></a><% } else { %>-<% } %></td>
+            <td><%- include('../partials/statusBadge', { value: invoice.status, humanize }) %></td>
+            <td><%= formatDate(invoice.issueDate || invoice.createdAt) %></td>
+            <td>₹<%= Number(invoice.total || 0).toLocaleString('en-IN') %></td>
+            <td class="text-center"><a href="/billing/<%= invoice.id %>" class="btn btn-outline-primary btn-sm"><i class="ph-eye me-1"></i>View</a></td>
+          </tr>
+        <% }) %>
+        <% if (!records.length) { %><tr><td colspan="8" class="text-center text-muted py-4">No invoices found.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+  <%- include('../partials/pagination', { pagination }) %>
+</div>
+
+<%- include('../partials/pageEnd') %>

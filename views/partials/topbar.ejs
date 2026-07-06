@@ -1,0 +1,70 @@
+<!-- Main navbar -->
+<div class="navbar navbar-dark navbar-expand-lg navbar-static border-bottom border-bottom-white border-opacity-10">
+  <div class="container-fluid">
+    <div class="d-flex d-lg-none me-2">
+      <button type="button" class="navbar-toggler sidebar-mobile-main-toggle rounded-pill" aria-label="Open navigation">
+        <i class="ph-list"></i><span class="visually-hidden">Menu</span>
+      </button>
+    </div>
+
+    <div class="navbar-brand flex-1 flex-lg-0">
+      <a href="/dashboard" class="d-inline-flex align-items-center text-white text-decoration-none">
+        <span class="crm-logo">S</span>
+        <span class="d-none d-sm-inline-block ms-3 fw-semibold"><%= branding.shortName %></span>
+      </a>
+    </div>
+
+    <ul class="nav flex-row">
+      <li class="nav-item d-lg-none">
+        <a href="#navbar_search" class="navbar-nav-link navbar-nav-link-icon rounded-pill" data-bs-toggle="collapse" aria-label="Search">
+          <i class="ph-magnifying-glass"></i>
+        </a>
+      </li>
+      <li class="nav-item nav-item-dropdown-lg dropdown">
+        <a href="#" class="navbar-nav-link navbar-nav-link-icon rounded-pill" data-bs-toggle="dropdown" aria-label="Quick links">
+          <i class="ph-squares-four"></i>
+        </a>
+        <div class="dropdown-menu dropdown-menu-scrollable-sm wmin-lg-400 p-0">
+          <div class="d-flex align-items-center border-bottom p-3"><h6 class="mb-0">Quick links</h6></div>
+          <div class="row row-cols-1 row-cols-sm-2 g-0">
+            <div class="col"><a class="dropdown-item text-wrap h-100 align-items-start border-end-sm border-bottom p-3" href="/enquiries/new"><div><div class="fw-semibold my-1">Create enquiry</div><div class="text-muted">Open manual enquiry form</div></div></a></div>
+            <div class="col"><a class="dropdown-item text-wrap h-100 align-items-start border-bottom p-3" href="/providers/new"><div><div class="fw-semibold my-1">Create provider</div><div class="text-muted">Add provider to directory</div></div></a></div>
+            <div class="col"><a class="dropdown-item text-wrap h-100 align-items-start border-end-sm border-bottom border-bottom-sm-0 rounded-bottom-start p-3" href="/follow-ups/new"><div><div class="fw-semibold my-1">Create follow-up</div><div class="text-muted">Add callback/task</div></div></a></div>
+            <div class="col"><a class="dropdown-item text-wrap h-100 align-items-start rounded-bottom-end p-3" href="/billing/new"><div><div class="fw-semibold my-1">Create invoice</div><div class="text-muted">New billing record</div></div></a></div>
+          </div>
+        </div>
+      </li>
+    </ul>
+
+    <div class="navbar-collapse justify-content-center flex-lg-1 order-2 order-lg-1 collapse" id="navbar_search">
+      <div class="navbar-search flex-fill position-relative mt-2 mt-lg-0 mx-lg-3">
+        <div class="form-control-feedback form-control-feedback-start flex-grow-1" data-color-theme="dark">
+          <input type="text" class="form-control bg-transparent rounded-pill" placeholder="Search enquiries..." data-crm-global-search>
+          <div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="nav flex-row justify-content-end order-1 order-lg-2">
+      <li class="nav-item d-none d-md-block"><a href="/search/enquiries" class="navbar-nav-link rounded-pill"><i class="ph-magnifying-glass me-1"></i> Search</a></li>
+      <% if (admin) { %>
+      <li class="nav-item nav-item-dropdown-lg dropdown ms-lg-2">
+        <a href="#" class="navbar-nav-link align-items-center rounded-pill p-1" data-bs-toggle="dropdown">
+          <span class="crm-logo bg-success"><%= (admin.name || admin.email || 'A').slice(0,1).toUpperCase() %></span>
+          <span class="d-none d-lg-inline-block mx-lg-2"><%= admin.name || 'Admin' %></span>
+        </a>
+        <div class="dropdown-menu dropdown-menu-end">
+          <span class="dropdown-item-text text-muted"><%= admin.email %></span>
+          <div class="dropdown-divider"></div>
+          <a href="/catalog/categories" class="dropdown-item"><i class="ph-gear me-2"></i> Website form builder</a>
+          <a href="/api/forms/schema?sourceWebsite=woodoly.com&categorySlug=furniture-repair&formType=wardrobe-repair" target="_blank" class="dropdown-item"><i class="ph-code me-2"></i> Schema API</a>
+          <a href="/api/health" target="_blank" class="dropdown-item"><i class="ph-pulse me-2"></i> API health</a>
+          <div class="dropdown-divider"></div>
+          <form method="post" action="/logout" class="m-0"><button type="submit" class="dropdown-item"><i class="ph-sign-out me-2"></i> Logout</button></form>
+        </div>
+      </li>
+      <% } %>
+    </ul>
+  </div>
+</div>
+<!-- /main navbar -->

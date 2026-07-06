@@ -1,0 +1,27 @@
+<%- include('../partials/pageStart', { subtitle: 'Invoice detail' }) %>
+
+<div class="row">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-sm-flex align-items-sm-center">
+        <div><h5 class="mb-0"><%= invoice.invoiceNo %></h5><div class="text-muted fs-sm"><%= invoice.id %></div></div>
+        <div class="ms-sm-auto mt-2 mt-sm-0 d-flex gap-2"><%- include('../partials/statusBadge', { value: invoice.status, humanize }) %><a href="/billing/<%= invoice.id %>/edit" class="btn btn-outline-secondary btn-sm"><i class="ph-pencil me-2"></i>Edit</a></div>
+      </div>
+      <div class="card-body border-top">
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Customer</label><div class="col-sm-9 pt-sm-2"><%= invoice.customerName %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Provider</label><div class="col-sm-9 pt-sm-2"><%= invoice.providerName || '-' %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Related enquiry</label><div class="col-sm-9 pt-sm-2"><% if (invoice.enquiryId) { %><a href="/enquiries/<%= invoice.enquiryId %>"><%= invoice.enquiryId %></a><% } else { %>-<% } %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Issue / due</label><div class="col-sm-9 pt-sm-2"><%= formatDate(invoice.issueDate) %> / <%= formatDate(invoice.dueDate) %></div></div>
+        <% if (invoice.notes) { %><div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Notes</label><div class="col-sm-9 pt-sm-2"><%= invoice.notes %></div></div><% } %>
+      </div>
+      <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody><% (invoice.items || []).forEach((item)=>{ %><tr><td><%= item.description %></td><td><%= item.qty %></td><td>₹<%= Number(item.rate || 0).toLocaleString('en-IN') %></td><td>₹<%= (Number(item.qty || 1) * Number(item.rate || 0)).toLocaleString('en-IN') %></td></tr><% }) %></tbody></table></div>
+      <div class="card-body border-top text-end"><div>Subtotal: ₹<%= Number(invoice.subtotal || 0).toLocaleString('en-IN') %></div><div>Discount: ₹<%= Number(invoice.discount || 0).toLocaleString('en-IN') %></div><div>Tax: ₹<%= Number(invoice.tax || 0).toLocaleString('en-IN') %></div><h4>Total: ₹<%= Number(invoice.total || 0).toLocaleString('en-IN') %></h4></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card"><div class="card-header"><h5 class="mb-0">Quick status update</h5></div><div class="card-body border-top"><form method="post" action="/billing/<%= invoice.id %>"><div class="mb-3"><label class="form-label">Status</label><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= invoice.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div><button class="btn btn-primary w-100" type="submit">Save status</button></form></div></div>
+    <div class="card"><div class="card-header"><h5 class="mb-0">Navigation</h5></div><div class="card-body border-top d-grid gap-2"><a href="/billing" class="btn btn-light"><i class="ph-list me-2"></i>Invoice list</a><a href="/billing/new" class="btn btn-primary"><i class="ph-plus me-2"></i>Create invoice</a><a href="/search/invoices" class="btn btn-outline-primary"><i class="ph-magnifying-glass me-2"></i>Invoice search</a><% if (enquiry) { %><a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary"><i class="ph-eye me-2"></i>View enquiry</a><% } %></div></div>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

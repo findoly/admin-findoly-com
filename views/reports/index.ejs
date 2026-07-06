@@ -1,0 +1,18 @@
+<%- include('../partials/pageStart', { subtitle: 'Reports and audit log' }) %>
+
+<div class="row">
+  <div class="col-lg-3"><div class="card"><div class="card-body"><div class="text-muted fs-sm">Total enquiries</div><h3 class="mb-0"><%= dashboard.counts.enquiries %></h3></div></div></div>
+  <div class="col-lg-3"><div class="card"><div class="card-body"><div class="text-muted fs-sm">Providers</div><h3 class="mb-0"><%= dashboard.counts.providers %></h3></div></div></div>
+  <div class="col-lg-3"><div class="card"><div class="card-body"><div class="text-muted fs-sm">Open follow-ups</div><h3 class="mb-0"><%= dashboard.counts.openFollowUps %></h3></div></div></div>
+  <div class="col-lg-3"><div class="card"><div class="card-body"><div class="text-muted fs-sm">Paid revenue</div><h3 class="mb-0">₹<%= dashboard.counts.paidRevenue.toLocaleString('en-IN') %></h3></div></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h5 class="mb-0">Audit log</h5></div>
+  <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Actor</th><th>Details</th></tr></thead><tbody>
+    <% auditLogs.forEach((log) => { %><tr><td><%= formatDate(log.createdAt) %></td><td><%= humanize(log.action) %></td><td><%= log.entityType %> / <%= log.entityId %></td><td><%= log.actor %></td><td class="crm-break"><code><%= JSON.stringify(log.metadata || log.details || {}) %></code></td></tr><% }) %>
+    <% if (!auditLogs.length) { %><tr><td colspan="5" class="text-muted text-center py-4">No audit logs yet.</td></tr><% } %>
+  </tbody></table></div>
+</div>
+
+<%- include('../partials/pageEnd') %>

@@ -1,0 +1,44 @@
+<%- include('../partials/pageStart', { subtitle: 'Task detail' }) %>
+
+<div class="row">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-sm-flex align-items-sm-center">
+        <div><h5 class="mb-0"><%= followUp.title %></h5><div class="text-muted fs-sm"><%= followUp.id %></div></div>
+        <div class="ms-sm-auto mt-2 mt-sm-0 d-flex gap-2"><%- include('../partials/statusBadge', { value: followUp.status, humanize }) %><a href="/follow-ups/<%= followUp.id %>/edit" class="btn btn-outline-secondary btn-sm"><i class="ph-pencil me-2"></i>Edit</a></div>
+      </div>
+      <div class="card-body border-top">
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Customer</label><div class="col-sm-9 pt-sm-2"><%= followUp.customerName || '-' %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Related enquiry</label><div class="col-sm-9 pt-sm-2"><% if (followUp.enquiryId) { %><a href="/enquiries/<%= followUp.enquiryId %>"><%= followUp.enquiryId %></a><% } else { %>-<% } %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Owner</label><div class="col-sm-9 pt-sm-2"><%= followUp.owner || '-' %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Channel</label><div class="col-sm-9 pt-sm-2"><%= humanize(followUp.channel) %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Due at</label><div class="col-sm-9 pt-sm-2"><%= formatDate(followUp.dueAt) %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Notes</label><div class="col-sm-9 pt-sm-2"><%= followUp.notes || '-' %></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Task actions</h5></div>
+      <div class="card-body border-top">
+        <form method="post" action="/follow-ups/<%= followUp.id %>">
+          <input type="hidden" name="returnTo" value="/follow-ups/<%= followUp.id %>">
+          <div class="mb-3"><label class="form-label">Status</label><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= followUp.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div>
+          <button class="btn btn-primary w-100" type="submit">Update status</button>
+        </form>
+      </div>
+    </div>
+    <% if (enquiry) { %>
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0">Related enquiry</h5></div>
+        <div class="card-body border-top">
+          <div class="fw-semibold"><%= enquiry.customer.name %></div>
+          <div class="text-muted"><%= enquiry.serviceType %></div>
+          <a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary btn-sm mt-3"><i class="ph-eye me-2"></i>View enquiry</a>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

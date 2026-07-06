@@ -1,0 +1,128 @@
+[
+  {
+    "id": "provider_vet_01",
+    "name": "Dr. Meera Kapoor",
+    "businessName": "Pet Wellness Home Care",
+    "mobile": "9000000001",
+    "email": "meera@example.com",
+    "status": "active",
+    "categorySlugs": [
+      "veterinary-care"
+    ],
+    "skills": [
+      "home visit",
+      "vaccination",
+      "video consultation"
+    ],
+    "city": "Delhi",
+    "state": "Delhi",
+    "serviceAreas": [
+      "Delhi",
+      "Noida",
+      "Gurugram"
+    ],
+    "availability": "available_today",
+    "rating": 4.8,
+    "notes": "Experienced small animal vet.",
+    "documentsVerified": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z"
+  },
+  {
+    "id": "provider_carp_01",
+    "name": "Amit Woodworks",
+    "businessName": "Amit Carpentry Services",
+    "mobile": "9000000002",
+    "email": "amit@example.com",
+    "status": "active",
+    "categorySlugs": [
+      "carpentry",
+      "door-window-repair",
+      "furniture-repair",
+      "modular-kitchen",
+      "wood-polishing",
+      "wooden-flooring"
+    ],
+    "skills": [
+      "wardrobe repair",
+      "door fitting",
+      "polishing"
+    ],
+    "city": "Noida",
+    "state": "UP",
+    "serviceAreas": [
+      "Bengaluru",
+      "Delhi",
+      "Ghaziabad",
+      "Noida"
+    ],
+    "availability": "available_today",
+    "rating": 4.5,
+    "notes": "Good for urgent furniture repairs.",
+    "documentsVerified": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z"
+  },
+  {
+    "id": "provider_paint_01",
+    "name": "ColorCraft Team",
+    "businessName": "ColorCraft Painters",
+    "mobile": "9000000003",
+    "email": "paint@example.com",
+    "status": "active",
+    "categorySlugs": [
+      "false-ceiling",
+      "painting",
+      "wall-painting",
+      "waterproofing"
+    ],
+    "skills": [
+      "interior painting",
+      "texture",
+      "waterproofing"
+    ],
+    "city": "Gurugram",
+    "state": "Haryana",
+    "serviceAreas": [
+      "Gurugram",
+      "Delhi",
+      "Faridabad"
+    ],
+    "availability": "available_this_week",
+    "rating": 4.3,
+    "notes": "Team provider with 4 painters.",
+    "documentsVerified": false,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z"
+  },
+  {
+    "id": "provider_plumb_01",
+    "name": "Ravi Plumbing Works",
+    "businessName": "Ravi Plumbing Works",
+    "mobile": "9000000004",
+    "email": "ravi@example.com",
+    "status": "active",
+    "categorySlugs": [
+      "plumbing",
+      "woodoly-electrical-repair",
+      "woodoly-plumbing-repair"
+    ],
+    "skills": [
+      "leak repair",
+      "bath fittings",
+      "drain cleaning"
+    ],
+    "city": "Delhi",
+    "state": "Delhi",
+    "serviceAreas": [
+      "Delhi",
+      "Noida"
+    ],
+    "availability": "limited",
+    "rating": 4.1,
+    "notes": "Prefers morning slots.",
+    "documentsVerified": true,
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-01T09:00:00.000Z"
+  }
+]

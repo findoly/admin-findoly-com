@@ -1,0 +1,10 @@
+const express = require('express');
+const controller = require('../controllers/providerController');
+const router = express.Router();
+router.get('/', controller.index);
+router.get('/new', controller.showCreate);
+router.post('/', controller.create);
+router.get('/:id/edit', controller.showEdit);
+router.get('/:id', controller.show);
+router.post('/:id', controller.update);
+module.exports = router;

@@ -1,0 +1,26 @@
+<%- include('../partials/pageStart', { subtitle: 'Add task' }) %>
+
+<div class="row">
+  <div class="col-xl-8 offset-xl-2">
+    <div class="card">
+      <div class="card-header d-sm-flex align-items-sm-center">
+        <h5 class="mb-0">Create follow-up</h5>
+        <div class="ms-sm-auto mt-2 mt-sm-0"><a href="/follow-ups" class="btn btn-light btn-sm"><i class="ph-list me-2"></i>Back to list</a></div>
+      </div>
+      <div class="card-body border-top">
+        <form method="post" action="/follow-ups">
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related enquiry</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No enquiry</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>"><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name</label><div class="col-lg-9"><input class="form-control" name="customerName" value=""></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Title <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="title" required></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Due at</label><div class="col-lg-9"><input class="form-control" type="datetime-local" name="dueAt"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Owner</label><div class="col-lg-9"><input class="form-control" name="owner" value="<%= admin.email %>"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Channel</label><div class="col-lg-9"><select class="form-select" name="channel"><option>call</option><option>whatsapp</option><option>email</option><option>sms</option></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Notes</label><div class="col-lg-9"><textarea class="form-control" name="notes" rows="4"></textarea></div></div>
+          <div class="text-end"><a href="/follow-ups" class="btn btn-light">Cancel</a><button class="btn btn-primary ms-2" type="submit">Create follow-up <i class="ph-paper-plane-tilt ms-2"></i></button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

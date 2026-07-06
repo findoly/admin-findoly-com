@@ -1,0 +1,96 @@
+<%- include('../partials/pageStart', { subtitle: 'Dashboard' }) %>
+
+<div class="row">
+  <% const queueColor = { new: 'primary', contacted: 'info', assigned: 'warning', completed: 'success', cancelled: 'danger' }; %>
+  <% enquiryQueues.forEach((queue) => { const color = queueColor[queue.key] || 'secondary'; %>
+    <div class="col-sm-6 col-xl">
+      <div class="card bg-<%= color %> text-white">
+        <div class="card-body">
+          <div class="d-flex align-items-start">
+            <div>
+              <h3 class="mb-1"><%= dashboard.queueCounts[queue.key] || 0 %></h3>
+              <div class="fw-semibold"><%= queue.label %></div>
+              <div class="fs-sm opacity-75"><%= queue.description %></div>
+            </div>
+            <div class="ms-auto opacity-75"><i class="<%= queue.icon %> ph-2x"></i></div>
+          </div>
+        </div>
+        <div class="card-footer border-white border-opacity-10 d-flex justify-content-between align-items-center py-2">
+          <a href="/enquiries/queue/<%= queue.key %>" class="text-white text-decoration-none">View details</a>
+          <i class="ph-caret-right"></i>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<div class="row">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card crm-stat-card"><div class="card-body"><div class="d-flex align-items-center"><div><div class="text-muted fs-sm">Total enquiries</div><h3 class="mb-0"><%= dashboard.counts.enquiries %></h3></div><div class="crm-stat-icon bg-primary bg-opacity-10 text-primary ms-auto"><i class="ph-list-checks"></i></div></div></div></div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card crm-stat-card"><div class="card-body"><div class="d-flex align-items-center"><div><div class="text-muted fs-sm">Providers</div><h3 class="mb-0"><%= dashboard.counts.providers %></h3></div><div class="crm-stat-icon bg-success bg-opacity-10 text-success ms-auto"><i class="ph-users-three"></i></div></div></div></div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card crm-stat-card"><div class="card-body"><div class="d-flex align-items-center"><div><div class="text-muted fs-sm">Open follow-ups</div><h3 class="mb-0"><%= dashboard.counts.openFollowUps %></h3></div><div class="crm-stat-icon bg-secondary bg-opacity-10 text-secondary ms-auto"><i class="ph-clock"></i></div></div></div></div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card crm-stat-card"><div class="card-body"><div class="d-flex align-items-center"><div><div class="text-muted fs-sm">Paid revenue</div><h3 class="mb-0">₹<%= dashboard.counts.paidRevenue.toLocaleString('en-IN') %></h3></div><div class="crm-stat-icon bg-teal bg-opacity-10 text-teal ms-auto"><i class="ph-currency-inr"></i></div></div></div></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <h5 class="mb-0">Recent enquiries</h5>
+        <a href="/enquiries" class="ms-auto">View all <i class="ph-arrow-circle-right ms-1"></i></a>
+      </div>
+      <div class="table-responsive">
+        <table class="table text-nowrap">
+          <thead><tr><th>Customer</th><th>Category</th><th>Status</th><th>Source</th><th class="text-center" style="width:20px"><i class="ph-dots-three"></i></th></tr></thead>
+          <tbody>
+          <% dashboard.recentEnquiries.forEach((enquiry) => { %>
+            <tr>
+              <td><div class="fw-semibold"><%= enquiry.customer.name || '-' %></div><div class="text-muted fs-sm"><%= enquiry.customer.mobile || '' %></div></td>
+              <td><%= humanize(enquiry.categorySlug) %></td>
+              <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
+              <td><%= enquiry.sourceWebsite %></td>
+              <td class="text-center"><a href="/enquiries/<%= enquiry.id %>" class="text-body"><i class="ph-arrow-circle-right"></i></a></td>
+            </tr>
+          <% }) %>
+          <% if (!dashboard.recentEnquiries.length) { %><tr><td colspan="5" class="text-muted text-center py-4">No enquiries yet.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <h5 class="mb-0">Open follow-ups</h5>
+        <a href="/follow-ups" class="ms-auto">View all</a>
+      </div>
+      <div class="card-body">
+        <% dashboard.openFollowUps.forEach((item) => { %>
+          <div class="d-flex align-items-start mb-3">
+            <div class="bg-warning bg-opacity-10 text-warning rounded-pill me-3"><i class="ph-phone-call p-2"></i></div>
+            <div class="flex-fill"><div class="fw-semibold"><%= item.title %></div><div class="text-muted fs-sm"><%= item.customerName || item.enquiryId || 'No enquiry linked' %> · <%= formatDate(item.dueAt) %></div></div>
+          </div>
+        <% }) %>
+        <% if (!dashboard.openFollowUps.length) { %><div class="text-muted">No open follow-ups.</div><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-4"><div class="card"><div class="card-header"><h5 class="mb-0">Status funnel</h5></div><div class="card-body"><div class="crm-mini-bars" data-bars='<%- JSON.stringify(dashboard.byStatus) %>'></div></div></div></div>
+  <div class="col-lg-4"><div class="card"><div class="card-header"><h5 class="mb-0">Category split</h5></div><div class="card-body"><div class="crm-mini-bars" data-bars='<%- JSON.stringify(dashboard.byCategory) %>'></div></div></div></div>
+  <div class="col-lg-4"><div class="card"><div class="card-header"><h5 class="mb-0">Provider workload</h5></div><div class="card-body p-0"><div class="list-group list-group-flush">
+    <% dashboard.providerWorkload.forEach(({provider, activeCount}) => { %><div class="list-group-item d-flex justify-content-between align-items-center"><span><%= provider.name %></span><span class="badge bg-primary rounded-pill"><%= activeCount %></span></div><% }) %>
+    <% if (!dashboard.providerWorkload.length) { %><div class="list-group-item text-muted">No provider workload yet.</div><% } %>
+  </div></div></div></div>
+</div>
+
+<%- include('../partials/pageEnd') %>

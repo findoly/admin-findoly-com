@@ -1,0 +1,267 @@
+[
+  {
+    "id": "enq_demo_01",
+    "sourceWebsite": "vetskart.com",
+    "categorySlug": "veterinary-care",
+    "serviceType": "Home consultation",
+    "priority": "high",
+    "status": "assigned",
+    "customer": {
+      "name": "Priya Nair",
+      "mobile": "9876500001",
+      "email": "priya@example.com"
+    },
+    "address": {
+      "line1": "Green Park",
+      "city": "Delhi",
+      "state": "Delhi",
+      "pincode": "110016"
+    },
+    "preferredDate": "2026-07-08",
+    "preferredSlot": "10 AM - 1 PM",
+    "assignedProviderId": "provider_vet_01",
+    "assignedProviderName": "Dr. Meera Kapoor",
+    "quotedAmount": 899,
+    "finalAmount": 0,
+    "notes": "Dog has fever since yesterday.",
+    "fields": {
+      "petType": "Dog",
+      "petAge": "3 years",
+      "symptoms": "Fever and low appetite",
+      "consultationMode": "Home visit"
+    },
+    "timeline": [
+      {
+        "id": "time_demo_01",
+        "type": "created",
+        "message": "Enquiry received from vetskart.com",
+        "actor": "system",
+        "createdAt": "2026-07-06T08:30:00.000Z"
+      },
+      {
+        "id": "time_demo_02",
+        "type": "assigned",
+        "message": "Assigned to Dr. Meera Kapoor",
+        "actor": "admin@example.com",
+        "createdAt": "2026-07-06T09:00:00.000Z"
+      }
+    ],
+    "communicationLog": [],
+    "createdAt": "2026-07-06T08:30:00.000Z",
+    "updatedAt": "2026-07-06T09:00:00.000Z",
+    "source": {
+      "website": "vetskart.com",
+      "channel": "website",
+      "campaign": "pet-home-visit",
+      "formId": "vet-consultation-form",
+      "landingPage": "https://vetskart.com/home-vet-consultation",
+      "referrer": "https://google.com",
+      "externalEnquiryId": "VK-DEMO-001",
+      "utm": {
+        "source": "google",
+        "medium": "organic",
+        "campaign": "pet-care"
+      },
+      "metadata": {
+        "device": "mobile"
+      }
+    },
+    "formType": "default",
+    "templateId": "tpl_vet"
+  },
+  {
+    "id": "enq_demo_02",
+    "sourceWebsite": "carpenter.example.com",
+    "categorySlug": "carpentry",
+    "serviceType": "Wardrobe door repair",
+    "priority": "normal",
+    "status": "new",
+    "customer": {
+      "name": "Rahul Sharma",
+      "mobile": "9876500002",
+      "email": "rahul@example.com"
+    },
+    "address": {
+      "line1": "Sector 62",
+      "city": "Noida",
+      "state": "UP",
+      "pincode": "201301"
+    },
+    "preferredDate": "2026-07-09",
+    "preferredSlot": "2 PM - 5 PM",
+    "assignedProviderId": "",
+    "assignedProviderName": "",
+    "quotedAmount": 0,
+    "finalAmount": 0,
+    "notes": "Customer asked for photo review before visit.",
+    "fields": {
+      "workType": "Wardrobe repair",
+      "material": "Plywood",
+      "measurements": "6 ft wardrobe",
+      "issueDescription": "Door hinge broken"
+    },
+    "timeline": [
+      {
+        "id": "time_demo_03",
+        "type": "created",
+        "message": "Enquiry received from carpenter.example.com",
+        "actor": "system",
+        "createdAt": "2026-07-06T08:45:00.000Z"
+      }
+    ],
+    "communicationLog": [],
+    "createdAt": "2026-07-06T08:45:00.000Z",
+    "updatedAt": "2026-07-06T08:45:00.000Z",
+    "source": {
+      "website": "carpenter.example.com",
+      "channel": "partner-site",
+      "campaign": "wardrobe-repair",
+      "formId": "carpentry-lead-form",
+      "landingPage": "https://carpenter.example.com/noida",
+      "referrer": "https://partner.example.com",
+      "externalEnquiryId": "CARP-DEMO-002",
+      "utm": {
+        "source": "partner",
+        "medium": "referral",
+        "campaign": "noida-carpentry"
+      },
+      "metadata": {
+        "device": "desktop"
+      }
+    },
+    "formType": "default",
+    "templateId": "tpl_carpentry"
+  },
+  {
+    "id": "enq_demo_03",
+    "sourceWebsite": "painting.example.com",
+    "categorySlug": "painting",
+    "serviceType": "2BHK repainting",
+    "priority": "urgent",
+    "status": "contacted",
+    "customer": {
+      "name": "Neha Gupta",
+      "mobile": "9876500003",
+      "email": "neha@example.com"
+    },
+    "address": {
+      "line1": "Golf Course Road",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122002"
+    },
+    "preferredDate": "2026-07-10",
+    "preferredSlot": "Morning",
+    "assignedProviderId": "",
+    "assignedProviderName": "",
+    "quotedAmount": 15000,
+    "finalAmount": 0,
+    "notes": "Needs work completed before shifting.",
+    "fields": {
+      "propertyType": "Apartment",
+      "rooms": "3",
+      "paintType": "washable emulsion",
+      "wallCondition": "Minor dampness in one bedroom"
+    },
+    "timeline": [
+      {
+        "id": "time_demo_04",
+        "type": "created",
+        "message": "Enquiry received from painting.example.com",
+        "actor": "system",
+        "createdAt": "2026-07-06T09:15:00.000Z"
+      },
+      {
+        "id": "time_demo_05",
+        "type": "status_changed",
+        "message": "Status changed from new to contacted",
+        "actor": "admin@example.com",
+        "createdAt": "2026-07-06T09:45:00.000Z"
+      }
+    ],
+    "communicationLog": [],
+    "createdAt": "2026-07-06T09:15:00.000Z",
+    "updatedAt": "2026-07-06T09:45:00.000Z",
+    "source": {
+      "website": "painting.example.com",
+      "channel": "landing-page",
+      "campaign": "monsoon-painting-offer",
+      "formId": "painting-quote-form",
+      "landingPage": "https://painting.example.com/gurugram",
+      "referrer": "https://google.com",
+      "externalEnquiryId": "PAINT-DEMO-003",
+      "utm": {
+        "source": "google",
+        "medium": "cpc",
+        "campaign": "gurugram-painting"
+      },
+      "metadata": {
+        "device": "mobile"
+      }
+    },
+    "formType": "default",
+    "templateId": "tpl_painting"
+  },
+  {
+    "id": "enq_demo_woodoly_01",
+    "sourceWebsite": "woodoly.com",
+    "categorySlug": "furniture-repair",
+    "formType": "wardrobe-repair",
+    "templateId": "tpl_woodoly_wardrobe",
+    "serviceType": "Wardrobe hinge and shutter repair",
+    "priority": "normal",
+    "status": "new",
+    "customer": {
+      "name": "Amit Verma",
+      "mobile": "9876500010",
+      "email": "amit@example.com"
+    },
+    "address": {
+      "line1": "Indiranagar",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "pincode": "560038"
+    },
+    "preferredDate": "2026-07-11",
+    "preferredSlot": "Afternoon",
+    "assignedProviderId": "",
+    "assignedProviderName": "",
+    "quotedAmount": 0,
+    "finalAmount": 0,
+    "notes": "Demo Woodoly lead intentionally missing material and measurements so admin can fill later.",
+    "fields": {
+      "workType": "Wardrobe repair",
+      "furnitureItem": "Sliding wardrobe",
+      "issueDescription": "One shutter is not sliding properly"
+    },
+    "timeline": [
+      {
+        "id": "time_demo_woodoly_01",
+        "type": "created",
+        "message": "Enquiry received from woodoly.com",
+        "actor": "system",
+        "createdAt": "2026-07-06T10:10:00.000Z"
+      }
+    ],
+    "communicationLog": [],
+    "createdAt": "2026-07-06T10:10:00.000Z",
+    "updatedAt": "2026-07-06T10:10:00.000Z",
+    "source": {
+      "website": "woodoly.com",
+      "channel": "website",
+      "campaign": "woodoly-launch",
+      "formId": "wardrobe-repair",
+      "landingPage": "https://woodoly.com/wardrobe-repair",
+      "referrer": "https://google.com",
+      "externalEnquiryId": "WOOD-DEMO-010",
+      "utm": {
+        "source": "google",
+        "medium": "cpc",
+        "campaign": "bengaluru-wardrobe"
+      },
+      "metadata": {
+        "device": "mobile"
+      }
+    }
+  }
+]

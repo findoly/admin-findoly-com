@@ -1,0 +1,51 @@
+<%- include('../partials/pageStart', { subtitle: 'Form templates' }) %>
+
+<div class="row">
+  <div class="col-xl-7">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Create standalone form template</h5></div>
+      <div class="card-body border-top">
+        <form method="post" action="/catalog/templates" data-field-builder data-empty-builder="true">
+          <fieldset class="mb-3">
+            <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Template mapping</legend>
+            <div class="row mb-3"><label class="col-lg-3 col-form-label">Name <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="name" required placeholder="Woodoly wardrobe repair form"></div></div>
+            <div class="row mb-3"><label class="col-lg-3 col-form-label">Source website</label><div class="col-lg-9"><input class="form-control" name="sourceWebsite" list="template-source-websites" placeholder="woodoly.com" required><datalist id="template-source-websites"><% sourceWebsites.forEach((site) => { %><option value="<%= site %>"><% }) %></datalist></div></div>
+            <div class="row mb-3"><label class="col-lg-3 col-form-label">Category</label><div class="col-lg-5"><select class="form-select" name="categorySlug"><% categories.forEach((c)=>{ %><option value="<%= c.slug %>"><%= c.name %> — <%= c.sourceWebsite || 'any' %></option><% }) %></select></div><label class="col-lg-1 col-form-label text-lg-end">Type</label><div class="col-lg-3"><input class="form-control" name="formType" value="default"></div></div>
+            <div class="row mb-3"><label class="col-lg-3 col-form-label">Description</label><div class="col-lg-9"><textarea class="form-control" name="description" rows="3"></textarea></div></div>
+          </fieldset>
+
+          <fieldset class="mb-3">
+            <legend class="fs-base fw-bold border-bottom pb-2 mb-3 d-flex align-items-center"><span>Fields</span><button class="btn btn-light btn-sm ms-auto" type="button" data-add-field><i class="ph-plus me-1"></i>Add field</button></legend>
+            <div data-builder-rows></div>
+            <input type="hidden" name="fields" data-fields-json>
+          </fieldset>
+          <pre class="schema-preview mb-3" data-schema-preview>{}</pre>
+          <div class="text-end"><button class="btn btn-primary" type="submit">Create template</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-5">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Existing templates</h5></div>
+      <div class="table-responsive">
+        <table class="table text-nowrap">
+          <thead><tr><th>Name</th><th>Mapping</th><th>Fields</th><th>Status</th></tr></thead>
+          <tbody>
+          <% templates.forEach((template) => { %>
+            <tr>
+              <td><div class="fw-semibold"><%= template.name %></div><div class="text-muted fs-sm"><%= template.slug %></div></td>
+              <td><%= template.sourceWebsite %><div class="text-muted fs-sm"><%= template.categorySlug %> · <%= template.formType || 'default' %></div></td>
+              <td><%= (template.fields || []).length %></td>
+              <td><%- include('../partials/statusBadge', { value: template.active ? 'active' : 'inactive', humanize }) %></td>
+            </tr>
+          <% }) %>
+          <% if (!templates.length) { %><tr><td colspan="4" class="text-muted text-center py-4">No templates yet.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="field-types-json"><%- JSON.stringify(fieldTypes) %></script>
+<%- include('../partials/pageEnd') %>

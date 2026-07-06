@@ -1,0 +1,79 @@
+<%- include('head') %>
+<%- include('topbar') %>
+
+<!-- Page content -->
+<div class="page-content">
+  <%- include('sidebar') %>
+
+  <!-- Main content -->
+  <div class="content-wrapper">
+    <div class="content-inner">
+      <!-- Page header -->
+      <div class="page-header page-header-light shadow">
+        <div class="page-header-content d-lg-flex">
+          <div class="d-flex">
+            <h4 class="page-title mb-0">
+              <%= title || branding.appName %> <span class="fw-normal"><%= typeof subtitle !== 'undefined' && subtitle ? '- ' + subtitle : '' %></span>
+            </h4>
+            <a href="#page_header" class="btn btn-light align-self-center collapsed d-lg-none border-transparent rounded-pill p-0 ms-auto" data-bs-toggle="collapse">
+              <i class="ph-caret-down collapsible-indicator ph-sm m-1"></i>
+            </a>
+          </div>
+          <div class="collapse d-lg-block my-lg-auto ms-lg-auto" id="page_header">
+            <div class="d-sm-flex align-items-center mb-3 mb-lg-0 ms-lg-3">
+              <div class="d-inline-flex mt-3 mt-sm-0 gap-2 flex-wrap">
+                <% if (!currentPath.startsWith('/enquiries/new')) { %><a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create enquiry</a><% } %>
+                <% if (!currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="btn btn-light btn-sm"><i class="ph-magnifying-glass me-2"></i>Search records</a><% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="page-header-content d-lg-flex border-top">
+          <div class="d-flex">
+            <div class="breadcrumb py-2">
+              <a href="/dashboard" class="breadcrumb-item"><i class="ph-house"></i></a>
+              <% if (currentPath.startsWith('/enquiries')) { %><a href="/enquiries" class="breadcrumb-item">Enquiries</a><% } %>
+              <% if (currentPath.startsWith('/providers')) { %><a href="/providers" class="breadcrumb-item">Providers</a><% } %>
+              <% if (currentPath.startsWith('/follow-ups')) { %><a href="/follow-ups" class="breadcrumb-item">Follow-ups</a><% } %>
+              <% if (currentPath.startsWith('/communications')) { %><a href="/communications" class="breadcrumb-item">Communications</a><% } %>
+              <% if (currentPath.startsWith('/billing')) { %><a href="/billing" class="breadcrumb-item">Billing</a><% } %>
+              <% if (currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="breadcrumb-item">Search</a><% } %>
+              <% if (currentPath.startsWith('/catalog')) { %><a href="/catalog/categories" class="breadcrumb-item">Website modules</a><% } %>
+              <span class="breadcrumb-item active"><%= title || branding.appName %></span>
+            </div>
+            <a href="#breadcrumb_elements" class="btn btn-light align-self-center collapsed d-lg-none border-transparent rounded-pill p-0 ms-auto" data-bs-toggle="collapse">
+              <i class="ph-caret-down collapsible-indicator ph-sm m-1"></i>
+            </a>
+          </div>
+          <div class="collapse d-lg-block ms-lg-auto" id="breadcrumb_elements">
+            <div class="d-lg-flex mb-2 mb-lg-0">
+              <% if (currentPath.startsWith('/follow-ups')) { %>
+                <a href="/follow-ups" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>List</a>
+                <a href="/follow-ups/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Create</a>
+                <a href="/search/follow-ups" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
+              <% } else if (currentPath.startsWith('/communications')) { %>
+                <a href="/communications" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>List</a>
+                <a href="/communications/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Log</a>
+                <a href="/search/communications" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
+              <% } else if (currentPath.startsWith('/billing')) { %>
+                <a href="/billing" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>Invoices</a>
+                <a href="/billing/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Create</a>
+                <a href="/search/invoices" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
+              <% } else { %>
+                <a href="/api/health" target="_blank" class="d-flex align-items-center text-body py-2"><i class="ph-pulse me-2"></i>Health</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /page header -->
+
+      <!-- Content area -->
+      <div class="content">
+        <% if (flash) { %>
+          <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <%= flash %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        <% } %>

@@ -1,0 +1,116 @@
+<%- include('../partials/pageStart', { subtitle: 'Provider profile edit' }) %>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center">
+    <div>
+      <h5 class="mb-0">Edit provider</h5>
+      <div class="text-muted fs-sm mt-1"><%= provider.id %> · manage contact details, categories, service areas and availability.</div>
+    </div>
+    <div class="mt-2 mt-sm-0 ms-sm-auto">
+      <a href="/providers/<%= provider.id %>" class="btn btn-light"><i class="ph-arrow-left me-2"></i>Back to provider</a>
+    </div>
+  </div>
+
+  <div class="card-body border-top">
+    <form method="post" action="/providers/<%= provider.id %>">
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Profile</legend>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Name <span class="text-danger">*</span></label>
+          <div class="col-lg-9"><input class="form-control" name="name" value="<%= provider.name || '' %>" required></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Business name</label>
+          <div class="col-lg-9"><input class="form-control" name="businessName" value="<%= provider.businessName || '' %>"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Mobile / email</label>
+          <div class="col-lg-4"><input class="form-control" name="mobile" value="<%= provider.mobile || '' %>" required></div>
+          <div class="col-lg-5"><input class="form-control" type="email" name="email" value="<%= provider.email || '' %>"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Status</label>
+          <div class="col-lg-9"><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= provider.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Service capability</legend>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Categories</label>
+          <div class="col-lg-9">
+            <input class="form-control" name="categorySlugs" value="<%= (provider.categorySlugs || []).join(', ') %>" list="categorySlugOptions">
+            <datalist id="categorySlugOptions"><% categories.forEach((category) => { %><option value="<%= category.slug %>"><% }) %></datalist>
+            <div class="form-text">Comma-separated category slugs. This keeps the provider open to multiple service verticals.</div>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Skills</label>
+          <div class="col-lg-9"><input class="form-control" name="skills" value="<%= (provider.skills || []).join(', ') %>" placeholder="home visit, polishing, wall repair"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">City / state</label>
+          <div class="col-lg-4"><input class="form-control" name="city" value="<%= provider.city || '' %>"></div>
+          <div class="col-lg-5"><input class="form-control" name="state" value="<%= provider.state || '' %>"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Service areas</label>
+          <div class="col-lg-9"><input class="form-control" name="serviceAreas" value="<%= (provider.serviceAreas || []).join(', ') %>"><div class="form-text">Comma-separated cities/areas for matching enquiries.</div></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Availability / rating</label>
+          <div class="col-lg-5">
+            <select class="form-select" name="availability">
+              <% ['available_today', 'available_this_week', 'limited', 'unavailable'].forEach((availability) => { %><option value="<%= availability %>" <%= provider.availability === availability ? 'selected' : '' %>><%= humanize(availability) %></option><% }) %>
+            </select>
+          </div>
+          <div class="col-lg-4"><input class="form-control" type="number" name="rating" step="0.1" min="0" max="5" value="<%= provider.rating || 0 %>"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Documents verified</label>
+          <div class="col-lg-9">
+            <select class="form-select" name="documentsVerified">
+              <option value="true" <%= provider.documentsVerified ? 'selected' : '' %>>Yes</option>
+              <option value="false" <%= !provider.documentsVerified ? 'selected' : '' %>>No</option>
+            </select>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Notes</label>
+          <div class="col-lg-9"><textarea class="form-control" name="notes" rows="4"><%= provider.notes || '' %></textarea></div>
+        </div>
+      </fieldset>
+
+      <div class="text-end">
+        <a href="/providers/<%= provider.id %>" class="btn btn-light">Cancel</a>
+        <button class="btn btn-primary ms-2" type="submit">Save provider <i class="ph-floppy-disk ms-2"></i></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center">
+    <h5 class="mb-0">Assigned enquiries</h5>
+    <span class="badge bg-primary rounded-pill ms-sm-auto mt-2 mt-sm-0"><%= enquiries.length %></span>
+  </div>
+  <div class="table-responsive">
+    <table class="table text-nowrap">
+      <thead><tr><th>Customer</th><th>Service</th><th>Status</th><th>Created</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
+      <tbody>
+        <% enquiries.forEach((enquiry) => { %>
+          <tr>
+            <td><div class="fw-semibold"><%= enquiry.customer?.name || '-' %></div><div class="text-muted fs-sm"><%= enquiry.customer?.mobile || '-' %></div></td>
+            <td><%= enquiry.serviceType %></td>
+            <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
+            <td><%= formatDate(enquiry.createdAt) %></td>
+            <td class="text-center"><a href="/enquiries/<%= enquiry.id %>/edit" class="text-body"><i class="ph-pencil-simple"></i></a></td>
+          </tr>
+        <% }) %>
+        <% if (!enquiries.length) { %><tr><td colspan="5" class="text-muted text-center py-4">No assigned enquiries.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

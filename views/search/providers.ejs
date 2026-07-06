@@ -1,0 +1,49 @@
+<%- include('../partials/pageStart', { subtitle: 'Search provider directory' }) %>
+<%- include('../partials/searchTabs') %>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
+    <div>
+      <h5 class="py-sm-2 my-sm-1 mb-0">Provider Search</h5>
+      <div class="text-muted fs-sm">Search only providers. Use View for profile/history and Edit for provider data, categories, skills and service areas.</div>
+    </div>
+    <div class="mt-2 mt-sm-0 ms-sm-auto d-flex gap-2">
+      <span class="badge bg-primary rounded-pill align-self-center"><%= pagination.total %> found</span>
+      <a href="/providers/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create provider</a>
+    </div>
+  </div>
+  <div class="card-body border-top">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-xl-4 col-lg-5"><label class="form-label">Search text</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Name, mobile, skill, city..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
+      <div class="col-xl-3 col-lg-4 col-sm-6"><label class="form-label">Category</label><select class="form-select" name="categorySlug"><option value="">All categories</option><% categories.forEach((category)=>{ %><option value="<%= category.slug %>" <%= filters.categorySlug === category.slug ? 'selected' : '' %>><%= category.name %></option><% }) %></select></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">City</label><input class="form-control" name="city" placeholder="City" value="<%= filters.city || '' %>"></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table text-nowrap">
+      <thead><tr><th>Provider</th><th>Business</th><th>Categories</th><th>Skills</th><th>Location</th><th>Status</th><th>Rating</th><th>Availability</th><th class="text-center" style="width:160px">Action</th></tr></thead>
+      <tbody>
+        <% records.forEach((provider) => { %>
+          <tr>
+            <td><div class="fw-semibold"><%= provider.name %></div><div class="text-muted fs-sm"><%= provider.mobile || '-' %> <%= provider.email || '' %></div></td>
+            <td><%= provider.businessName || '-' %></td>
+            <td><%= (provider.categorySlugs || []).map(humanize).join(', ') || '-' %></td>
+            <td><%= (provider.skills || []).join(', ') || '-' %></td>
+            <td><%= [provider.city, provider.state].filter(Boolean).join(', ') || '-' %></td>
+            <td><%- include('../partials/statusBadge', { value: provider.status, humanize }) %></td>
+            <td><%= provider.rating || 0 %></td>
+            <td><%= humanize(provider.availability) %></td>
+            <td class="text-center"><div class="d-inline-flex gap-2"><a href="/providers/<%= provider.id %>" class="btn btn-outline-primary btn-sm"><i class="ph-eye me-1"></i>View</a><a href="/providers/<%= provider.id %>/edit" class="btn btn-light btn-sm"><i class="ph-pencil-simple me-1"></i>Edit</a></div></td>
+          </tr>
+        <% }) %>
+        <% if (!records.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No providers found.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+  <%- include('../partials/pagination', { pagination }) %>
+</div>
+
+<%- include('../partials/pageEnd') %>

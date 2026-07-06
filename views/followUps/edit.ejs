@@ -1,0 +1,27 @@
+<%- include('../partials/pageStart', { subtitle: 'Edit task' }) %>
+
+<div class="row">
+  <div class="col-xl-8 offset-xl-2">
+    <div class="card">
+      <div class="card-header d-sm-flex align-items-sm-center">
+        <h5 class="mb-0">Edit follow-up</h5>
+        <div class="ms-sm-auto mt-2 mt-sm-0"><a href="/follow-ups/<%= followUp.id %>" class="btn btn-light btn-sm"><i class="ph-eye me-2"></i>View</a></div>
+      </div>
+      <div class="card-body border-top">
+        <form method="post" action="/follow-ups/<%= followUp.id %>">
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related enquiry</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No enquiry</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>" <%= followUp.enquiryId === e.id ? 'selected' : '' %>><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name</label><div class="col-lg-9"><input class="form-control" name="customerName" value="<%= followUp.customerName || '' %>"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Title <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="title" value="<%= followUp.title || '' %>" required></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Due at</label><div class="col-lg-9"><input class="form-control" type="datetime-local" name="dueAt" value="<%= followUp.dueAt ? String(followUp.dueAt).slice(0,16) : '' %>"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Owner</label><div class="col-lg-9"><input class="form-control" name="owner" value="<%= followUp.owner || admin.email %>"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Channel</label><div class="col-lg-9"><select class="form-select" name="channel"><% ['call','whatsapp','email','sms'].forEach((channel)=>{ %><option value="<%= channel %>" <%= followUp.channel === channel ? 'selected' : '' %>><%= humanize(channel) %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Status</label><div class="col-lg-9"><select class="form-select" name="status"><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= followUp.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Notes</label><div class="col-lg-9"><textarea class="form-control" name="notes" rows="4"><%= followUp.notes || '' %></textarea></div></div>
+          <div class="text-end"><a href="/follow-ups/<%= followUp.id %>" class="btn btn-light">Cancel</a><button class="btn btn-primary ms-2" type="submit">Save changes <i class="ph-floppy-disk ms-2"></i></button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

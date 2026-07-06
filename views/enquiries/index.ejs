@@ -1,0 +1,118 @@
+<%- include('../partials/pageStart', { subtitle: queueDefinition ? queueDefinition.description : 'Operations queue' }) %>
+
+<% const currentQueue = queueDefinition || null; %>
+<% const queueCounts = (typeof navCounts !== 'undefined' && navCounts.queues) ? navCounts.queues : {}; %>
+
+<div class="row">
+  <% enquiryQueues.forEach((queue) => { %>
+    <div class="col-sm-6 col-xl">
+      <a href="/enquiries/queue/<%= queue.key %>" class="text-body text-decoration-none">
+        <div class="card <%= currentQueue && currentQueue.key === queue.key ? 'border-primary' : '' %>">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div>
+                <div class="text-muted fs-sm"><%= queue.shortLabel %></div>
+                <h3 class="mb-0"><%= queueCounts[queue.key] || 0 %></h3>
+              </div>
+              <div class="crm-stat-icon bg-primary bg-opacity-10 text-primary ms-auto"><i class="<%= queue.icon %>"></i></div>
+            </div>
+            <div class="fs-sm text-muted mt-2"><%= queue.description %></div>
+          </div>
+        </div>
+      </a>
+    </div>
+  <% }) %>
+</div>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
+    <div class="py-sm-2 my-sm-1">
+      <h5 class="mb-0"><%= currentQueue ? currentQueue.label : 'All enquiries' %></h5>
+      <% if (currentQueue) { %>
+        <div class="text-muted fs-sm">Showing only: <%= currentQueue.statuses.map(humanize).join(', ') %></div>
+      <% } else { %>
+        <div class="text-muted fs-sm">Full enquiry list with optional filters</div>
+      <% } %>
+    </div>
+    <div class="mt-2 mt-sm-0 ms-sm-auto d-inline-flex gap-2 flex-wrap">
+      <% if (currentQueue) { %><a class="btn btn-light" href="/enquiries"><i class="ph-list me-2"></i>All enquiries</a><% } %>
+      <a class="btn btn-primary" href="/enquiries/new"><i class="ph-plus me-2"></i>Create enquiry</a>
+    </div>
+  </div>
+
+  <div class="card-body border-top">
+    <form class="row g-3 align-items-end" method="get">
+      <div class="col-lg-3">
+        <label class="form-label">Search</label>
+        <input class="form-control" name="search" placeholder="Customer, phone, source..." value="<%= filters.search || filters.q || '' %>">
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">Website</label>
+        <select class="form-select" name="sourceWebsite">
+          <option value="">All websites</option>
+          <% sourceWebsites.forEach((site)=>{ %><option value="<%= site %>" <%= filters.sourceWebsite === site ? 'selected' : '' %>><%= site %></option><% }) %>
+        </select>
+      </div>
+      <% if (!currentQueue) { %>
+      <div class="col-lg-2">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          <option value="">All statuses</option>
+          <% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %>
+        </select>
+      </div>
+      <% } %>
+      <div class="col-lg-2">
+        <label class="form-label">Category</label>
+        <select class="form-select" name="categorySlug">
+          <option value="">All categories</option>
+          <% categories.forEach((c)=>{ %><option value="<%= c.slug %>" <%= filters.categorySlug === c.slug ? 'selected' : '' %>><%= c.name %> — <%= c.sourceWebsite || 'any' %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">Form type</label>
+        <input class="form-control" name="formType" placeholder="default" value="<%= filters.formType || '' %>">
+      </div>
+      <div class="col-lg-1">
+        <label class="form-label">Per page</label>
+        <select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select>
+      </div>
+      <div class="col-lg-1"><button class="btn btn-light w-100" type="submit">Filter</button></div>
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table text-nowrap">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Service</th>
+          <th>Website / form</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Provider</th>
+          <th>Created</th>
+          <th class="text-center" style="width:150px">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      <% enquiries.forEach((enquiry) => { %>
+        <tr>
+          <td><div class="fw-semibold"><%= enquiry.customer.name || '-' %></div><div class="text-muted fs-sm"><%= enquiry.customer.mobile %> <%= enquiry.customer.email || '' %></div></td>
+          <td><div><%= enquiry.serviceType %></div><div class="text-muted fs-sm"><%= humanize(enquiry.categorySlug) %></div></td>
+          <td><div><%= enquiry.sourceWebsite %></div><div class="text-muted fs-sm"><%= [enquiry.formType, enquiry.source?.channel, enquiry.source?.campaign || enquiry.source?.utm?.campaign].filter(Boolean).join(' · ') %></div></td>
+          <td><%- include('../partials/statusBadge', { value: enquiry.priority, humanize }) %></td>
+          <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
+          <td><%= enquiry.assignedProviderName || '-' %></td>
+          <td><%= formatDate(enquiry.createdAt) %></td>
+          <td class="text-center"><div class="d-inline-flex gap-2"><a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary btn-sm"><i class="ph-eye me-1"></i>View</a><a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-light btn-sm"><i class="ph-pencil-simple me-1"></i>Edit</a></div></td>
+        </tr>
+      <% }) %>
+      <% if (!enquiries.length) { %><tr><td colspan="8" class="text-muted text-center py-4"><%= currentQueue ? currentQueue.emptyMessage : 'No enquiries found.' %></td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+  <%- include('../partials/pagination', { pagination }) %>
+</div>
+
+<%- include('../partials/pageEnd') %>

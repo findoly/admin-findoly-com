@@ -1,0 +1,162 @@
+<%- include('../partials/pageStart', { subtitle: 'Find and edit CRM records' }) %>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
+    <div>
+      <h5 class="py-sm-2 my-sm-1 mb-0">Search center</h5>
+      <div class="text-muted fs-sm">Search enquiries, providers, follow-ups, communications and invoices from one place.</div>
+    </div>
+    <div class="mt-2 mt-sm-0 ms-sm-auto">
+      <span class="badge bg-primary rounded-pill"><%= results.total %> result<%= results.total === 1 ? '' : 's' %></span>
+    </div>
+  </div>
+
+  <div class="card-body border-top">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-xl-4 col-lg-6">
+        <label class="form-label">Search text</label>
+        <div class="form-control-feedback form-control-feedback-start">
+          <input class="form-control" name="q" placeholder="Mobile, customer, provider, invoice, external ID..." value="<%= filters.q || '' %>">
+          <div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div>
+        </div>
+      </div>
+      <div class="col-xl-2 col-lg-3 col-sm-6">
+        <label class="form-label">Record type</label>
+        <select class="form-select" name="entity">
+          <% [
+            ['all', 'All records'],
+            ['enquiries', 'Enquiries'],
+            ['providers', 'Providers'],
+            ['followUps', 'Follow-ups'],
+            ['communications', 'Communications'],
+            ['invoices', 'Invoices']
+          ].forEach(([value, label]) => { %>
+            <option value="<%= value %>" <%= (filters.entity || 'all') === value ? 'selected' : '' %>><%= label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-xl-2 col-lg-3 col-sm-6">
+        <label class="form-label">Website</label>
+        <select class="form-select" name="sourceWebsite">
+          <option value="">All websites</option>
+          <% sourceWebsites.forEach((site) => { %>
+            <option value="<%= site %>" <%= filters.sourceWebsite === site ? 'selected' : '' %>><%= site %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-xl-2 col-lg-3 col-sm-6">
+        <label class="form-label">Category</label>
+        <select class="form-select" name="categorySlug">
+          <option value="">All categories</option>
+          <% categories.forEach((category) => { %>
+            <option value="<%= category.slug %>" <%= filters.categorySlug === category.slug ? 'selected' : '' %>><%= category.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-xl-1 col-lg-3 col-sm-6">
+        <label class="form-label">Limit</label>
+        <select class="form-select" name="limit">
+          <% [20, 50, 100].forEach((limit) => { %><option value="<%= limit %>" <%= String(filters.limit || 20) === String(limit) ? 'selected' : '' %>><%= limit %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-xl-1 col-lg-3 col-sm-6">
+        <button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Go</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <h5 class="mb-0">Enquiries</h5>
+        <span class="badge bg-primary rounded-pill ms-auto"><%= results.enquiries.length %></span>
+      </div>
+      <div class="table-responsive">
+        <table class="table text-nowrap">
+          <thead><tr><th>Customer</th><th>Service</th><th>Website/form</th><th>Status</th><th>Provider</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
+          <tbody>
+            <% results.enquiries.forEach((enquiry) => { %>
+              <tr>
+                <td><div class="fw-semibold"><%= enquiry.customer?.name || '-' %></div><div class="text-muted fs-sm"><%= enquiry.customer?.mobile || '-' %> <%= enquiry.customer?.email || '' %></div></td>
+                <td><div><%= enquiry.serviceType %></div><div class="text-muted fs-sm"><%= humanize(enquiry.categorySlug) %></div></td>
+                <td><div><%= enquiry.sourceWebsite %></div><div class="text-muted fs-sm"><%= [enquiry.formType, enquiry.source?.channel, enquiry.source?.campaign || enquiry.source?.utm?.campaign].filter(Boolean).join(' · ') %></div></td>
+                <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
+                <td><%= enquiry.assignedProviderName || '-' %></td>
+                <td class="text-center">
+                  <div class="d-inline-flex gap-2">
+                    <a href="/enquiries/<%= enquiry.id %>" class="text-body" title="View"><i class="ph-eye"></i></a>
+                    <a href="/enquiries/<%= enquiry.id %>/edit" class="text-body" title="Edit"><i class="ph-pencil-simple"></i></a>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!results.enquiries.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No enquiries found.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <h5 class="mb-0">Providers</h5>
+        <span class="badge bg-primary rounded-pill ms-auto"><%= results.providers.length %></span>
+      </div>
+      <div class="table-responsive">
+        <table class="table text-nowrap">
+          <thead><tr><th>Provider</th><th>Status</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
+          <tbody>
+            <% results.providers.forEach((provider) => { %>
+              <tr>
+                <td><div class="fw-semibold"><%= provider.name %></div><div class="text-muted fs-sm"><%= provider.mobile || '-' %> · <%= [provider.city, provider.state].filter(Boolean).join(', ') || '-' %></div></td>
+                <td><%- include('../partials/statusBadge', { value: provider.status, humanize }) %></td>
+                <td class="text-center">
+                  <div class="d-inline-flex gap-2">
+                    <a href="/providers/<%= provider.id %>" class="text-body" title="View"><i class="ph-eye"></i></a>
+                    <a href="/providers/<%= provider.id %>/edit" class="text-body" title="Edit"><i class="ph-pencil-simple"></i></a>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!results.providers.length) { %><tr><td colspan="3" class="text-center text-muted py-4">No providers found.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center"><h5 class="mb-0">Follow-ups</h5><span class="badge bg-primary rounded-pill ms-auto"><%= results.followUps.length %></span></div>
+      <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>Title</th><th>Status</th></tr></thead><tbody>
+        <% results.followUps.forEach((item) => { %><tr><td><div class="fw-semibold"><%= item.title %></div><div class="text-muted fs-sm"><%= item.enquiryId || '-' %> · <%= item.dueAt || '-' %></div></td><td><%- include('../partials/statusBadge', { value: item.status, humanize }) %></td></tr><% }) %>
+        <% if (!results.followUps.length) { %><tr><td colspan="2" class="text-center text-muted py-4">No follow-ups found.</td></tr><% } %>
+      </tbody></table></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center"><h5 class="mb-0">Communications</h5><span class="badge bg-primary rounded-pill ms-auto"><%= results.communications.length %></span></div>
+      <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>Recipient</th><th>Channel</th></tr></thead><tbody>
+        <% results.communications.forEach((item) => { %><tr><td><div class="fw-semibold"><%= item.recipientName || item.recipientContact || '-' %></div><div class="text-muted fs-sm"><%= item.enquiryId || item.providerId || '-' %></div></td><td><%= humanize(item.channel) %></td></tr><% }) %>
+        <% if (!results.communications.length) { %><tr><td colspan="2" class="text-center text-muted py-4">No communications found.</td></tr><% } %>
+      </tbody></table></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center"><h5 class="mb-0">Invoices</h5><span class="badge bg-primary rounded-pill ms-auto"><%= results.invoices.length %></span></div>
+      <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>Invoice</th><th>Total</th></tr></thead><tbody>
+        <% results.invoices.forEach((item) => { %><tr><td><div class="fw-semibold"><a href="/billing/<%= item.id %>"><%= item.invoiceNo %></a></div><div class="text-muted fs-sm"><%= item.customerName || '-' %> · <%= item.status %></div></td><td>₹<%= item.total || 0 %></td></tr><% }) %>
+        <% if (!results.invoices.length) { %><tr><td colspan="2" class="text-center text-muted py-4">No invoices found.</td></tr><% } %>
+      </tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/pageEnd') %>

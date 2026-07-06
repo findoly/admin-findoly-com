@@ -1,0 +1,29 @@
+/* CRM-only additions. Base layout, forms, cards, tables and responsive behaviour come from Limitless CSS. */
+.crm-logo { width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 50rem; background: #0c83ff; color: #fff; font-weight: 700; }
+.crm-stat-card .card-body { min-height: 7rem; }
+.crm-stat-icon { width: 2.5rem; height: 2.5rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 50rem; }
+.status-new,.status-open,.status-draft,.status-normal{background-color:rgba(var(--primary-rgb),.1);color:var(--primary)}
+.status-assigned,.status-scheduled,.status-sent,.status-high,.status-contacted{background-color:rgba(var(--warning-rgb),.12);color:#b45309}
+.status-completed,.status-paid,.status-done,.status-active,.status-low{background-color:rgba(var(--success-rgb),.12);color:var(--success)}
+.status-cancelled,.status-lost,.status-blocked,.status-urgent{background-color:rgba(var(--danger-rgb),.12);color:var(--danger)}
+.status-verification-pending,.status-missed,.status-inactive{background-color:rgba(var(--secondary-rgb),.12);color:var(--secondary)}
+.required-hint { color: var(--danger); font-size: var(--body-font-size-sm); margin-left: .35rem; }
+.crm-mini-bars { display: grid; gap: .625rem; }
+.crm-bar-row { display: grid; grid-template-columns: minmax(7rem, .6fr) 1fr 3rem; gap: .625rem; align-items: center; }
+.crm-bar-track { height: .5rem; background: var(--gray-200); border-radius: 50rem; overflow: hidden; }
+.crm-bar-fill { height: 100%; background: var(--primary); border-radius: 50rem; }
+.crm-field-builder-row { background: var(--gray-100); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem; margin-bottom: .75rem; }
+.schema-preview { background: #111827; color: #dbeafe; border-radius: var(--border-radius); padding: 1rem; overflow: auto; max-height: 20rem; white-space: pre-wrap; }
+.crm-empty { padding: 2rem; text-align: center; color: var(--gray-600); }
+.crm-nowrap { white-space: nowrap; }
+.crm-break { word-break: break-word; }
+@media (max-width: 991.98px) {
+  .navbar-search { width: 100%; }
+  .content { padding: var(--spacer-2); }
+  .crm-bar-row { grid-template-columns: 1fr; }
+}
+@media print {
+  .navbar, .sidebar, .page-header, .navbar-footer { display: none !important; }
+  .page-content, .content-wrapper, .content-inner { display: block !important; overflow: visible !important; }
+  .content { padding: 0 !important; }
+}

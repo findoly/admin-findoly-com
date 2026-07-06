@@ -1,0 +1,107 @@
+<%- include('../partials/pageStart', { subtitle: 'Manual booking' }) %>
+
+<div class="card">
+  <div class="card-header d-sm-flex align-items-sm-center">
+    <div>
+      <h5 class="mb-0">Create manual enquiry</h5>
+      <div class="text-muted fs-sm mt-1">Choose website, category and form type. Dynamic fields are loaded from the matching form template.</div>
+    </div>
+    <div class="ms-sm-auto mt-2 mt-sm-0"><a href="/enquiries" class="btn btn-light"><i class="ph-arrow-left me-2"></i>Back</a></div>
+  </div>
+  <div class="card-body border-top">
+    <form method="post" action="/enquiries" data-dynamic-template-form>
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Source information</legend>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Source website <span class="text-danger">*</span></label>
+          <div class="col-lg-9"><input class="form-control" name="sourceWebsite" value="manual-admin" list="source-websites" placeholder="woodoly.com / vetskart.com" required data-template-source><datalist id="source-websites"><% sourceWebsites.forEach((site) => { %><option value="<%= site %>"><% }) %></datalist></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Channel / campaign</label>
+          <div class="col-lg-4"><input class="form-control" name="sourceChannel" placeholder="website, whatsapp, call-center"></div>
+          <div class="col-lg-5"><input class="form-control" name="campaign" placeholder="google-ads / summer-offer"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Form and tracking</label>
+          <div class="col-lg-3"><input class="form-control" name="formId" placeholder="homepage-lead-form"></div>
+          <div class="col-lg-3"><input class="form-control" name="externalEnquiryId" placeholder="External enquiry ID"></div>
+          <div class="col-lg-3"><input class="form-control" name="utm_campaign" placeholder="UTM campaign"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Landing page</label>
+          <div class="col-lg-9"><input class="form-control" name="landingPage" placeholder="https://example.com/service-page"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Referrer / UTM</label>
+          <div class="col-lg-3"><input class="form-control" name="referrer" placeholder="https://google.com"></div>
+          <div class="col-lg-3"><input class="form-control" name="utm_source" placeholder="google"></div>
+          <div class="col-lg-3"><input class="form-control" name="utm_medium" placeholder="cpc"></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Module selection</legend>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Category <span class="text-danger">*</span></label>
+          <div class="col-lg-9"><select class="form-select" name="categorySlug" required data-template-category>
+            <% categories.forEach((c) => { %><option value="<%= c.slug %>" data-source="<%= c.sourceWebsite || 'any' %>" data-form-type="<%= c.formType || 'default' %>"><%= c.name %> — <%= c.sourceWebsite || 'any' %> / <%= c.formType || 'default' %></option><% }) %>
+          </select></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Form type</label>
+          <div class="col-lg-9"><input class="form-control" name="formType" value="default" placeholder="wardrobe-repair / painting-quote / default" data-template-form-type></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Template</label>
+          <div class="col-lg-9"><select class="form-select" name="templateId" data-template-select>
+            <option value="">Auto select best matching template</option>
+            <% templates.forEach((template) => { %><option value="<%= template.id %>" data-source="<%= template.sourceWebsite %>" data-category="<%= template.categorySlug %>" data-form-type="<%= template.formType || 'default' %>"><%= template.name %> — <%= template.sourceWebsite %> / <%= template.categorySlug %> / <%= template.formType || 'default' %></option><% }) %>
+          </select><div class="form-text">Manual booking can be saved even if required dynamic fields are missing. Admin can complete them later.</div></div>
+        </div>
+        <div data-template-summary></div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Service / priority</label>
+          <div class="col-lg-6"><input class="form-control" name="serviceType" placeholder="Wardrobe repair, wall painting, home visit" required></div>
+          <div class="col-lg-3"><select class="form-select" name="priority"><% priorities.forEach((p)=>{ %><option value="<%= p %>"><%= humanize(p) %></option><% }) %></select></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Customer</legend>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Name / mobile</label>
+          <div class="col-lg-5"><input class="form-control" name="customerName" required></div>
+          <div class="col-lg-4"><input class="form-control" name="mobile" required></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Email</label>
+          <div class="col-lg-9"><input class="form-control" type="email" name="email"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Address</label>
+          <div class="col-lg-4"><input class="form-control" name="city" placeholder="City"></div>
+          <div class="col-lg-3"><input class="form-control" name="state" placeholder="State"></div>
+          <div class="col-lg-2"><input class="form-control" name="pincode" placeholder="Pincode"></div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Address line</label>
+          <div class="col-lg-9"><input class="form-control" name="addressLine1" placeholder="House, street, area"></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="mb-3">
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Dynamic form data</legend>
+        <input type="hidden" name="dynamicFieldKeys" data-dynamic-field-keys>
+        <div data-dynamic-fields></div>
+      </fieldset>
+
+      <div class="row mb-3">
+        <label class="col-lg-3 col-form-label">Notes</label>
+        <div class="col-lg-9"><textarea class="form-control" name="notes" rows="4" placeholder="Internal note, requirement detail, call summary"></textarea></div>
+      </div>
+      <div class="text-end"><button type="submit" class="btn btn-primary">Create enquiry <i class="ph-paper-plane-tilt ms-2"></i></button></div>
+    </form>
+  </div>
+</div>
+<script type="application/json" id="templates-json"><%- JSON.stringify(templates) %></script>
+<%- include('../partials/pageEnd') %>
