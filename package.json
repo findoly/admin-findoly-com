@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Generic admin CRM for multi-category service enquiries, provider assignment, follow-ups, communications and billing.",
   "private": true,
-  "type": "commonjs",
   "scripts": {
     "start": "node src/server.js"
   },
