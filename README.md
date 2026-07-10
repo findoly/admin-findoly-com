@@ -29,18 +29,16 @@ test/                   Node test runner suites
 
 ## Per-employee appearance settings
 
-Authenticated employees can open **Appearance settings** from the palette button in the top navigation or from the account menu. The settings panel provides live controls for:
+Authenticated employees can open **Appearance settings** from the palette button in the top navigation or from the account menu. Changes preview immediately and are saved only in browser `localStorage`, using the signed-in employee email in the storage key.
 
-- accent, page, header, sidebar, active-menu, text, and muted-text colors
-- card surface, header, border color, border width, radius, and shadow
-- input surface and border colors
-- table header, row, alternating row, hover, and border colors
-- table radius, border width, and striped/plain row style
-- button and navigation radius
-- sidebar width, interface density, and font scale
-- quick presets such as Soft Slate, Ocean, Sage, Warm Sand, Lavender, and Graphite
+Only four dashboard presets are included:
 
-Preferences are stored in browser `localStorage`, using the signed-in employee email as part of the storage key. They are not written to MongoDB and do not affect another employee's browser or account. Changes preview immediately and persist across page navigation and future sessions in that browser.
+- **Black & white** — dark header/sidebar with white content surfaces.
+- **White & black** — light header/sidebar with dark text; this is the default.
+- **Facebook style, Facebook light, LinkedIn professional, Teal professional** — familiar Facebook blue with light-gray page surfaces.
+- **Blue, black & white** — dark navigation with blue actions and white content.
+
+Font selection and font-size controls have been removed so every employee sees consistent typography. Employees can still adjust layout density, page/header/sidebar colors, backgrounds, card and table surfaces, borders, radii, shadows, sidebar width, and table row styling. These preferences are not written to MongoDB and do not affect another employee's browser or account.
 
 ## Current workflow
 
@@ -285,3 +283,7 @@ The integration test is skipped by default when that environment variable is not
 - Add attachment storage for photos/documents.
 - Add queue/retry handling for communication webhooks.
 - Use managed MongoDB backups and audit-log retention.
+
+## Default appearance
+
+The default employee interface is the **White & black** theme: white header and cards, soft-gray page/sidebar surfaces, dark text, subtle borders, no gradients, and no card shadows. Employees can switch among the four approved themes, stored per employee in browser localStorage.

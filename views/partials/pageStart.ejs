@@ -29,42 +29,6 @@
           </div>
         </div>
 
-        <div class="page-header-content d-lg-flex border-top crm-page-subnav">
-          <div class="d-flex">
-            <div class="breadcrumb py-2">
-              <a href="/dashboard" class="breadcrumb-item"><i class="ph-house"></i></a>
-              <% if (currentPath.startsWith('/enquiries')) { %><a href="/enquiries" class="breadcrumb-item">Requirements</a><% } %>
-              <% if (currentPath.startsWith('/providers')) { %><a href="/providers" class="breadcrumb-item">Providers</a><% } %>
-              <% if (currentPath.startsWith('/follow-ups')) { %><a href="/follow-ups" class="breadcrumb-item">Follow-ups</a><% } %>
-              <% if (currentPath.startsWith('/communications')) { %><a href="/communications" class="breadcrumb-item">Communications</a><% } %>
-              <% if (currentPath.startsWith('/billing')) { %><a href="/billing" class="breadcrumb-item">Billing</a><% } %>
-              <% if (currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="breadcrumb-item">Search</a><% } %>
-              <span class="breadcrumb-item active"><%= title || branding.appName %></span>
-            </div>
-            <a href="#breadcrumb_elements" class="btn btn-light align-self-center collapsed d-lg-none border-transparent rounded-pill p-0 ms-auto" data-bs-toggle="collapse">
-              <svg class="crm-svg-icon collapsible-indicator m-1" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </a>
-          </div>
-          <div class="collapse d-lg-block ms-lg-auto" id="breadcrumb_elements">
-            <div class="d-lg-flex mb-2 mb-lg-0">
-              <% if (currentPath.startsWith('/follow-ups')) { %>
-                <a href="/follow-ups" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>List</a>
-                <a href="/follow-ups/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Create</a>
-                <a href="/search/follow-ups" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
-              <% } else if (currentPath.startsWith('/communications')) { %>
-                <a href="/communications" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>List</a>
-                <a href="/communications/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Log</a>
-                <a href="/search/communications" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
-              <% } else if (currentPath.startsWith('/billing')) { %>
-                <a href="/billing" class="d-flex align-items-center text-body py-2"><i class="ph-list me-2"></i>Invoices</a>
-                <a href="/billing/new" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-plus me-2"></i>Create</a>
-                <a href="/search/invoices" class="d-flex align-items-center text-body py-2 ms-lg-3"><i class="ph-magnifying-glass me-2"></i>Search</a>
-              <% } else { %>
-                <a href="/api/health" target="_blank" class="d-flex align-items-center text-body py-2"><i class="ph-pulse me-2"></i>Health</a>
-              <% } %>
-            </div>
-          </div>
-        </div>
       </div>
       <!-- /page header -->
 

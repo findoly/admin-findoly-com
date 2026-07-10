@@ -392,6 +392,94 @@
     setStep(0, false);
   }
 
+
+  function compactFilterForms() {
+    const forms = document.querySelectorAll('.card-body.border-top > form.row.g-3.align-items-end[method="get"]');
+    forms.forEach((form, index) => {
+      if (form.dataset.crmCompactFilterInit === 'true') return;
+      const groups = Array.from(form.children).filter((node) => node.nodeType === 1);
+      const searchGroup = groups.find((group) => group.querySelector('input[name="q"], input[name="search"]'));
+      const pageSizeGroup = groups.find((group) => group.querySelector('select[name="pageSize"]'));
+      const actionGroup = groups.find((group) => group.querySelector('button[type="submit"]'));
+      if (!searchGroup || !actionGroup) return;
+
+      form.dataset.crmCompactFilterInit = 'true';
+      form.className = 'crm-filter-form';
+      form.parentElement?.classList.add('crm-filter-shell');
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'crm-filter-toolbar';
+      const advanced = document.createElement('div');
+      advanced.className = 'crm-filter-advanced';
+      advanced.id = `crm-filter-advanced-${index}`;
+      const grid = document.createElement('div');
+      grid.className = 'crm-filter-grid';
+
+      searchGroup.className = 'crm-filter-search';
+      searchGroup.querySelector('.form-label')?.classList.add('visually-hidden');
+      toolbar.appendChild(searchGroup);
+
+      const advancedGroups = groups.filter((group) => group !== searchGroup && group !== pageSizeGroup && group !== actionGroup);
+      advancedGroups.forEach((group) => {
+        group.className = 'crm-filter-field';
+        grid.appendChild(group);
+      });
+      advanced.appendChild(grid);
+
+      const activeFilterCount = () => advancedGroups.reduce((count, group) => {
+        const active = Array.from(group.querySelectorAll('input, select, textarea')).some((control) => {
+          if (control.disabled || !control.name) return false;
+          if (control.type === 'checkbox' || control.type === 'radio') return control.checked;
+          return String(control.value || '').trim() !== '';
+        });
+        return count + (active ? 1 : 0);
+      }, 0);
+
+      const count = activeFilterCount();
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = `btn btn-light crm-filter-toggle${count ? ' is-active' : ''}`;
+      toggle.setAttribute('aria-controls', advanced.id);
+      toggle.setAttribute('aria-expanded', count ? 'true' : 'false');
+      toggle.innerHTML = `<i class="ph-faders-horizontal me-2"></i>Filters${count ? `<span class="badge bg-primary ms-2">${count}</span>` : ''}`;
+      if (advancedGroups.length) toolbar.appendChild(toggle);
+
+      if (pageSizeGroup) {
+        pageSizeGroup.className = 'crm-filter-page-size';
+        const label = pageSizeGroup.querySelector('.form-label');
+        if (label) label.textContent = 'Rows';
+        toolbar.appendChild(pageSizeGroup);
+      }
+
+      const submit = actionGroup.querySelector('button[type="submit"]');
+      if (submit) {
+        submit.classList.remove('flex-fill', 'w-100');
+        submit.classList.add('crm-filter-submit');
+        if (!submit.querySelector('i')) submit.innerHTML = `<i class="ph-magnifying-glass me-2"></i>${submit.textContent.trim() || 'Search'}`;
+        toolbar.appendChild(submit);
+      }
+      const clear = actionGroup.querySelector('a');
+      if (clear) {
+        clear.classList.add('crm-filter-clear');
+        clear.setAttribute('title', 'Clear filters');
+        toolbar.appendChild(clear);
+      }
+      actionGroup.remove();
+
+      const setOpen = (open) => {
+        advanced.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.classList.toggle('is-open', open);
+      };
+      setOpen(count > 0);
+      toggle.addEventListener('click', () => setOpen(!advanced.classList.contains('is-open')));
+
+      form.replaceChildren(toolbar, advanced);
+      const table = form.closest('.card')?.querySelector('.table-responsive table');
+      table?.classList.add('crm-compact-table');
+    });
+  }
+
   function globalSearch() {
     document.querySelectorAll('[data-crm-global-search]').forEach((input) => {
       input.addEventListener('keydown', (event) => {
@@ -465,6 +553,7 @@
     renderBars();
     dynamicTemplateForm();
     leadCreateWizard();
+    compactFilterForms();
     globalSearch();
     dashboardNewBookings();
     crmTabs();

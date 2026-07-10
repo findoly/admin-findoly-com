@@ -2397,40 +2397,40 @@ body {
    Values are applied by /js/appearance.js and saved per employee in localStorage.
    -------------------------------------------------------------------------- */
 :root {
-  --crm-user-accent: #356ae6;
-  --crm-user-accent-hover: #2f5dcc;
-  --crm-user-accent-soft: rgba(53, 106, 230, .12);
-  --crm-user-accent-softer: rgba(53, 106, 230, .07);
-  --crm-user-accent-rgb: 53, 106, 230;
-  --crm-user-header-bg: #e9eef5;
-  --crm-user-header-text: #1f2937;
-  --crm-user-sidebar-bg: #dde6f0;
-  --crm-user-sidebar-text: #344054;
-  --crm-user-sidebar-active-bg: #cbdcf8;
-  --crm-user-sidebar-active-text: #174ea6;
-  --crm-user-page-bg: #eef2f6;
-  --crm-user-main-text: #172033;
-  --crm-user-muted-text: #667085;
-  --crm-user-card-bg: #fdfefe;
-  --crm-user-card-header-bg: #f5f8fb;
-  --crm-user-card-border: #cdd7e3;
+  --crm-user-accent: #111827;
+  --crm-user-accent-hover: #000000;
+  --crm-user-accent-soft: rgba(17, 24, 39, .08);
+  --crm-user-accent-softer: rgba(17, 24, 39, .04);
+  --crm-user-accent-rgb: 17, 24, 39;
+  --crm-user-header-bg: #ffffff;
+  --crm-user-header-text: #111827;
+  --crm-user-sidebar-bg: #f8fafc;
+  --crm-user-sidebar-text: #374151;
+  --crm-user-sidebar-active-bg: #111827;
+  --crm-user-sidebar-active-text: #ffffff;
+  --crm-user-page-bg: #f4f5f7;
+  --crm-user-main-text: #111827;
+  --crm-user-muted-text: #6b7280;
+  --crm-user-card-bg: #ffffff;
+  --crm-user-card-header-bg: #ffffff;
+  --crm-user-card-border: #dfe3e8;
   --crm-user-input-bg: #ffffff;
-  --crm-user-input-border: #bdc9d8;
-  --crm-user-table-head-bg: #e8eef5;
-  --crm-user-table-head-text: #344054;
-  --crm-user-table-border: #d4dde8;
+  --crm-user-input-border: #cfd5dc;
+  --crm-user-table-head-bg: #f3f4f6;
+  --crm-user-table-head-text: #111827;
+  --crm-user-table-border: #e2e5e9;
   --crm-user-table-row-bg: #ffffff;
-  --crm-user-table-alt-bg: #f7f9fc;
-  --crm-user-table-hover: #e7f0ff;
-  --crm-user-card-radius: 8px;
-  --crm-user-table-radius: 8px;
-  --crm-user-button-radius: 6px;
-  --crm-user-nav-radius: 6px;
+  --crm-user-table-alt-bg: #fafafa;
+  --crm-user-table-hover: #f3f4f6;
+  --crm-user-card-radius: 6px;
+  --crm-user-table-radius: 6px;
+  --crm-user-button-radius: 5px;
+  --crm-user-nav-radius: 5px;
   --crm-user-card-border-width: 1px;
   --crm-user-table-border-width: 1px;
-  --crm-user-sidebar-width: 284px;
+  --crm-user-sidebar-width: 276px;
   --crm-user-font-scale: 100%;
-  --crm-user-card-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+  --crm-user-card-shadow: none;
 }
 
 html {
@@ -2767,10 +2767,10 @@ body.crm-appearance-open {
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: #f7f9fc;
-  color: #172033;
+  background: #f7f7f8;
+  color: #111827;
   border-left: 1px solid #cfd8e4;
-  box-shadow: -12px 0 36px rgba(15, 23, 42, .16);
+  box-shadow: -8px 0 24px rgba(15, 23, 42, .10);
   transform: translateX(102%);
   transition: transform .2s ease;
 }
@@ -2981,5 +2981,363 @@ body.crm-appearance-open {
   }
   .crm-appearance-status {
     width: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Appearance v3: palette themes, typography and background combinations
+   -------------------------------------------------------------------------- */
+:root {
+  --crm-user-accent-text: #ffffff;
+  --crm-user-header-bg2: #ffffff;
+  --crm-user-sidebar-bg2: #f8fafc;
+  --crm-user-page-bg2: #ffffff;
+  --crm-user-font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --crm-user-heading-font-family: inherit;
+  --crm-user-page-background: #f4f5f7;
+  --crm-user-header-background: #ffffff;
+  --crm-user-sidebar-background: #f8fafc;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea,
+.form-control,
+.form-select,
+.btn,
+.table {
+  font-family: var(--crm-user-font-family) !important;
+}
+
+h1, h2, h3, h4, h5, h6,
+.page-title,
+.card-title,
+.crm-sidebar-title,
+.crm-brand-name,
+.crm-view-title {
+  font-family: var(--crm-user-heading-font-family), var(--crm-user-font-family) !important;
+}
+
+body,
+.content-inner {
+  background: var(--crm-user-page-background) !important;
+  background-attachment: fixed !important;
+}
+
+html[data-crm-background-style="dots"] body,
+html[data-crm-background-style="dots"] .content-inner {
+  background-size: 18px 18px !important;
+}
+
+html[data-crm-background-style="grid"] body,
+html[data-crm-background-style="grid"] .content-inner {
+  background-size: 24px 24px !important;
+}
+
+.crm-topbar,
+.navbar-light.navbar-static.crm-topbar {
+  background: var(--crm-user-header-background) !important;
+}
+
+.crm-sidebar,
+.sidebar-light.crm-sidebar {
+  background: var(--crm-user-sidebar-background) !important;
+}
+
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.disabled,
+.btn-primary:disabled,
+.bg-primary {
+  color: var(--crm-user-accent-text) !important;
+}
+
+.badge.bg-primary,
+.page-item.active .page-link {
+  color: var(--crm-user-accent-text) !important;
+}
+
+.crm-theme-presets-featured {
+  grid-template-columns: 1fr;
+}
+
+.crm-theme-preset-five {
+  min-height: 3.2rem;
+  padding: .55rem .65rem;
+}
+
+.crm-theme-preset-five > span {
+  width: 7.25rem;
+  height: 1.85rem;
+  flex: 0 0 7.25rem;
+  border-radius: .35rem;
+  background: linear-gradient(90deg,
+    var(--preset-1) 0 20%,
+    var(--preset-2) 20% 40%,
+    var(--preset-3) 40% 60%,
+    var(--preset-4) 60% 80%,
+    var(--preset-5) 80% 100%);
+}
+
+.crm-theme-preset-five > span::after {
+  display: none;
+}
+
+.crm-theme-preset-five b {
+  min-width: 0;
+  overflow: hidden;
+  font-size: .82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-theme-preset.is-active {
+  border-color: var(--crm-user-accent);
+  background: var(--crm-user-accent-softer);
+  box-shadow: 0 0 0 2px var(--crm-user-accent-soft);
+}
+
+.crm-theme-preset.is-active::after {
+  content: "✓";
+  margin-left: auto;
+  color: var(--crm-user-accent);
+  font-weight: 800;
+}
+
+.crm-appearance-panel-body .form-select {
+  color-scheme: light;
+}
+
+@media (max-width: 480px) {
+  .crm-theme-preset-five > span {
+    width: 6rem;
+    flex-basis: 6rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Compact filters, breadcrumb-free headers and theme-safe hover states
+   -------------------------------------------------------------------------- */
+:root {
+  --crm-user-header-hover-bg: rgba(17, 24, 39, .08);
+  --crm-user-header-hover-text: #111827;
+  --crm-user-sidebar-hover-bg: rgba(17, 24, 39, .08);
+  --crm-user-sidebar-hover-text: #111827;
+}
+
+/* Breadcrumb row was removed from the template; keep the page header compact. */
+.crm-page-header {
+  border-bottom: 1px solid var(--crm-user-card-border) !important;
+  box-shadow: none !important;
+}
+
+.crm-page-heading {
+  min-height: 3.5rem;
+  padding-top: .65rem !important;
+  padding-bottom: .65rem !important;
+}
+
+.crm-page-heading .page-title {
+  font-size: 1.08rem !important;
+  line-height: 1.35;
+}
+
+/* Keep link text readable on both light and dark employee themes. */
+.crm-topbar .navbar-nav-link:hover,
+.crm-topbar .navbar-nav-link:focus,
+.crm-topbar .crm-topbar-link:hover,
+.crm-topbar .crm-appearance-trigger:hover {
+  background: var(--crm-user-header-hover-bg) !important;
+  color: var(--crm-user-header-hover-text) !important;
+}
+
+.crm-topbar .navbar-nav-link:hover *,
+.crm-topbar .crm-topbar-link:hover *,
+.crm-topbar .crm-appearance-trigger:hover * {
+  color: inherit !important;
+}
+
+.crm-sidebar .nav-sidebar .nav-link:hover,
+.crm-sidebar .nav-sidebar .nav-group-sub .nav-link:hover {
+  background: var(--crm-user-sidebar-hover-bg) !important;
+  color: var(--crm-user-sidebar-hover-text) !important;
+}
+
+.crm-sidebar .nav-sidebar .nav-link:hover > i,
+.crm-sidebar .nav-sidebar .nav-link:hover span,
+.crm-sidebar .nav-sidebar .nav-link:hover span > .d-block,
+.crm-sidebar .nav-sidebar .nav-link:hover::after {
+  color: inherit !important;
+}
+
+.crm-sidebar .nav-sidebar .nav-link:hover > i {
+  background: color-mix(in srgb, var(--crm-user-sidebar-hover-text) 12%, transparent) !important;
+}
+
+.dropdown-menu .dropdown-item:hover,
+.dropdown-menu .dropdown-item:focus {
+  background: var(--crm-user-accent-soft) !important;
+  color: var(--crm-user-main-text) !important;
+}
+
+/* Filter toolbar: search stays visible; secondary controls expand only when needed. */
+.crm-filter-shell {
+  padding: 0 !important;
+  background: var(--crm-user-card-bg) !important;
+}
+
+.crm-filter-form {
+  width: 100%;
+  margin: 0;
+}
+
+.crm-filter-toolbar {
+  display: flex;
+  align-items: end;
+  gap: .5rem;
+  min-height: 3.65rem;
+  padding: .65rem .75rem;
+}
+
+.crm-filter-search {
+  flex: 1 1 22rem;
+  min-width: 15rem;
+  max-width: 34rem;
+}
+
+.crm-filter-search .form-control,
+.crm-filter-search .form-select,
+.crm-filter-submit,
+.crm-filter-toggle,
+.crm-filter-clear,
+.crm-filter-page-size .form-select {
+  min-height: 2.35rem;
+}
+
+.crm-filter-page-size {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-left: auto;
+}
+
+.crm-filter-page-size .form-label {
+  margin: 0;
+  color: var(--crm-user-muted-text) !important;
+  font-size: .73rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+}
+
+.crm-filter-page-size .form-select {
+  width: 4.85rem;
+  padding-right: 1.8rem;
+}
+
+.crm-filter-toggle {
+  white-space: nowrap;
+}
+
+.crm-filter-toggle.is-active {
+  border-color: color-mix(in srgb, var(--crm-user-accent) 35%, var(--crm-user-card-border)) !important;
+  background: var(--crm-user-accent-softer) !important;
+  color: var(--crm-user-accent) !important;
+}
+
+.crm-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.3rem;
+}
+
+.crm-filter-advanced {
+  display: none;
+  padding: .75rem;
+  border-top: 1px solid var(--crm-user-card-border);
+  background: color-mix(in srgb, var(--crm-user-card-bg) 94%, var(--crm-user-page-bg));
+}
+
+.crm-filter-advanced.is-open {
+  display: block;
+}
+
+.crm-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: .65rem;
+}
+
+.crm-filter-field {
+  min-width: 0;
+}
+
+.crm-filter-field .form-label {
+  margin-bottom: .28rem;
+  color: var(--crm-user-muted-text) !important;
+  font-size: .74rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.crm-filter-field .form-control,
+.crm-filter-field .form-select {
+  min-height: 2.3rem;
+  padding-top: .42rem;
+  padding-bottom: .42rem;
+}
+
+.crm-compact-table > :not(caption) > * > * {
+  padding-top: .62rem !important;
+  padding-bottom: .62rem !important;
+}
+
+.crm-compact-table thead th {
+  font-size: .73rem;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 991.98px) {
+  .crm-filter-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .crm-filter-search {
+    flex-basis: calc(100% - 7rem);
+    max-width: none;
+  }
+  .crm-filter-page-size {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .crm-filter-toolbar {
+    gap: .4rem;
+    padding: .6rem;
+  }
+  .crm-filter-search {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .crm-filter-submit,
+  .crm-filter-toggle,
+  .crm-filter-clear {
+    flex: 1 1 auto;
+  }
+  .crm-filter-page-size {
+    order: 5;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .crm-filter-grid {
+    grid-template-columns: 1fr;
   }
 }
