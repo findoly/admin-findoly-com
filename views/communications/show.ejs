@@ -10,7 +10,7 @@
       <div class="card-body border-top">
         <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Recipient</label><div class="col-sm-9 pt-sm-2"><div class="fw-semibold"><%= communication.recipientName || '-' %></div><div class="text-muted"><%= communication.recipientContact || '' %></div></div></div>
         <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Channel / direction</label><div class="col-sm-9 pt-sm-2"><%= humanize(communication.channel) %> / <%= humanize(communication.direction) %></div></div>
-        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Related enquiry</label><div class="col-sm-9 pt-sm-2"><% if (communication.enquiryId) { %><a href="/enquiries/<%= communication.enquiryId %>"><%= communication.enquiryId %></a><% } else { %>-<% } %></div></div>
+        <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Related requirement</label><div class="col-sm-9 pt-sm-2"><% if (communication.enquiryId) { %><a href="/enquiries/<%= communication.enquiryId %>"><%= communication.enquiryId %></a><% } else { %>-<% } %></div></div>
         <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Related provider</label><div class="col-sm-9 pt-sm-2"><% if (communication.providerId) { %><a href="/providers/<%= communication.providerId %>"><%= communication.providerId %></a><% } else { %>-<% } %></div></div>
         <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Created</label><div class="col-sm-9 pt-sm-2"><%= formatDate(communication.createdAt) %></div></div>
         <div class="row mb-2"><label class="col-sm-3 col-form-label text-muted">Message</label><div class="col-sm-9 pt-sm-2 crm-break"><%= communication.message || '-' %></div></div>
@@ -23,7 +23,7 @@
       <div class="card-body border-top d-grid gap-2">
         <a href="/communications" class="btn btn-light"><i class="ph-list me-2"></i>Communication list</a>
         <a href="/communications/new" class="btn btn-primary"><i class="ph-plus me-2"></i>Log another</a>
-        <% if (enquiry) { %><a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary"><i class="ph-eye me-2"></i>View enquiry</a><% } %>
+        <% if (enquiry) { %><a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary"><i class="ph-eye me-2"></i>View requirement</a><% } %>
         <% if (provider) { %><a href="/providers/<%= provider.id %>" class="btn btn-outline-primary"><i class="ph-users-three me-2"></i>View provider</a><% } %>
       </div>
     </div>

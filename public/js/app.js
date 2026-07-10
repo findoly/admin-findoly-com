@@ -164,10 +164,10 @@
         const schemaUrl = `/api/forms/schema?sourceWebsite=${encodeURIComponent(sourceValue())}&categorySlug=${encodeURIComponent(categoryValue())}&formType=${encodeURIComponent(formTypeValue())}`;
         summary.innerHTML = template
           ? `<div class="alert alert-info"><strong>${escapeHtml(template.name)}</strong><br><span>${escapeHtml(template.sourceWebsite)} · ${escapeHtml(template.categorySlug)} · ${escapeHtml(template.formType || 'default')} · ${fields.length} fields</span><br><a target="_blank" href="${schemaUrl}">Open schema API</a></div>`
-          : `<div class="alert alert-warning">No matching template found. You can still save core enquiry details and add a template later. <a target="_blank" href="${schemaUrl}">Check schema API</a></div>`;
+          : `<div class="alert alert-warning">No matching form definition found. You can still save the requirement and add a definition later. <a target="_blank" href="${schemaUrl}">Check schema API</a></div>`;
       }
       if (!fields.length) {
-        target.innerHTML = '<div class="text-muted">No template fields configured for this website/category/form type. You can still save the enquiry with notes.</div>';
+        target.innerHTML = '<div class="text-muted">No form definition fields configured for this website/category/form type. You can still save the requirement with notes.</div>';
         return;
       }
       target.innerHTML = fields.map((field) => renderDynamicField(field)).join('');
@@ -193,83 +193,203 @@
     render();
   }
 
-  function fieldBuilder() {
-    document.querySelectorAll('[data-field-builder]').forEach((form) => {
-      const rows = form.querySelector('[data-builder-rows]');
-      const hidden = form.querySelector('[data-fields-json]');
-      const addButton = form.querySelector('[data-add-field]');
-      const preview = form.querySelector('[data-schema-preview]');
-      if (!rows || !hidden || !addButton) return;
-      const fieldTypes = readJsonScript('#field-types-json', ['text', 'textarea', 'number', 'select', 'radio', 'checkbox', 'date', 'datetime-local', 'email', 'tel', 'url', 'file_url']);
 
-      const defaultFields = [
-        { name: 'requirement', label: 'Requirement', type: 'textarea', required: true, options: '', group: 'Requirement', placeholder: 'Describe customer requirement' },
-        { name: 'budget', label: 'Budget', type: 'number', required: false, options: '', group: 'Commercials', placeholder: 'Approximate budget' },
-        { name: 'photos', label: 'Photo / file URL', type: 'file_url', required: false, options: '', group: 'Attachments', placeholder: 'https://...' }
-      ];
-      const starter = form.dataset.emptyBuilder === 'true' ? [] : defaultFields;
-      const existing = form.getAttribute('data-existing-fields');
-      let initialFields = starter;
-      if (existing) {
-        try { initialFields = JSON.parse(existing); } catch (error) { initialFields = starter; }
+  function leadCreateWizard() {
+    const form = document.querySelector('[data-lead-create-wizard]');
+    if (!form) return;
+
+    const steps = Array.from(form.querySelectorAll('[data-wizard-step]'));
+    const stepButtons = Array.from(form.querySelectorAll('[data-wizard-step-button]'));
+    const nextButton = form.querySelector('[data-wizard-next]');
+    const prevButton = form.querySelector('[data-wizard-prev]');
+    const submitButton = form.querySelector('[data-wizard-submit]');
+    const categorySelect = form.querySelector('[data-lead-category]');
+    const sourceInput = form.querySelector('[data-lead-source]');
+    const formTypeInput = form.querySelector('[data-lead-form-type]');
+    const templateIdInput = form.querySelector('[data-lead-template-id]');
+    const schemaTarget = form.querySelector('[data-schema-fields]');
+    const schemaSummary = form.querySelector('[data-schema-summary]');
+    const dynamicKeysInput = form.querySelector('[data-dynamic-field-keys]');
+    const extraSection = form.querySelector('[data-extra-details-section]');
+    const extraRows = form.querySelector('[data-extra-detail-rows]');
+    const addExtraButton = form.querySelector('[data-add-extra-detail]');
+    const extraJsonInput = form.querySelector('[data-extra-details-json]');
+    const templates = readJsonScript('#templates-json', []);
+    let activeStep = 0;
+
+    const setStep = (index, shouldScroll = true) => {
+      activeStep = Math.max(0, Math.min(index, steps.length - 1));
+      steps.forEach((step, stepIndex) => step.classList.toggle('active', stepIndex === activeStep));
+      stepButtons.forEach((button, buttonIndex) => {
+        button.classList.toggle('active', buttonIndex === activeStep);
+        button.classList.toggle('completed', buttonIndex < activeStep);
+        button.setAttribute('aria-current', buttonIndex === activeStep ? 'step' : 'false');
+      });
+      prevButton?.classList.toggle('d-none', activeStep === 0);
+      nextButton?.classList.toggle('d-none', activeStep === steps.length - 1);
+      submitButton?.classList.toggle('d-none', activeStep !== steps.length - 1);
+      if (shouldScroll) form.querySelector('.crm-wizard-step.active')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const clearControlError = (control) => {
+      control.classList.remove('is-invalid');
+      const wrapper = control.closest('[class*="col-"]') || control.parentElement;
+      wrapper?.querySelector(':scope > .crm-invalid-feedback')?.remove();
+    };
+
+    const showControlError = (control) => {
+      clearControlError(control);
+      control.classList.add('is-invalid');
+      const wrapper = control.closest('[class*="col-"]') || control.parentElement;
+      const feedback = document.createElement('div');
+      feedback.className = 'crm-invalid-feedback';
+      feedback.textContent = control.validationMessage || 'Please complete this field.';
+      wrapper?.appendChild(feedback);
+    };
+
+    const validatePanel = (panel, shouldFocus = true) => {
+      if (!panel) return true;
+      const controls = Array.from(panel.querySelectorAll('input, select, textarea'))
+        .filter((control) => !control.disabled && control.type !== 'hidden');
+      let firstInvalid = null;
+      controls.forEach((control) => {
+        clearControlError(control);
+        if (!control.checkValidity()) {
+          showControlError(control);
+          firstInvalid ||= control;
+        }
+      });
+      if (firstInvalid) {
+        if (shouldFocus) {
+          firstInvalid.focus({ preventScroll: true });
+          firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return false;
+      }
+      return true;
+    };
+
+    const validateStep = () => validatePanel(steps[activeStep]);
+
+    const getSelectedTemplate = () => {
+      const category = String(categorySelect?.value || '').trim();
+      const source = String(sourceInput?.value || '').trim().toLowerCase();
+      if (!category) return null;
+      return templates
+        .map((template) => {
+          if (template.categorySlug !== category) return { template, score: -1 };
+          let score = 20;
+          if (template.sourceWebsite === source) score += 10;
+          if (template.sourceWebsite === 'any') score += 5;
+          if ((template.formType || 'default') === 'default') score += 2;
+          return { template, score };
+        })
+        .filter((item) => item.score >= 0)
+        .sort((a, b) => b.score - a.score)[0]?.template || null;
+    };
+
+    const renderSchemaFields = () => {
+      if (!schemaTarget || !schemaSummary) return;
+      const previousValues = {};
+      schemaTarget.querySelectorAll('[name^="field__"]').forEach((input) => {
+        previousValues[input.name] = input.value;
+      });
+
+      const template = getSelectedTemplate();
+      const fields = Array.isArray(template?.fields) ? template.fields : [];
+      if (templateIdInput) templateIdInput.value = template?.id || '';
+      if (formTypeInput) formTypeInput.value = template?.formType || categorySelect?.selectedOptions?.[0]?.dataset.formType || 'default';
+      if (dynamicKeysInput) dynamicKeysInput.value = fields.map((field) => field.name).join(',');
+
+      if (!categorySelect?.value) {
+        schemaSummary.innerHTML = 'Select a category in step 1 to load its known fields.';
+        schemaTarget.innerHTML = '';
+        return;
       }
 
-      const sync = () => {
-        const fields = Array.from(rows.querySelectorAll('.crm-field-builder-row')).map((row) => ({
-          label: row.querySelector('[data-field-label]').value.trim(),
-          name: slugify(row.querySelector('[data-field-name]').value || row.querySelector('[data-field-label]').value),
-          type: row.querySelector('[data-field-type]').value,
-          required: row.querySelector('[data-field-required]').checked,
-          options: row.querySelector('[data-field-options]').value.split(',').map((item) => item.trim()).filter(Boolean),
-          group: row.querySelector('[data-field-group]').value.trim() || 'Details',
-          placeholder: row.querySelector('[data-field-placeholder]').value.trim(),
-          helpText: row.querySelector('[data-field-help]').value.trim()
-        })).filter((field) => field.name && field.label);
-        hidden.value = JSON.stringify(fields);
-        if (preview) preview.textContent = JSON.stringify({ fields }, null, 2);
-      };
+      if (!fields.length) {
+        schemaSummary.innerHTML = '<strong>No predefined fields for this category.</strong> You can still add name/value details below.';
+        schemaTarget.innerHTML = '';
+        return;
+      }
 
-      const addRow = (field = {}) => {
-        const row = document.createElement('div');
-        row.className = 'crm-field-builder-row';
-        row.innerHTML = `
-          <div class="row g-3 align-items-end">
-            <div class="col-lg-3"><label class="form-label">Field label</label><input class="form-control" data-field-label placeholder="Requirement" value="${escapeHtml(field.label || '')}"></div>
-            <div class="col-lg-2"><label class="form-label">Field key</label><input class="form-control" data-field-name placeholder="requirement" value="${escapeHtml(field.name || '')}"></div>
-            <div class="col-lg-2"><label class="form-label">Type</label><select class="form-select" data-field-type>${fieldTypes.map((type) => `<option value="${escapeHtml(type)}" ${field.type === type ? 'selected' : ''}>${escapeHtml(type)}</option>`).join('')}</select></div>
-            <div class="col-lg-2"><label class="form-label">Section</label><input class="form-control" data-field-group placeholder="Details" value="${escapeHtml(field.group || 'Details')}"></div>
-            <div class="col-lg-2"><label class="form-label">Placeholder</label><input class="form-control" data-field-placeholder placeholder="Shown in form" value="${escapeHtml(field.placeholder || '')}"></div>
-            <div class="col-lg-1"><button class="btn btn-danger w-100" type="button" data-remove-field><i class="ph-trash"></i></button></div>
-            <div class="col-lg-3"><label class="form-check mt-2"><input class="form-check-input" data-field-required type="checkbox" ${field.required ? 'checked' : ''}><span class="form-check-label">Required</span></label></div>
-            <div class="col-lg-4"><label class="form-label">Options</label><input class="form-control" data-field-options placeholder="Small, Medium, Large" value="${escapeHtml(Array.isArray(field.options) ? field.options.join(', ') : field.options || '')}"><div class="form-text">For select, radio and checkbox fields.</div></div>
-            <div class="col-lg-5"><label class="form-label">Help text</label><input class="form-control" data-field-help placeholder="Help text shown to admin / website" value="${escapeHtml(field.helpText || field.help || '')}"></div>
-          </div>
-        `;
-        rows.appendChild(row);
-        row.querySelector('[data-remove-field]').addEventListener('click', () => { row.remove(); sync(); });
-        row.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', sync));
-        row.querySelector('[data-field-label]').addEventListener('input', (event) => {
-          const nameInput = row.querySelector('[data-field-name]');
-          if (!nameInput.value.trim()) nameInput.value = slugify(event.target.value);
-        });
-        sync();
-      };
+      schemaSummary.innerHTML = `<strong>${escapeHtml(template.name || 'Category fields')}</strong><span class="d-block text-muted fs-sm mt-1">${fields.length} known fields are shown as simple text inputs.</span>`;
+      schemaTarget.innerHTML = fields.map((field) => {
+        const key = escapeHtml(field.name);
+        const value = previousValues[`field__${field.name}`] || '';
+        const required = field.required ? '<span class="text-danger ms-1">*</span>' : '';
+        return `<div class="row mb-3 crm-schema-field-row"><label class="col-lg-3 col-form-label">${escapeHtml(field.label || humanize(field.name))}${required}<span class="crm-field-type">${escapeHtml(field.type || 'text')}</span></label><div class="col-lg-9"><input class="form-control" type="text" name="field__${key}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder || `Enter ${field.label || humanize(field.name)}`)}"><div class="form-text">Saved as <code>additionalDetails.${key}</code>.</div></div></div>`;
+      }).join('');
+    };
 
-      addButton.addEventListener('click', () => addRow({ type: 'text', group: 'Details' }));
-      initialFields.forEach(addRow);
-      if (!initialFields.length) addRow({ type: 'text', group: 'Details' });
-      form.addEventListener('submit', sync);
-      sync();
-    });
-  }
-
-  function autoslugCategory() {
-    document.querySelectorAll('[data-autoslug-source]').forEach((input) => {
-      const target = document.querySelector(input.dataset.autoslugSource);
-      input.addEventListener('input', () => {
-        if (target && !target.value.trim()) target.value = slugify(input.value);
+    const syncExtraDetails = () => {
+      if (!extraJsonInput || !extraRows) return;
+      const details = {};
+      extraRows.querySelectorAll('[data-extra-detail-row]').forEach((row) => {
+        const label = row.querySelector('[data-extra-detail-name]')?.value.trim() || '';
+        const value = row.querySelector('[data-extra-detail-value]')?.value.trim() || '';
+        const key = slugify(label).replace(/-/g, '_');
+        if (key) details[key] = value;
       });
+      extraJsonInput.value = JSON.stringify(details);
+    };
+
+    const addExtraDetailRow = (name = '', value = '') => {
+      if (!extraRows) return;
+      const row = document.createElement('div');
+      row.className = 'row g-2 align-items-end mb-3 crm-extra-detail-row';
+      row.setAttribute('data-extra-detail-row', '');
+      row.innerHTML = `<div class="col-lg-4"><label class="form-label">Field name</label><input class="form-control" type="text" data-extra-detail-name value="${escapeHtml(name)}" placeholder="Example: Material"></div><div class="col-lg-7"><label class="form-label">Value</label><input class="form-control" type="text" data-extra-detail-value value="${escapeHtml(value)}" placeholder="Example: Plywood"></div><div class="col-lg-1"><button class="btn btn-light w-100" type="button" data-remove-extra-detail aria-label="Remove detail"><i class="ph-trash"></i></button></div>`;
+      extraRows.appendChild(row);
+      row.querySelectorAll('input').forEach((input) => input.addEventListener('input', syncExtraDetails));
+      row.querySelector('[data-remove-extra-detail]')?.addEventListener('click', () => {
+        row.remove();
+        syncExtraDetails();
+      });
+      syncExtraDetails();
+    };
+
+    const toggleExtraDetails = () => {
+      const enabled = form.querySelector('[data-extra-details-choice]:checked')?.value === 'yes';
+      extraSection?.classList.toggle('d-none', !enabled);
+      if (enabled && extraRows && !extraRows.children.length) addExtraDetailRow();
+      if (!enabled && extraRows) {
+        extraRows.innerHTML = '';
+        syncExtraDetails();
+      }
+    };
+
+    nextButton?.addEventListener('click', () => {
+      if (!validateStep()) return;
+      if (activeStep === 0) renderSchemaFields();
+      setStep(activeStep + 1);
     });
+    prevButton?.addEventListener('click', () => setStep(activeStep - 1));
+    stepButtons.forEach((button, index) => button.addEventListener('click', () => {
+      if (index > activeStep && !validateStep()) return;
+      if (index === 1) renderSchemaFields();
+      setStep(index);
+    }));
+    categorySelect?.addEventListener('change', renderSchemaFields);
+    sourceInput?.addEventListener('change', renderSchemaFields);
+    form.querySelectorAll('[data-extra-details-choice]').forEach((input) => input.addEventListener('change', toggleExtraDetails));
+    addExtraButton?.addEventListener('click', () => addExtraDetailRow());
+    form.querySelectorAll('input, select, textarea').forEach((control) => {
+      control.addEventListener('input', () => clearControlError(control));
+      control.addEventListener('change', () => clearControlError(control));
+    });
+    form.addEventListener('submit', (event) => {
+      syncExtraDetails();
+      const invalidStep = steps.findIndex((step) => !validatePanel(step, false));
+      if (invalidStep >= 0) {
+        event.preventDefault();
+        setStep(invalidStep, false);
+        validatePanel(steps[invalidStep], true);
+      }
+    });
+
+    toggleExtraDetails();
+    setStep(0, false);
   }
 
   function globalSearch() {
@@ -285,8 +405,8 @@
 
 
   function dashboardNewBookings() {
-    const section = document.querySelector('#new-bookings-section');
-    const table = document.querySelector('#dashboard_new_bookings');
+    const section = document.querySelector('#new-requirements-section');
+    const table = document.querySelector('#dashboard_new_requirements');
     if (!section || !table) return;
 
     const openAndScroll = () => {
@@ -296,14 +416,46 @@
       window.setTimeout(() => section.classList.remove('crm-panel-highlight'), 1400);
     };
 
-    if (window.location.hash === '#new-bookings-section' || window.location.hash === '#dashboard_new_bookings') {
+    if (window.location.hash === '#new-requirements-section' || window.location.hash === '#dashboard_new_requirements') {
       openAndScroll();
     }
 
-    document.querySelectorAll('[data-crm-scroll-target="#new-bookings-section"]').forEach((trigger) => {
+    document.querySelectorAll('[data-crm-scroll-target="#new-requirements-section"]').forEach((trigger) => {
       trigger.addEventListener('click', () => {
         window.setTimeout(openAndScroll, 80);
       });
+    });
+  }
+
+
+  function crmTabs() {
+    document.querySelectorAll('[data-crm-tabs]').forEach((container) => {
+      const tabs = Array.from(container.querySelectorAll('[data-crm-tab]'));
+      const panels = Array.from(container.querySelectorAll('[data-crm-tab-panel]'));
+      if (!tabs.length || !panels.length) return;
+
+      const activate = (name, updateHash = true) => {
+        tabs.forEach((tab) => {
+          const isActive = tab.getAttribute('data-crm-tab') === name;
+          tab.classList.toggle('active', isActive);
+          tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        panels.forEach((panel) => {
+          panel.classList.toggle('active', panel.getAttribute('data-crm-tab-panel') === name);
+        });
+        if (updateHash) {
+          const url = new URL(window.location.href);
+          url.hash = name;
+          window.history.replaceState(null, '', url.toString());
+        }
+      };
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => activate(tab.getAttribute('data-crm-tab')));
+      });
+
+      const initial = window.location.hash ? window.location.hash.slice(1) : tabs[0].getAttribute('data-crm-tab');
+      if (tabs.some((tab) => tab.getAttribute('data-crm-tab') === initial)) activate(initial, false);
     });
   }
 
@@ -312,9 +464,9 @@
     submenuAccordion();
     renderBars();
     dynamicTemplateForm();
-    fieldBuilder();
-    autoslugCategory();
+    leadCreateWizard();
     globalSearch();
     dashboardNewBookings();
+    crmTabs();
   });
 })();

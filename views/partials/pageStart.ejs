@@ -9,12 +9,12 @@
   <div class="content-wrapper">
     <div class="content-inner">
       <!-- Page header -->
-      <div class="page-header page-header-light shadow">
-        <div class="page-header-content d-lg-flex">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content d-lg-flex crm-page-heading">
           <div class="d-flex">
-            <h4 class="page-title mb-0">
+            <h3 class="page-title mb-0">
               <%= title || branding.appName %> <span class="fw-normal"><%= typeof subtitle !== 'undefined' && subtitle ? '- ' + subtitle : '' %></span>
-            </h4>
+            </h3>
             <a href="#page_header" class="btn btn-light align-self-center collapsed d-lg-none border-transparent rounded-pill p-0 ms-auto" data-bs-toggle="collapse">
               <svg class="crm-svg-icon collapsible-indicator m-1" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
             </a>
@@ -22,24 +22,23 @@
           <div class="collapse d-lg-block my-lg-auto ms-lg-auto" id="page_header">
             <div class="d-sm-flex align-items-center mb-3 mb-lg-0 ms-lg-3">
               <div class="d-inline-flex mt-3 mt-sm-0 gap-2 flex-wrap">
-                <% if (!currentPath.startsWith('/enquiries/new')) { %><a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create enquiry</a><% } %>
-                <% if (!currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="btn btn-light btn-sm"><i class="ph-magnifying-glass me-2"></i>Search records</a><% } %>
+                <% if (!currentPath.startsWith('/enquiries/new')) { %><a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create lead</a><% } %>
+                <% if (!currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="btn btn-light btn-sm"><i class="ph-magnifying-glass me-2"></i>Search</a><% } %>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="page-header-content d-lg-flex border-top">
+        <div class="page-header-content d-lg-flex border-top crm-page-subnav">
           <div class="d-flex">
             <div class="breadcrumb py-2">
               <a href="/dashboard" class="breadcrumb-item"><i class="ph-house"></i></a>
-              <% if (currentPath.startsWith('/enquiries')) { %><a href="/enquiries" class="breadcrumb-item">Enquiries</a><% } %>
+              <% if (currentPath.startsWith('/enquiries')) { %><a href="/enquiries" class="breadcrumb-item">Requirements</a><% } %>
               <% if (currentPath.startsWith('/providers')) { %><a href="/providers" class="breadcrumb-item">Providers</a><% } %>
               <% if (currentPath.startsWith('/follow-ups')) { %><a href="/follow-ups" class="breadcrumb-item">Follow-ups</a><% } %>
               <% if (currentPath.startsWith('/communications')) { %><a href="/communications" class="breadcrumb-item">Communications</a><% } %>
               <% if (currentPath.startsWith('/billing')) { %><a href="/billing" class="breadcrumb-item">Billing</a><% } %>
               <% if (currentPath.startsWith('/search')) { %><a href="/search/enquiries" class="breadcrumb-item">Search</a><% } %>
-              <% if (currentPath.startsWith('/catalog')) { %><a href="/catalog/categories" class="breadcrumb-item">Website modules</a><% } %>
               <span class="breadcrumb-item active"><%= title || branding.appName %></span>
             </div>
             <a href="#breadcrumb_elements" class="btn btn-light align-self-center collapsed d-lg-none border-transparent rounded-pill p-0 ms-auto" data-bs-toggle="collapse">

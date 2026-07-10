@@ -9,9 +9,10 @@
       </div>
       <div class="card-body border-top">
         <form method="post" action="/follow-ups">
-          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related enquiry</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No enquiry</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>"><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
-          <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name</label><div class="col-lg-9"><input class="form-control" name="customerName" value=""></div></div>
-          <div class="row mb-3"><label class="col-lg-3 col-form-label">Title <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="title" required></div></div>
+          <input type="hidden" name="returnTo" value="<%= prefill.returnTo || '' %>">
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related requirement</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No requirement</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>" <%= prefill.enquiryId === e.id ? 'selected' : '' %>><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name</label><div class="col-lg-9"><input class="form-control" name="customerName" value="<%= prefill.customerName || '' %>"></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Title <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="title" value="<%= prefill.customerName ? 'Call ' + prefill.customerName : '' %>" required></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Due at</label><div class="col-lg-9"><input class="form-control" type="datetime-local" name="dueAt"></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Owner</label><div class="col-lg-9"><input class="form-control" name="owner" value="<%= admin.email %>"></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Channel</label><div class="col-lg-9"><select class="form-select" name="channel"><option>call</option><option>whatsapp</option><option>email</option><option>sms</option></select></div></div>

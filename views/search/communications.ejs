@@ -5,23 +5,25 @@
   <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
     <div>
       <h5 class="py-sm-2 my-sm-1 mb-0">Communication Search</h5>
-      <div class="text-muted fs-sm">Search only communication logs. Use View to open the related enquiry when available.</div>
+      <div class="text-muted fs-sm">Search only communication logs. Use View to open the related requirement when available.</div>
     </div>
     <div class="mt-2 mt-sm-0 ms-sm-auto"><span class="badge bg-primary rounded-pill"><%= pagination.total %> found</span></div>
   </div>
   <div class="card-body border-top">
     <form method="get" class="row g-3 align-items-end">
-      <div class="col-xl-4 col-lg-6"><label class="form-label">Search text</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Recipient, contact, message, enquiry ID..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
+      <div class="col-xl-4 col-lg-6"><label class="form-label">Search text</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Recipient, contact, message, requirement ID..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Channel</label><select class="form-select" name="channel"><option value="">All channels</option><% ['call','whatsapp','sms','email','note'].forEach((channel)=>{ %><option value="<%= channel %>" <%= filters.channel === channel ? 'selected' : '' %>><%= humanize(channel) %></option><% }) %></select></div>
-      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Enquiry ID</label><input class="form-control" name="enquiryId" placeholder="enq_..." value="<%= filters.enquiryId || '' %>"></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Requirement ID</label><input class="form-control" name="enquiryId" placeholder="req_..." value="<%= filters.enquiryId || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">From</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">To</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || '' %>"></div>
       <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-3 col-sm-6"><button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button><a href="/search/communications" class="btn btn-light">Clear</a></div>
     </form>
   </div>
   <div class="table-responsive">
     <table class="table text-nowrap">
-      <thead><tr><th>Recipient</th><th>Channel</th><th>Direction</th><th>Message</th><th>Enquiry</th><th>Provider</th><th>Status</th><th>Created</th><th class="text-center" style="width:120px">Action</th></tr></thead>
+      <thead><tr><th>Recipient</th><th>Channel</th><th>Direction</th><th>Message</th><th>Requirement</th><th>Provider</th><th>Status</th><th>Created</th><th class="text-center" style="width:120px">Action</th></tr></thead>
       <tbody>
         <% records.forEach((item) => { %>
           <tr>

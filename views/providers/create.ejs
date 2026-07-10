@@ -1,4 +1,5 @@
 <%- include('../partials/pageStart', { subtitle: 'Create provider' }) %>
+<% const provider = null; %>
 
 <div class="card">
   <div class="card-header d-sm-flex align-items-sm-center"><h5 class="mb-0">Create provider</h5><a href="/providers" class="btn btn-light ms-sm-auto mt-2 mt-sm-0"><i class="ph-arrow-left me-2"></i>Back</a></div>
@@ -16,6 +17,7 @@
         <div class="row mb-3"><label class="col-lg-3 col-form-label">Location</label><div class="col-lg-4"><input class="form-control" name="city"></div><div class="col-lg-5"><input class="form-control" name="state"></div></div>
         <div class="row mb-3"><label class="col-lg-3 col-form-label">Service areas</label><div class="col-lg-9"><input class="form-control" name="serviceAreas"><div class="form-text">Comma-separated cities/areas.</div></div></div>
         <div class="row mb-3"><label class="col-lg-3 col-form-label">Availability / rating</label><div class="col-lg-6"><select class="form-select" name="availability"><option value="available_today">Available today</option><option value="available_this_week">Available this week</option><option value="limited">Limited</option><option value="unavailable">Unavailable</option></select></div><div class="col-lg-3"><input class="form-control" type="number" name="rating" step="0.1" min="0" max="5" value="4"></div></div>
+        <div class="row mb-3"><label class="col-lg-3 col-form-label">Onboarding stage</label><div class="col-lg-9"><select class="form-select" name="onboardingStage"><% ['new', 'documents_pending', 'training_pending', 'ready', 'paused'].forEach((stage)=>{ %><option value="<%= stage %>" <%= provider && provider.onboardingStage === stage ? 'selected' : '' %>><%= humanize(stage) %></option><% }) %></select></div></div>
         <div class="row mb-3"><label class="col-lg-3 col-form-label">Documents verified</label><div class="col-lg-9"><select class="form-select" name="documentsVerified"><option value="true">Yes</option><option value="false">No</option></select></div></div>
         <div class="row mb-3"><label class="col-lg-3 col-form-label">Notes</label><div class="col-lg-9"><textarea class="form-control" name="notes" rows="4"></textarea></div></div>
       </fieldset>

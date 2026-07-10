@@ -1,139 +1,286 @@
 <%- include('../partials/pageStart', { subtitle: enquiry.sourceWebsite + ' · ' + (enquiry.formType || 'default') }) %>
 
-<div class="row">
-  <div class="col-xl-7">
-    <div class="card">
-      <div class="card-header d-flex align-items-center">
-        <div>
-          <h5 class="mb-0"><%= enquiry.customer.name || 'Unnamed customer' %></h5>
-          <div class="text-muted fs-sm"><%= enquiry.serviceType %> · <%= humanize(enquiry.categorySlug) %></div>
+<% const details = enquiry.additionalDetails || enquiry.fields || {}; %>
+<% const metaEntries = Object.entries(enquiry.metadata || {}); %>
+<% const activeFollowUps = (followUps || []).filter((item) => item.status !== 'done' && item.status !== 'closed'); %>
+
+<div class="card crm-view-hero crm-workspace-card">
+  <div class="card-body p-3 p-lg-4">
+    <div class="d-lg-flex align-items-lg-start gap-3">
+      <div class="crm-avatar-lg"><%= (enquiry.customer.name || 'R').slice(0,1).toUpperCase() %></div>
+      <div class="flex-fill min-w-0">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+          <h4 class="mb-0 text-truncate"><%= enquiry.customer.name || 'Unnamed customer' %></h4>
+          <%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %>
+          <span class="badge bg-light text-body border"><%= humanize(enquiry.priority || 'normal') %></span>
         </div>
-        <div class="ms-auto d-inline-flex align-items-center gap-2"><a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-light btn-sm"><i class="ph-pencil-simple me-2"></i>Edit</a><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></div>
+        <div class="text-muted"><%= enquiry.serviceType || humanize(enquiry.categorySlug) %> · <%= humanize(enquiry.categorySlug) %></div>
+        <div class="crm-id-line mt-2"><span>Requirement ID</span><code><%= enquiry.id %></code></div>
       </div>
-      <div class="card-body">
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Template</label><div class="col-lg-9 pt-lg-2"><%= template ? template.name : 'No matching template' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Source</label><div class="col-lg-9 pt-lg-2"><%= enquiry.sourceWebsite %><% if (enquiry.source?.channel) { %> · <%= enquiry.source.channel %><% } %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Campaign</label><div class="col-lg-9 pt-lg-2"><%= enquiry.source?.campaign || enquiry.source?.utm?.campaign || '-' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Form / external ID</label><div class="col-lg-9 pt-lg-2"><%= [enquiry.source?.formId, enquiry.source?.externalEnquiryId].filter(Boolean).join(' / ') || '-' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Landing/referrer</label><div class="col-lg-9 pt-lg-2 crm-break"><%= [enquiry.source?.landingPage, enquiry.source?.referrer].filter(Boolean).join(' ← ') || '-' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Contact</label><div class="col-lg-9 pt-lg-2"><%= enquiry.customer.mobile || '-' %> · <%= enquiry.customer.email || '-' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Address</label><div class="col-lg-9 pt-lg-2"><%= [enquiry.address.line1, enquiry.address.city, enquiry.address.state, enquiry.address.pincode].filter(Boolean).join(', ') || '-' %></div></div>
-        <div class="row mb-3"><label class="col-lg-3 col-form-label text-muted">Assigned provider</label><div class="col-lg-9 pt-lg-2"><%= enquiry.assignedProviderName || 'Not assigned yet' %></div></div>
-        <div class="row mb-0"><label class="col-lg-3 col-form-label text-muted">Quoted/final</label><div class="col-lg-9 pt-lg-2">₹<%= enquiry.quotedAmount || 0 %> / ₹<%= enquiry.finalAmount || 0 %></div></div>
+      <div class="crm-view-actions mt-3 mt-lg-0">
+        <a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-primary"><i class="ph-pencil-simple me-2"></i>Edit requirement</a>
+        <a href="/enquiries" class="btn btn-light"><i class="ph-list me-2"></i>Back to list</a>
       </div>
     </div>
-  </div>
-  <div class="col-xl-5">
-    <div class="card">
-      <div class="card-header d-flex align-items-center">
-        <h5 class="mb-0">Dynamic data</h5>
-        <span class="badge bg-primary rounded-pill ms-auto"><%= fieldCompletion.completionPercent %>% complete</span>
-      </div>
-      <div class="card-body">
-        <% if (fieldCompletion.missingRequired.length) { %>
-          <div class="alert alert-warning"><strong>Missing required fields:</strong> <%= fieldCompletion.missingRequired.map((field) => field.label).join(', ') %></div>
-        <% } else { %>
-          <div class="alert alert-success">All configured required fields are filled.</div>
-        <% } %>
-        <% if (Object.keys(enquiry.fields || {}).length) { %>
-          <% Object.entries(enquiry.fields).forEach(([key, value]) => { %>
-            <div class="row mb-2"><label class="col-sm-5 col-form-label text-muted"><%= humanize(key) %></label><div class="col-sm-7 pt-sm-2 crm-break"><%= Array.isArray(value) ? value.join(', ') : value %></div></div>
-          <% }) %>
-        <% } else { %>
-          <div class="text-muted">No dynamic source fields have been captured yet.</div>
-        <% } %>
-      </div>
+
+    <div class="row g-3 mt-3 crm-quick-facts">
+      <div class="col-sm-6 col-xl-3"><div class="crm-fact"><span>Customer contact</span><strong><%= enquiry.customer.mobile || enquiry.customer.email || '-' %></strong></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="crm-fact"><span>Location</span><strong><%= [enquiry.address?.city, enquiry.address?.state].filter(Boolean).join(', ') || '-' %></strong></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="crm-fact"><span>Form data</span><strong><%= fieldCompletion.completionPercent %>% complete</strong></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="crm-fact"><span>Approval</span><strong><%= humanize(enquiry.status) %></strong></div></div>
     </div>
   </div>
 </div>
 
-<div class="row">
-  <div class="col-xl-6">
-    <div class="card">
-      <div class="card-header"><h5 class="mb-0">Update enquiry</h5></div>
-      <div class="card-body border-top">
-        <form method="post" action="/enquiries/<%= enquiry.id %>">
-          <div class="row mb-3"><label class="col-lg-4 col-form-label">Status</label><div class="col-lg-8"><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= enquiry.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div></div>
-          <div class="row mb-3"><label class="col-lg-4 col-form-label">Priority</label><div class="col-lg-8"><select class="form-select" name="priority"><% priorities.forEach((p)=>{ %><option value="<%= p %>" <%= enquiry.priority === p ? 'selected' : '' %>><%= humanize(p) %></option><% }) %></select></div></div>
-          <div class="row mb-3"><label class="col-lg-4 col-form-label">Quoted / final</label><div class="col-lg-4"><input class="form-control" type="number" name="quotedAmount" value="<%= enquiry.quotedAmount || 0 %>"></div><div class="col-lg-4"><input class="form-control" type="number" name="finalAmount" value="<%= enquiry.finalAmount || 0 %>"></div></div>
-          <div class="row mb-3"><label class="col-lg-4 col-form-label">Preferred date / slot</label><div class="col-lg-4"><input class="form-control" type="date" name="preferredDate" value="<%= dateOnly(enquiry.preferredDate) %>"></div><div class="col-lg-4"><input class="form-control" name="preferredSlot" value="<%= enquiry.preferredSlot || '' %>"></div></div>
-          <div class="text-end"><button class="btn btn-primary" type="submit">Save changes</button></div>
-        </form>
-      </div>
-    </div>
+<div class="card crm-view-card crm-workspace-card" data-crm-tabs>
+  <div class="card-header crm-view-tabs-wrap">
+    <ul class="nav nav-pills crm-view-tabs flex-wrap" role="tablist">
+      <li class="nav-item"><button type="button" class="nav-link active" data-crm-tab="overview">Overview</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-crm-tab="form-data">Form data</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-crm-tab="verification">Verification</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-crm-tab="approval">Approval</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-crm-tab="activity">Activity <span class="badge bg-light text-body ms-1"><%= (followUps || []).length + (communications || []).length %></span></button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-crm-tab="metadata">Metadata</button></li>
+    </ul>
   </div>
-  <div class="col-xl-6">
-    <div class="card">
-      <div class="card-header"><h5 class="mb-0">Assign provider</h5></div>
-      <div class="card-body border-top">
-        <form method="post" action="/enquiries/<%= enquiry.id %>/assign">
-          <div class="row mb-3"><label class="col-lg-4 col-form-label">Recommended providers</label><div class="col-lg-8"><select class="form-select" name="providerId" required>
-            <% const providerOptions = recommendations.length ? recommendations : providers; %>
-            <% providerOptions.forEach((provider) => { %><option value="<%= provider.id %>"><%= provider.name %><% if (provider.matchScore !== undefined) { %> — score <%= provider.matchScore %><% } %> — <%= provider.city %></option><% }) %>
-          </select><div class="form-text">Matching considers category, city/service area, rating and availability.</div></div></div>
-          <div class="text-end"><button class="btn btn-primary" type="submit">Assign provider</button></div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div class="card">
-  <div class="card-header d-sm-flex align-items-sm-center">
-    <div><h5 class="mb-0">Update dynamic form data</h5><div class="text-muted fs-sm mt-1">Complete missing fields later without blocking booking creation.</div></div>
-    <% if (template) { %><span class="badge bg-primary rounded-pill ms-sm-auto mt-2 mt-sm-0"><%= template.name %></span><% } %>
+  <div class="card-body border-top crm-tab-panel active" data-crm-tab-panel="overview">
+    <div class="row g-4">
+      <div class="col-xl-6">
+        <div class="crm-section-title">Customer</div>
+        <div class="crm-info-list">
+          <div><span>Name</span><strong><%= enquiry.customer.name || '-' %></strong></div>
+          <div><span>Mobile</span><strong><%= enquiry.customer.mobile || '-' %></strong></div>
+          <div><span>Email</span><strong><%= enquiry.customer.email || '-' %></strong></div>
+          <div><span>Address</span><strong><%= [enquiry.address?.line1, enquiry.address?.city, enquiry.address?.state, enquiry.address?.pincode].filter(Boolean).join(', ') || '-' %></strong></div>
+        </div>
+      </div>
+      <div class="col-xl-6">
+        <div class="crm-section-title">Requirement</div>
+        <div class="crm-info-list">
+          <div><span>Service type</span><strong><%= enquiry.serviceType || '-' %></strong></div>
+          <div><span>Category</span><strong><%= humanize(enquiry.categorySlug) %></strong></div>
+          <div><span>Form type</span><strong><%= humanize(enquiry.formType || 'default') %></strong></div>
+          <div><span>Preferred date / slot</span><strong><%= [dateOnly(enquiry.preferredDate), enquiry.preferredSlot].filter(Boolean).join(' · ') || '-' %></strong></div>
+        </div>
+      </div>
+      <div class="col-xl-6">
+        <div class="crm-section-title">Source</div>
+        <div class="crm-info-list">
+          <div><span>Website</span><strong><%= enquiry.sourceWebsite || '-' %></strong></div>
+          <div><span>Channel</span><strong><%= enquiry.source?.channel || '-' %></strong></div>
+          <div><span>Campaign</span><strong><%= enquiry.source?.campaign || enquiry.source?.utm?.campaign || '-' %></strong></div>
+          <div><span>Form / external ID</span><strong><%= [enquiry.source?.formId, enquiry.source?.externalEnquiryId].filter(Boolean).join(' / ') || '-' %></strong></div>
+        </div>
+      </div>
+      <div class="col-xl-6">
+        <div class="crm-section-title">Internal note</div>
+        <div class="crm-note-box"><%= enquiry.notes || 'No internal note saved yet.' %></div>
+      </div>
+    </div>
   </div>
-  <div class="card-body border-top">
-    <form method="post" action="/enquiries/<%= enquiry.id %>/fields">
-      <input type="hidden" name="dynamicFieldKeys" value="<%= fieldCompletion.editableFields.map((field) => field.name).join(',') %>">
-      <% if (fieldCompletion.editableFields.length) { %>
-        <% fieldCompletion.editableFields.forEach((field) => { const value = enquiry.fields?.[field.name]; const valueText = fieldValue(enquiry.fields, field.name); %>
-          <div class="row mb-3">
-            <label class="col-lg-3 col-form-label"><%= field.label %><% if (field.required) { %><span class="required-hint">Required</span><% } %></label>
-            <div class="col-lg-9">
-              <% if (field.type === 'textarea') { %>
-                <textarea class="form-control" name="field__<%= field.name %>" rows="3" placeholder="<%= field.placeholder || '' %>"><%= valueText %></textarea>
-              <% } else if (field.type === 'select') { %>
-                <select class="form-select" name="field__<%= field.name %>"><option value="">Select</option><% (field.options || []).forEach((option) => { %><option value="<%= option %>" <%= valueText === option ? 'selected' : '' %>><%= option %></option><% }) %></select>
-              <% } else if (field.type === 'radio') { %>
-                <div class="form-check-horizontal"><% (field.options || []).forEach((option) => { %><label class="form-check form-check-inline"><input class="form-check-input" type="radio" name="field__<%= field.name %>" value="<%= option %>" <%= valueText === option ? 'checked' : '' %>><span class="form-check-label"><%= option %></span></label><% }) %></div>
-              <% } else if (field.type === 'checkbox') { %>
-                <div class="form-check-horizontal"><% (field.options || []).forEach((option) => { const selected = Array.isArray(value) ? value.includes(option) : valueText.split(',').map((v)=>v.trim()).includes(option); %><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="field__<%= field.name %>" value="<%= option %>" <%= selected ? 'checked' : '' %>><span class="form-check-label"><%= option %></span></label><% }) %></div>
-              <% } else { %>
-                <input class="form-control" type="<%= field.type === 'file_url' ? 'url' : field.type %>" name="field__<%= field.name %>" value="<%= valueText %>" placeholder="<%= field.placeholder || (field.type === 'file_url' ? 'https://file-url.example.com/photo.jpg' : '') %>">
-              <% } %>
-              <% if (field.helpText) { %><div class="form-text"><%= field.helpText %></div><% } %>
+
+  <div class="card-body border-top crm-tab-panel" data-crm-tab-panel="form-data">
+    <div class="d-sm-flex align-items-sm-center mb-3">
+      <div>
+        <div class="crm-section-title mb-1">Category-specific form data</div>
+        <div class="text-muted fs-sm">Fixed fields stay common; category fields are stored in <code>additionalDetails</code>.</div>
+      </div>
+      <% if (template) { %><span class="badge bg-primary rounded-pill ms-sm-auto mt-2 mt-sm-0"><%= template.name %></span><% } %>
+    </div>
+    <div class="border rounded crm-requirement-fields-table">
+      <%- include('../partials/requirementFields', { fields: details, template: template || { fields: enquiry.fieldDefinitions || [] }, humanize }) %>
+    </div>
+
+    <div class="border-top mt-4 pt-4">
+      <div class="crm-section-title">Update additional details</div>
+      <form method="post" action="/enquiries/<%= enquiry.id %>/fields" class="mt-3">
+        <input type="hidden" name="dynamicFieldKeys" value="<%= fieldCompletion.editableFields.map((field) => field.name).join(',') %>">
+        <% if (fieldCompletion.editableFields.length) { %>
+          <% fieldCompletion.editableFields.forEach((field) => { const value = details?.[field.name]; const valueText = fieldValue(details, field.name); %>
+            <div class="row mb-3">
+              <label class="col-lg-3 col-form-label"><%= field.label %><% if (field.required) { %><span class="required-hint">Required</span><% } %></label>
+              <div class="col-lg-9">
+                <% if (field.type === 'textarea') { %>
+                  <textarea class="form-control" name="field__<%= field.name %>" rows="3" placeholder="<%= field.placeholder || '' %>"><%= valueText %></textarea>
+                <% } else if (field.type === 'select') { %>
+                  <select class="form-select" name="field__<%= field.name %>"><option value="">Select</option><% (field.options || []).forEach((option) => { %><option value="<%= option %>" <%= valueText === option ? 'selected' : '' %>><%= option %></option><% }) %></select>
+                <% } else if (field.type === 'radio') { %>
+                  <div class="form-check-horizontal"><% (field.options || []).forEach((option) => { %><label class="form-check form-check-inline"><input class="form-check-input" type="radio" name="field__<%= field.name %>" value="<%= option %>" <%= valueText === option ? 'checked' : '' %>><span class="form-check-label"><%= option %></span></label><% }) %></div>
+                <% } else if (field.type === 'checkbox') { %>
+                  <div class="form-check-horizontal"><% (field.options || []).forEach((option) => { const selected = Array.isArray(value) ? value.includes(option) : valueText.split(',').map((v)=>v.trim()).includes(option); %><label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="field__<%= field.name %>" value="<%= option %>" <%= selected ? 'checked' : '' %>><span class="form-check-label"><%= option %></span></label><% }) %></div>
+                <% } else { %>
+                  <input class="form-control" type="<%= field.type === 'file_url' ? 'url' : field.type %>" name="field__<%= field.name %>" value="<%= valueText %>" placeholder="<%= field.placeholder || (field.type === 'file_url' ? 'https://file-url.example.com/photo.jpg' : '') %>">
+                <% } %>
+                <% if (field.helpText) { %><div class="form-text"><%= field.helpText %></div><% } %>
+              </div>
             </div>
-          </div>
-        <% }) %>
-      <% } else { %>
-        <div class="text-muted">No template fields are configured for this enquiry yet. Create a matching template from Catalog → Form Templates.</div>
-      <% } %>
-      <div class="text-end"><button class="btn btn-primary" type="submit">Save dynamic fields</button></div>
-    </form>
-  </div>
-</div>
-
-<div class="row">
-  <div class="col-xl-4"><div class="card"><div class="card-header"><h5 class="mb-0">Add note</h5></div><div class="card-body"><form method="post" action="/enquiries/<%= enquiry.id %>/notes"><textarea class="form-control mb-3" name="note" rows="4" placeholder="Internal update, call summary, customer concern..." required></textarea><button class="btn btn-light" type="submit">Add note</button></form></div></div></div>
-  <div class="col-xl-4"><div class="card"><div class="card-header"><h5 class="mb-0">Create follow-up</h5></div><div class="card-body"><form method="post" action="/follow-ups"><input type="hidden" name="returnTo" value="/enquiries/<%= enquiry.id %>"><input type="hidden" name="enquiryId" value="<%= enquiry.id %>"><input type="hidden" name="customerName" value="<%= enquiry.customer.name %>"><div class="mb-3"><label class="form-label">Title</label><input class="form-control" name="title" value="Call <%= enquiry.customer.name || 'customer' %>" required></div><div class="mb-3"><label class="form-label">Due at</label><input class="form-control" type="datetime-local" name="dueAt"></div><div class="mb-3"><label class="form-label">Channel</label><select class="form-select" name="channel"><option>call</option><option>whatsapp</option><option>email</option><option>sms</option></select></div><button class="btn btn-light" type="submit">Create follow-up</button></form></div></div></div>
-  <div class="col-xl-4"><div class="card"><div class="card-header"><h5 class="mb-0">Log communication</h5></div><div class="card-body"><form method="post" action="/communications"><input type="hidden" name="returnTo" value="/enquiries/<%= enquiry.id %>"><input type="hidden" name="enquiryId" value="<%= enquiry.id %>"><input type="hidden" name="recipientName" value="<%= enquiry.customer.name %>"><input type="hidden" name="recipientContact" value="<%= enquiry.customer.mobile || enquiry.customer.email %>"><div class="mb-3"><label class="form-label">Channel</label><select class="form-select" name="channel"><option>call</option><option>whatsapp</option><option>email</option><option>sms</option></select></div><div class="mb-3"><label class="form-label">Message</label><textarea class="form-control" name="message" rows="3" required></textarea></div><button class="btn btn-light" type="submit">Log/send</button></form></div></div></div>
-</div>
-
-<div class="row">
-  <div class="col-xl-5"><div class="card"><div class="card-header"><h5 class="mb-0">Create invoice</h5></div><div class="card-body"><form method="post" action="/billing"><input type="hidden" name="enquiryId" value="<%= enquiry.id %>"><input type="hidden" name="customerName" value="<%= enquiry.customer.name %>"><input type="hidden" name="providerName" value="<%= enquiry.assignedProviderName %>"><label class="form-label">Items <span class="text-muted">description|qty|rate</span></label><textarea class="form-control mb-3" name="items" rows="3">Service charge|1|<%= enquiry.finalAmount || enquiry.quotedAmount || 0 %></textarea><button class="btn btn-light" type="submit">Create invoice</button></form></div></div></div>
-  <div class="col-xl-7"><div class="card"><div class="card-header"><h5 class="mb-0">Follow-ups and communications</h5></div><div class="card-body p-0"><div class="list-group list-group-flush"><% followUps.forEach((item) => { %><div class="list-group-item"><div class="fw-semibold"><%= item.title %></div><div class="text-muted fs-sm"><%= humanize(item.status) %> · <%= formatDate(item.dueAt) %></div></div><% }) %><% communications.forEach((item) => { %><div class="list-group-item"><div class="fw-semibold"><%= humanize(item.channel) %></div><div class="text-muted fs-sm"><%= item.message %></div></div><% }) %><% if (!followUps.length && !communications.length) { %><div class="list-group-item text-muted">No follow-ups or communication logs yet.</div><% } %></div></div></div></div>
-</div>
-
-<div class="card">
-  <div class="card-header"><h5 class="mb-0">Timeline</h5></div>
-  <div class="card-body">
-    <div class="list-feed">
-      <% (enquiry.timeline || []).slice().reverse().forEach((item) => { %>
-        <div class="list-feed-item"><div class="fw-semibold"><%= humanize(item.type) %></div><%= item.message %><div class="text-muted fs-sm"><%= item.actor %> · <%= formatDate(item.createdAt) %></div></div>
-      <% }) %>
-      <% if (!(enquiry.timeline || []).length) { %><div class="text-muted">No timeline yet.</div><% } %>
+          <% }) %>
+          <div class="text-end"><button class="btn btn-primary" type="submit">Save form data</button></div>
+        <% } else { %>
+          <div class="alert alert-light border mb-0">No saved category schema is available for this lead. Captured additional details are visible above.</div>
+        <% } %>
+      </form>
     </div>
+  </div>
+
+  <div class="card-body border-top crm-tab-panel" data-crm-tab-panel="verification">
+    <div class="row g-4">
+      <div class="col-xl-5">
+        <div class="card border mb-0">
+          <div class="card-header d-flex align-items-center">
+            <div><h5 class="mb-0">Verification checklist</h5><div class="text-muted fs-sm">Before approving the lead.</div></div>
+            <span class="badge bg-primary rounded-pill ms-auto"><%= fieldCompletion.completionPercent %>%</span>
+          </div>
+          <div class="card-body border-top">
+            <% if (fieldCompletion.missingRequired.length) { %>
+              <div class="alert alert-warning"><strong>Missing required fields:</strong> <%= fieldCompletion.missingRequired.map((field) => field.label).join(', ') %></div>
+            <% } else { %>
+              <div class="alert alert-success">Configured required fields are filled.</div>
+            <% } %>
+            <ul class="crm-check-list mb-0">
+              <li>Customer mobile/email checked</li>
+              <li>Requirement category confirmed</li>
+              <li>Location/service area understood</li>
+              <li>Invalid/test/spam requirement rejected</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="col-xl-7">
+        <div class="card border mb-0">
+          <div class="card-header"><h5 class="mb-0">Status update</h5></div>
+          <div class="card-body border-top">
+            <form method="post" action="/enquiries/<%= enquiry.id %>">
+              <div class="row mb-3"><label class="col-lg-3 col-form-label">Status</label><div class="col-lg-9"><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= enquiry.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div></div>
+              <div class="row mb-3"><label class="col-lg-3 col-form-label">Priority</label><div class="col-lg-9"><select class="form-select" name="priority"><% priorities.forEach((p)=>{ %><option value="<%= p %>" <%= enquiry.priority === p ? 'selected' : '' %>><%= humanize(p) %></option><% }) %></select></div></div>
+              <div class="row mb-3"><label class="col-lg-3 col-form-label">Preferred date / slot</label><div class="col-lg-5"><input class="form-control" type="date" name="preferredDate" value="<%= dateOnly(enquiry.preferredDate) %>"></div><div class="col-lg-4"><input class="form-control" name="preferredSlot" value="<%= enquiry.preferredSlot || '' %>"></div></div>
+              <div class="d-flex flex-wrap gap-2 justify-content-end">
+                <button class="btn btn-light" type="submit" name="status" value="verification_pending">Move to verification</button>
+                <button class="btn btn-primary" type="submit" name="status" value="approved">Approve lead</button>
+                <button class="btn btn-light" type="submit" name="status" value="rejected">Reject</button>
+                <button class="btn btn-primary" type="submit">Save changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body border-top crm-tab-panel" data-crm-tab-panel="approval">
+    <div class="row g-4">
+      <div class="col-xl-5">
+        <div class="crm-section-title">Approval model</div>
+        <div class="crm-info-list mb-3">
+          <div><span>Current status</span><strong><%= humanize(enquiry.status) %></strong></div>
+          <div><span>Category</span><strong><%= humanize(enquiry.categorySlug) %></strong></div>
+          <div><span>Source</span><strong><%= enquiry.sourceWebsite || '-' %></strong></div>
+        </div>
+        <div class="alert alert-light border mb-0">CRM team verifies customer details and approves or rejects the lead. Approval is the final CRM decision; there is no provider assignment step here.</div>
+      </div>
+      <div class="col-xl-7">
+        <div class="card border mb-0">
+          <div class="card-header"><h5 class="mb-0">Lead approval</h5></div>
+          <div class="card-body border-top">
+            <form method="post" action="/enquiries/<%= enquiry.id %>">
+              <div class="row mb-3">
+                <label class="col-lg-3 col-form-label">Status</label>
+                <div class="col-lg-9">
+                  <select class="form-select" name="status">
+                    <% statuses.filter((s) => !['distributed', 'assigned', 'scheduled'].includes(s)).forEach((s)=>{ %><option value="<%= s %>" <%= enquiry.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %>
+                  </select>
+                </div>
+              </div>
+              <div class="row mb-3">
+                <label class="col-lg-3 col-form-label">Decision note</label>
+                <div class="col-lg-9"><textarea class="form-control" name="notes" rows="4" placeholder="Why approved/rejected, verification summary..."><%= enquiry.notes || '' %></textarea></div>
+              </div>
+              <div class="d-flex flex-wrap gap-2 justify-content-end">
+                <button class="btn btn-light" type="submit" name="status" value="verification_pending">Move to verification</button>
+                <button class="btn btn-primary" type="submit" name="status" value="approved">Approve lead</button>
+                <button class="btn btn-light" type="submit" name="status" value="rejected">Reject</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body border-top crm-tab-panel" data-crm-tab-panel="activity">
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <a href="/follow-ups/new?enquiryId=<%= encodeURIComponent(enquiry.id) %>&customerName=<%= encodeURIComponent(enquiry.customer.name || '') %>&returnTo=<%= encodeURIComponent('/enquiries/' + enquiry.id + '#activity') %>" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create follow-up</a>
+      <a href="/communications/new?enquiryId=<%= encodeURIComponent(enquiry.id) %>&recipientName=<%= encodeURIComponent(enquiry.customer.name || '') %>&recipientContact=<%= encodeURIComponent(enquiry.customer.mobile || enquiry.customer.email || '') %>&returnTo=<%= encodeURIComponent('/enquiries/' + enquiry.id + '#activity') %>" class="btn btn-light btn-sm"><i class="ph-chats me-2"></i>Log communication</a>
+      <a href="/search/follow-ups?enquiryId=<%= encodeURIComponent(enquiry.id) %>" class="btn btn-light btn-sm"><i class="ph-magnifying-glass me-2"></i>Search follow-ups</a>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-xl-4">
+        <div class="card border mb-0">
+          <div class="card-header"><h5 class="mb-0">Add quick note</h5></div>
+          <div class="card-body border-top">
+            <form method="post" action="/enquiries/<%= enquiry.id %>/notes">
+              <textarea class="form-control mb-3" name="note" rows="4" placeholder="Verification note, customer concern, approval reason..." required></textarea>
+              <button class="btn btn-light" type="submit">Add note</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-xl-8">
+        <div class="card border mb-4">
+          <div class="card-header d-flex align-items-center"><h5 class="mb-0">Follow-ups</h5><span class="badge bg-light text-body border ms-auto"><%= activeFollowUps.length %> open</span></div>
+          <div class="table-responsive border-top">
+            <table class="table table-sm mb-0">
+              <thead><tr><th>Task</th><th>Channel</th><th>Status</th><th>Due</th><th class="text-end">Action</th></tr></thead>
+              <tbody>
+                <% (followUps || []).slice(0, 8).forEach((item) => { %><tr><td><div class="fw-semibold"><%= item.title %></div><div class="text-muted fs-sm"><%= item.owner || '' %></div></td><td><%= humanize(item.channel) %></td><td><%- include('../partials/statusBadge', { value: item.status, humanize }) %></td><td><%= formatDate(item.dueAt) %></td><td class="text-end"><a class="btn btn-outline-primary btn-sm" href="/follow-ups/<%= item.id %>">View</a></td></tr><% }) %>
+                <% if (!(followUps || []).length) { %><tr><td colspan="5" class="text-muted text-center py-3">No follow-ups yet.</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card border mb-0">
+          <div class="card-header"><h5 class="mb-0">Communication log</h5></div>
+          <div class="table-responsive border-top">
+            <table class="table table-sm mb-0">
+              <thead><tr><th>When</th><th>Channel</th><th>Message</th><th>Status</th><th class="text-end">Action</th></tr></thead>
+              <tbody>
+                <% (communications || []).slice(0, 8).forEach((item) => { %><tr><td><%= formatDate(item.createdAt) %></td><td><%= humanize(item.channel) %></td><td><div class="text-truncate" style="max-width: 360px;"><%= item.message || '-' %></div></td><td><%- include('../partials/statusBadge', { value: item.status, humanize }) %></td><td class="text-end"><a class="btn btn-outline-primary btn-sm" href="/communications/<%= item.id %>">View</a></td></tr><% }) %>
+                <% if (!(communications || []).length) { %><tr><td colspan="5" class="text-muted text-center py-3">No communication log yet.</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border mt-4 mb-0">
+      <div class="card-header"><h5 class="mb-0">Timeline</h5></div>
+      <div class="card-body border-top">
+        <div class="list-feed">
+          <% (enquiry.timeline || []).slice().reverse().forEach((item) => { %>
+            <div class="list-feed-item"><div class="fw-semibold"><%= humanize(item.type) %></div><%= item.message %><div class="text-muted fs-sm"><%= item.actor %> · <%= formatDate(item.createdAt) %></div></div>
+          <% }) %>
+          <% if (!(enquiry.timeline || []).length) { %><div class="text-muted">No timeline yet.</div><% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body border-top crm-tab-panel" data-crm-tab-panel="metadata">
+    <div class="d-sm-flex align-items-sm-center mb-3">
+      <div><div class="crm-section-title mb-1">Internal metadata</div><div class="text-muted fs-sm">Technical/source values saved with the requirement.</div></div>
+      <a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-light btn-sm ms-sm-auto mt-2 mt-sm-0">Edit metadata</a>
+    </div>
+    <% if (metaEntries.length) { %>
+      <div class="table-responsive border rounded"><table class="table table-sm mb-0"><tbody>
+        <% metaEntries.forEach(([key, value]) => { %><tr><td class="fw-semibold"><%= humanize(key) %><div class="text-muted fs-sm"><%= key %></div></td><td class="crm-break"><%= typeof value === 'object' ? JSON.stringify(value) : value %></td></tr><% }) %>
+      </tbody></table></div>
+    <% } else { %>
+      <div class="alert alert-light border mb-0">No internal metadata saved yet.</div>
+    <% } %>
   </div>
 </div>
 

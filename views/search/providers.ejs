@@ -18,8 +18,10 @@
       <div class="col-xl-3 col-lg-4 col-sm-6"><label class="form-label">Category</label><select class="form-select" name="categorySlug"><option value="">All categories</option><% categories.forEach((category)=>{ %><option value="<%= category.slug %>" <%= filters.categorySlug === category.slug ? 'selected' : '' %>><%= category.name %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
       <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">City</label><input class="form-control" name="city" placeholder="City" value="<%= filters.city || '' %>"></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">From</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">To</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || '' %>"></div>
       <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-2 col-sm-6"><button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button></div>
+      <div class="col-xl-2 col-lg-4 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button><a href="/search/providers" class="btn btn-light">Clear</a></div>
     </form>
   </div>
   <div class="table-responsive">

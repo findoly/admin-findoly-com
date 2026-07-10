@@ -14,7 +14,8 @@
         <div class="row mb-2"><label class="col-sm-4 col-form-label text-muted">Service areas</label><div class="col-sm-8 pt-sm-2"><%= (provider.serviceAreas || []).join(', ') || '-' %></div></div>
         <div class="row mb-2"><label class="col-sm-4 col-form-label text-muted">Availability</label><div class="col-sm-8 pt-sm-2"><%= humanize(provider.availability) %></div></div>
         <div class="row mb-2"><label class="col-sm-4 col-form-label text-muted">Rating</label><div class="col-sm-8 pt-sm-2"><%= provider.rating || 0 %> / 5</div></div>
-        <div class="row mb-0"><label class="col-sm-4 col-form-label text-muted">Documents</label><div class="col-sm-8 pt-sm-2"><%= provider.documentsVerified ? 'Verified' : 'Pending' %></div></div>
+        <div class="row mb-2"><label class="col-sm-4 col-form-label text-muted">Documents</label><div class="col-sm-8 pt-sm-2"><%= provider.documentsVerified ? 'Verified' : 'Pending' %></div></div>
+        <div class="row mb-2"><label class="col-sm-4 col-form-label text-muted">Onboarding</label><div class="col-sm-8 pt-sm-2"><%= humanize(provider.onboardingStage || 'new') %></div></div>
       </div>
     </div>
   </div>
@@ -36,12 +37,5 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header"><h5 class="mb-0">Assigned enquiries</h5></div>
-  <div class="table-responsive"><table class="table text-nowrap"><thead><tr><th>Customer</th><th>Service</th><th>Status</th><th>Created</th><th class="text-center" style="width:20px"><i class="ph-dots-three"></i></th></tr></thead><tbody>
-    <% enquiries.forEach((enquiry) => { %><tr><td><%= enquiry.customer.name %></td><td><%= enquiry.serviceType %></td><td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td><td><%= formatDate(enquiry.createdAt) %></td><td class="text-center"><a href="/enquiries/<%= enquiry.id %>" class="text-body"><i class="ph-arrow-circle-right"></i></a></td></tr><% }) %>
-    <% if (!enquiries.length) { %><tr><td colspan="5" class="text-muted text-center py-4">No assigned enquiries.</td></tr><% } %>
-  </tbody></table></div>
-</div>
 
 <%- include('../partials/pageEnd') %>

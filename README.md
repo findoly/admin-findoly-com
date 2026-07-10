@@ -1,414 +1,287 @@
-# Service CRM Admin
+# LeadOps CRM
 
-Generic monolithic admin CRM for multi-website, multi-category service enquiries. It keeps the VetsKart-style business workflow, but supports any provider category such as veterinary care, carpentry, painting, plumbing, electrical, cleaning and future service verticals.
+Internal Express/EJS CRM for receiving, verifying, categorizing, approving, following up, and searching customer leads from websites, agents, calls, WhatsApp, or manual admin entry.
 
-## What this version supports
+## Express Generator structure
 
-- Local MongoDB or MongoDB Atlas through **Mongoose**.
-- Website-specific service modules with an inline form builder.
-- Dynamic form templates selected by:
-  - `sourceWebsite`
-  - `categorySlug`
-  - `formType`
-- Manual admin booking with dynamic fields per category/form type.
-- Enquiries can be saved even when some dynamic fields are missing.
-- Enquiry detail page shows missing required dynamic fields and allows admins to complete them later.
-- External website/API intake with flexible `fields`, `formData`, or `dynamicFields` object.
-- Provider assignment, follow-ups, communications, billing, reports and audit logs.
-- Limitless/Bootstrap based admin UI with a classic operations-console layout, responsive sidebar, mobile-friendly forms, and dense laptop tables.
-
-## Current storage
-
-This app uses **MongoDB through Mongoose**. It works with a **local MongoDB database for testing/development** and MongoDB Atlas for staging/production.
-
-MongoDB collections created by the app:
-
-- `enquiries`
-- `providers`
-- `categories`
-- `formtemplates`
-- `followups`
-- `communications`
-- `invoices`
-- `auditlogs`
-
-## Local MongoDB setup
-
-Install and start MongoDB locally, then use this URI:
-
-```env
-MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin
-TEST_MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin_test
-```
-
-Common local start commands:
-
-```bash
-# macOS Homebrew
-brew services start mongodb-community
-
-# Linux systemd
-sudo systemctl start mongod
-
-# Docker
-docker run -d --name service-crm-mongo -p 27017:27017 mongo:7
-```
-
-## Setup
-
-```bash
-cp .env.example .env
-npm install
-```
-
-The default `.env.example` already points to local MongoDB:
-
-```env
-MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin
-TEST_MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin_test
-```
-
-When you later move to Atlas, replace `MONGODB_URI` with your Atlas connection string. Do not commit `.env` because it may contain database credentials.
-
-## Seed demo data
-
-After MongoDB is running:
-
-```bash
-npm run seed
-```
-
-This seeds demo service modules, providers, dynamic templates, enquiries and follow-ups into MongoDB. Demo data includes `woodoly.com` examples with multiple categories and form types.
-
-## Run
-
-```bash
-npm start
-```
-
-Open:
+The application now follows the standard Express Generator bootstrap layout. There is no `src/` application directory.
 
 ```text
-http://localhost:3000
+app.js                 Express configuration and exported app
+bin/www                HTTP server entry point and MongoDB startup
+routes/                 Feature routers
+controllers/            HTTP request handlers
+services/               Business rules and orchestration
+models/                 Mongoose schemas and models
+repositories/           Public UUID lookup helpers
+middleware/             Authentication and error middleware
+db/                     Mongoose connection
+config/                 Branding and app configuration
+utils/                  Shared utilities
+views/                  EJS templates
+public/                 Static CSS, JavaScript, and uploads
+scripts/                Seed and validation scripts
+test/                   Node test runner suites
 ```
 
-Default demo admin login:
+`npm start` and `npm run dev` both start the generated-style `bin/www` entry point. `app.js` remains side-effect free apart from middleware configuration, which keeps it directly reusable in Supertest and other integrations.
+
+
+## Per-employee appearance settings
+
+Authenticated employees can open **Appearance settings** from the palette button in the top navigation or from the account menu. The settings panel provides live controls for:
+
+- accent, page, header, sidebar, active-menu, text, and muted-text colors
+- card surface, header, border color, border width, radius, and shadow
+- input surface and border colors
+- table header, row, alternating row, hover, and border colors
+- table radius, border width, and striped/plain row style
+- button and navigation radius
+- sidebar width, interface density, and font scale
+- quick presets such as Soft Slate, Ocean, Sage, Warm Sand, Lavender, and Graphite
+
+Preferences are stored in browser `localStorage`, using the signed-in employee email as part of the storage key. They are not written to MongoDB and do not affect another employee's browser or account. Changes preview immediately and persist across page navigation and future sessions in that browser.
+
+## Current workflow
+
+1. A lead is created from the CRM or submitted through the API.
+2. The team verifies the customer and requirement details.
+3. The team categorizes the lead and records category-specific information.
+4. The team approves, rejects, completes, or closes the lead.
+5. Follow-ups and communication logs are managed on separate pages.
+
+Provider assignment, lead distribution, provider unlock, and public provider listings are not part of the current CRM workflow. Providers are maintained only as an internal directory and onboarding record.
+
+## Lead data model
+
+Every lead uses the same fixed Mongoose schema for common information:
+
+- UUID string `id`
+- status and priority
+- customer name, mobile, and email
+- address
+- category and requirement title
+- preferred date and time
+- lead source and tracking information
+- notes and timeline
+
+Category-specific information is stored in a flexible `additionalDetails` object:
+
+```json
+{
+  "material": "Plywood",
+  "budget": "5000",
+  "work_area": "Bedroom"
+}
+```
+
+Legacy API keys `fields`, `formData`, and `dynamicFields` are still accepted and normalized into `additionalDetails`.
+
+## Create lead wizard
+
+The manual lead screen is available at:
 
 ```text
-Email: admin@example.com
-Password: change-me
+/enquiries/new
 ```
 
-For auto-restart during development:
+It uses three focused steps:
 
-```bash
-npm run dev
-```
+1. **Customer details** — fixed customer, address, category, title, priority, and preferred time fields.
+2. **Additional details** — known category schema fields are displayed as simple text fields. Admins can optionally add extra field-name/value rows.
+3. **Lead source** — source type, website/source name, agent/source name, channel, campaign, form ID, external ID, landing page, and internal note.
 
-## How dynamic forms work
+The CRM reads existing category field definitions internally to display known fields, but the Website Modules and Form Definitions management pages are intentionally removed from the admin UI.
 
-Create website modules and their forms from:
+## Lead detail UI
+
+The lead detail page uses nav pills instead of one long page:
+
+- Overview
+- Form data
+- Verification
+- Approval
+- Activity
+- Metadata
+
+Approval is the final CRM decision. There is no provider assignment step.
+
+## Main pages
 
 ```text
-/catalog/categories
+/dashboard
+/enquiries
+/enquiries/new
+/enquiries/queue/new
+/enquiries/queue/verification
+/enquiries/queue/approved
+/enquiries/queue/completed
+/enquiries/queue/rejected
+/enquiries/:id
+/enquiries/:id/edit
+/search/enquiries
+/providers
+/providers/new
+/providers/:id
+/providers/:id/edit
+/search/providers
+/follow-ups
+/follow-ups/new
+/communications
+/communications/new
+/billing
+/reports
 ```
 
-A module defines which category belongs to which source website, and the inline **Form builder** defines exactly what the website form/admin manual booking should collect. The matching key is:
+Each operational module uses separate list, create, detail, edit, and search pages where applicable.
 
-```text
-sourceWebsite + categorySlug + formType
+## API
+
+Create a lead:
+
+```http
+POST /api/requirements
+Content-Type: application/json
 ```
 
 Example:
 
-```text
-sourceWebsite: woodoly.com
-categorySlug: furniture-repair
-formType: wardrobe-repair
-```
-
-You can also manage standalone templates from:
-
-```text
-/catalog/templates
-```
-
-A template defines the fields that should appear for that website/category/form type. For example, Woodoly can have separate templates for:
-
-- `furniture-repair + wardrobe-repair`
-- `modular-kitchen + kitchen-installation`
-- `wall-painting + painting-quote`
-- `waterproofing + waterproofing-quote`
-
-Each template can have fields like text, textarea, number, select, radio, checkbox, date, email, tel, URL or file URL.
-
-Manual enquiry creation from `/enquiries/new` loads the matching template. Dynamic required fields are shown to the admin, but they do not block saving. Later, open the enquiry detail page and use **Update dynamic form data** to fill missing fields.
-
-## Form Schema API for websites
-
-External websites can ask the CRM what fields to render before submitting enquiries:
-
-```http
-GET /api/forms/schema?sourceWebsite=woodoly.com&categorySlug=furniture-repair&formType=wardrobe-repair
-```
-
-Alias endpoint:
-
-```http
-GET /api/form-schema?sourceWebsite=woodoly.com&categorySlug=furniture-repair&formType=wardrobe-repair
-```
-
-Example response shape:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "sourceWebsite": "woodoly.com",
-    "categorySlug": "furniture-repair",
-    "formType": "wardrobe-repair",
-    "fields": [
-      {
-        "name": "requirement",
-        "label": "Requirement",
-        "type": "textarea",
-        "required": true,
-        "group": "Requirement",
-        "placeholder": "Describe customer requirement"
-      }
-    ],
-    "submitEndpoint": "/api/enquiries"
-  }
-}
-```
-
-The website should render these fields and submit values in `fields`, `formData`, or `dynamicFields`.
-
-## Generic enquiry intake API
-
-External websites can send enquiries here:
-
-```http
-POST /api/enquiries
-Content-Type: application/json
-```
-
-Example with Woodoly dynamic form data and source information:
-
 ```json
 {
   "source": {
-    "website": "woodoly.com",
+    "website": "example.com",
+    "sourceType": "customer_website",
     "channel": "landing-page",
-    "campaign": "woodoly-launch",
-    "formId": "wardrobe-repair",
-    "landingPage": "https://woodoly.com/wardrobe-repair",
-    "referrer": "https://google.com",
-    "externalEnquiryId": "WOOD-1001",
-    "utm": {
-      "source": "google",
-      "medium": "cpc",
-      "campaign": "bengaluru-wardrobe"
-    },
-    "metadata": {
-      "sourceIp": "203.0.113.10",
-      "device": "mobile"
-    }
+    "campaign": "carpenter-campaign",
+    "formId": "carpenter-requirement",
+    "externalEnquiryId": "WEB-1001"
   },
-  "categorySlug": "furniture-repair",
-  "formType": "wardrobe-repair",
+  "categorySlug": "carpenter",
   "serviceType": "Wardrobe repair",
-  "priority": "normal",
   "customer": {
     "name": "Amit Verma",
     "mobile": "9876543210",
     "email": "amit@example.com"
   },
   "address": {
-    "line1": "Indiranagar",
     "city": "Bengaluru",
     "state": "Karnataka",
     "pincode": "560038"
   },
-  "preferredDate": "2026-07-11",
-  "preferredSlot": "Afternoon",
-  "fields": {
-    "workType": "Wardrobe repair",
-    "furnitureItem": "Sliding wardrobe",
-    "issueDescription": "One shutter is not sliding properly",
-    "photos": ["https://example.com/photo.jpg"]
-  },
-  "notes": "Customer wants inspection before quote."
-}
-```
-
-### Required intake fields
-
-- `customer.mobile` or `mobile`
-- `categorySlug` or `category`
-- `source.website` or `sourceWebsite`
-- `fields`, `formData`, or `dynamicFields` as an object
-
-The dynamic object is intentionally flexible. A painting enquiry can send `rooms`, a carpentry enquiry can send `material`, a veterinary enquiry can send `petType`, and a future category can send any other keys without adding new database columns.
-
-## Source information supported
-
-The API and admin manual-entry screen support:
-
-- `source.website`
-- `source.channel`
-- `source.campaign`
-- `source.formId`
-- `source.landingPage`
-- `source.referrer`
-- `source.externalEnquiryId`
-- `source.utm.source`
-- `source.utm.medium`
-- `source.utm.campaign`
-- `source.utm.term`
-- `source.utm.content`
-- `source.metadata`
-
-Flat aliases are also supported for website forms, such as `sourceWebsite`, `sourceChannel`, `campaign`, `formId`, `landingPage`, `referrer`, `externalEnquiryId`, `utm_source`, `utm_medium`, and `utm_campaign`.
-
-## Health check
-
-```http
-GET /api/health
-```
-
-Example response:
-
-```json
-{
-  "ok": true,
-  "service": "service-crm-admin",
-  "database": {
-    "connected": true,
-    "name": "service_crm_admin"
+  "additionalDetails": {
+    "material": "Plywood",
+    "issue": "Sliding shutter is stuck"
   }
 }
 ```
 
-## Tests
-
-Syntax/import check:
-
-```bash
-npm run check
-```
-
-Unit tests that do not require MongoDB:
-
-```bash
-npm test
-```
-
-MongoDB integration test against your local test database:
-
-```bash
-RUN_MONGO_INTEGRATION=true npm test
-```
-
-With the default config, the integration test uses:
-
-```env
-mongodb://127.0.0.1:27017/service_crm_admin_test
-```
-
-Keep `TEST_MONGODB_URI` set to a separate database so test data does not mix with development data.
-
-## Main admin routes
-
-- `/dashboard`
-- `/enquiries`
-- `/providers`
-- `/follow-ups`
-- `/billing`
-- `/catalog/categories`
-- `/catalog/templates`
-- `/communications`
-- `/reports`
-- `/api/enquiries`
-
-## Migration notes from old portal
-
-| Old portal concept | New generic concept |
-| --- | --- |
-| Vet / Doctor | Provider |
-| Vet booking | Enquiry / Booking |
-| Home service / consultation | Service request |
-| Assign vet | Assign provider |
-| Doctor payment | Provider payout / billing |
-| VetsKart-only source | Multi-website source |
-| Fixed vet forms | Dynamic website/category/form templates |
-
-## Production hardening checklist
-
-- Use environment variables for MongoDB credentials.
-- Use MongoDB Atlas or a managed MongoDB deployment for production.
-- Add API key or request-signature verification for `/api/enquiries`.
-- Replace demo cookie login with SSO or a real admin-user database.
-- Add role-based permissions for admin, manager, caller, finance and operations teams.
-- Add retry queue for communication webhooks/AWS Lambda failures.
-- Add attachment storage for enquiry photos and provider documents.
-- Add audit retention and backup policies.
-
-## UI update notes
-
-The admin UI now uses the uploaded Limitless/Bootstrap CSS as the base layout. The shell is built with theme classes such as `navbar`, `page-content`, `sidebar`, `content-wrapper`, `content-inner`, `page-header`, `nav-sidebar`, Bootstrap cards, buttons, tables, and responsive grid utilities. The local `public/css/app.css` file only contains CRM-specific compatibility helpers and mobile fixes.
-
-The category builder screen is mobile-first: field-builder rows stack on small screens and use auto-fit columns on laptop/desktop. Every website/category/form type can define its own fields, and external websites can call the schema API before rendering their intake form:
+Other lead aliases remain available for compatibility:
 
 ```http
-GET /api/forms/schema?sourceWebsite=woodoly.com&categorySlug=furniture-repair&formType=wardrobe-repair
+POST /api/enquiries
+POST /api/leads
+GET /api/requirements
+GET /api/requirements/:id
+GET /api/enquiries
+GET /api/leads
 ```
 
-## Search and edit workflow
-
-The admin CRM now uses separate Finder-style search pages instead of mixing all records into one result page. The Search menu contains dedicated table views with pagination and View/Edit actions:
-
-- `/search/enquiries` — enquiry-only search with website/category/status/form filters.
-- `/search/providers` — provider-only search with category/status/city filters.
-- `/search/invoices` — invoice-only search with status and enquiry filters.
-- `/search/follow-ups` — follow-up task search.
-- `/search/communications` — communication log search.
-
-`/search` redirects to `/search/enquiries`, and the top navbar search opens the enquiry finder by default.
-
-Common edit routes:
-
-- `GET /enquiries/:id/edit` — full enquiry edit screen for source website, category, form type, customer, address, status, pricing, notes and dynamic form fields.
-- `POST /enquiries/:id` — saves core enquiry and dynamic field changes.
-- `POST /enquiries/:id/assign` — assigns or reassigns a provider.
-- `GET /providers/:id/edit` — full provider profile edit screen for contact, categories, skills, service areas, rating and document status.
-- `POST /providers/:id` — saves provider changes.
-
-Provider assignment is intentionally open. The recommendation list scores all active providers by category match, customer city/service area, provider city, rating and availability, but the admin can still choose another active provider when needed.
-
-## Navigation and separated operations
-
-Operational modules are intentionally split into list/search/create/detail pages so admins do not have to create and manage records on the same crowded screen:
-
-- Enquiries: `/enquiries`, `/enquiries/new`, `/search/enquiries`, `/enquiries/:id`, `/enquiries/:id/edit`
-- Providers: `/providers`, `/providers/new`, `/search/providers`, `/providers/:id`, `/providers/:id/edit`
-- Follow-ups: `/follow-ups`, `/follow-ups/new`, `/search/follow-ups`, `/follow-ups/:id`, `/follow-ups/:id/edit`
-- Communications: `/communications`, `/communications/new`, `/search/communications`, `/communications/:id`, `/communications/:id/edit`
-- Billing: `/billing`, `/billing/new`, `/search/invoices`, `/billing/:id`, `/billing/:id/edit`
-
-Each list page has its own table, filters, pagination, View action, and Edit action where editing is supported. The sidebar groups these pages by workflow so the user can move from list → create → view → edit → search without mixing records from different modules on one screen.
-
-Additional read APIs are available for internal integrations and page-level API links:
+Read-only category schema endpoint:
 
 ```http
+GET /api/forms/schema?sourceWebsite=example.com&categorySlug=carpenter&formType=default
+```
+
+Operational read APIs:
+
+```http
+GET /api/providers
 GET /api/follow-ups
 GET /api/follow-ups/:id
 GET /api/communications
 GET /api/communications/:id
 GET /api/invoices
 GET /api/invoices/:id
+GET /api/health
 ```
 
-## Simple internal UI skin
+There are no active provider-assignment, distribution, or unlock endpoints.
 
-The admin UI uses a calm internal-operations skin: neutral navigation, white cards, subtle status accents, and clearer tables with hover rows, compact spacing, status badges, and visible action buttons. Heavy gradients are intentionally avoided because the app is for employees, not customer-facing marketing.
+## Storage and architecture
+
+- MongoDB through Mongoose.
+- UUID-style string IDs are used for public and primary record IDs.
+- Controllers and services fetch records by public `id`.
+- Application services do not use Mongoose `populate`, aggregation pipelines, or ObjectId-based business lookups.
+- Operational records denormalize the display data needed by their own pages.
+- `additionalDetails` and `metadata` use flexible mixed objects for category/source-specific values.
+
+Collections:
+
+- `enquiries` — lead/requirement records; legacy collection name retained
+- `providers`
+- `categories`
+- `formtemplates` — internal/read-only field definitions
+- `followups`
+- `communications`
+- `invoices`
+- `auditlogs`
+
+## Local setup
+
+```bash
+cp .env.example .env
+npm install
+```
+
+Start MongoDB locally. The default configuration uses:
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin
+TEST_MONGODB_URI=mongodb://127.0.0.1:27017/service_crm_admin_test
+```
+
+Seed demo data:
+
+```bash
+npm run seed
+```
+
+Start the app:
+
+```bash
+npm start
+```
+
+Open `http://localhost:3000`.
+
+Default demo login:
+
+```text
+admin@example.com
+change-me
+```
+
+## Checks and tests
+
+```bash
+npm run check
+npm test
+```
+
+Run the MongoDB integration test only against a separate test database:
+
+```bash
+RUN_MONGO_INTEGRATION=true npm test
+```
+
+The integration test is skipped by default when that environment variable is not enabled.
+
+## Production checklist
+
+- Replace demo cookie authentication with SSO or database-backed admin users.
+- Add roles for operations, verification, managers, finance, and support.
+- Add API keys or signature validation to public lead intake endpoints.
+- Add attachment storage for photos/documents.
+- Add queue/retry handling for communication webhooks.
+- Use managed MongoDB backups and audit-log retention.

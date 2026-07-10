@@ -9,7 +9,7 @@
       </div>
       <div class="card-body border-top">
         <form method="post" action="/follow-ups/<%= followUp.id %>">
-          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related enquiry</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No enquiry</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>" <%= followUp.enquiryId === e.id ? 'selected' : '' %>><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related requirement</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">No requirement</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>" <%= followUp.enquiryId === e.id ? 'selected' : '' %>><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name</label><div class="col-lg-9"><input class="form-control" name="customerName" value="<%= followUp.customerName || '' %>"></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Title <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="title" value="<%= followUp.title || '' %>" required></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Due at</label><div class="col-lg-9"><input class="form-control" type="datetime-local" name="dueAt" value="<%= followUp.dueAt ? String(followUp.dueAt).slice(0,16) : '' %>"></div></div>

@@ -25,14 +25,16 @@
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Channel</label><select class="form-select" name="channel"><option value="">All channels</option><% ['call','whatsapp','email','sms'].forEach((channel)=>{ %><option value="<%= channel %>" <%= filters.channel === channel ? 'selected' : '' %>><%= humanize(channel) %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Owner</label><input class="form-control" name="owner" value="<%= filters.owner || '' %>" placeholder="admin@email.com"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Due from</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || filters.dueFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Due to</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || filters.dueTo || '' %>"></div>
       <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-3 col-sm-6"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Filter</button><a href="/follow-ups" class="btn btn-light">Clear</a></div>
     </form>
   </div>
 
   <div class="table-responsive">
     <table class="table text-nowrap">
-      <thead><tr><th>Task</th><th>Customer</th><th>Related enquiry</th><th>Owner</th><th>Channel</th><th>Status</th><th>Due</th><th class="text-center" style="width: 220px;">Actions</th></tr></thead>
+      <thead><tr><th>Task</th><th>Customer</th><th>Related requirement</th><th>Owner</th><th>Channel</th><th>Status</th><th>Due</th><th class="text-center" style="width: 220px;">Actions</th></tr></thead>
       <tbody>
         <% followUps.forEach((item) => { %>
           <tr>

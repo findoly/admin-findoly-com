@@ -3,9 +3,9 @@ require('dotenv').config();
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
-const app = require('../src/app');
-const { connectDb, disconnectDb } = require('../src/db/mongoose');
-const { AuditLog, Enquiry } = require('../src/models');
+const app = require('../app');
+const { connectDb, disconnectDb } = require('../db/mongoose');
+const { AuditLog, Enquiry } = require('../models');
 
 const configuredUri = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI || '';
 const hasMongoUri = configuredUri.startsWith('mongodb') && !configuredUri.includes('<db_user>') && !configuredUri.includes('<cluster-name>');
@@ -86,7 +86,7 @@ test('POST /api/enquiries stores dynamic fields, form type and source info in Mo
 });
 
 test('normalises website-specific formData as dynamic fields without requiring fixed columns', async () => {
-  const { normaliseEnquiry } = require('../src/services/enquiryService');
+  const { normaliseEnquiry } = require('../services/enquiryService');
   const enquiry = normaliseEnquiry({
     id: 'enq_unit_test',
     sourceWebsite: 'woodoly.com',
@@ -111,7 +111,7 @@ test('normalises website-specific formData as dynamic fields without requiring f
 });
 
 test('field completion reports missing required dynamic fields but does not block saving', async () => {
-  const catalogService = require('../src/services/catalogService');
+  const catalogService = require('../services/catalogService');
   const enquiry = {
     fields: {
       workType: 'Wardrobe repair',

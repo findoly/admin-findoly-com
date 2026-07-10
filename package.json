@@ -1,10 +1,20 @@
 {
   "name": "service-crm-admin",
   "version": "1.0.0",
-  "description": "Generic admin CRM for multi-category service enquiries, provider assignment, follow-ups, communications and billing.",
+  "description": "Express Generator-style LeadOps CRM for lead intake, verification, approval, follow-ups, provider onboarding and search.",
   "private": true,
+  "type": "commonjs",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www",
+    "seed": "node scripts/seed.js",
+    "check": "node scripts/check.js",
+    "test": "node --test",
+    "test:integration": "node --test test/*.test.js",
+    "test:mongo": "RUN_MONGO_INTEGRATION=true node --test"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",
@@ -17,5 +27,9 @@
     "method-override": "^3.0.0",
     "mongoose": "^8.24.1",
     "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "supertest": "^7.2.2"
   }
 }

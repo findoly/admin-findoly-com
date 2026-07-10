@@ -17,15 +17,17 @@
     <form method="get" class="row g-3 align-items-end">
       <div class="col-xl-4 col-lg-6"><label class="form-label">Search</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Invoice, customer, provider..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
-      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Enquiry ID</label><input class="form-control" name="enquiryId" value="<%= filters.enquiryId || '' %>" placeholder="enq_..."></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Requirement ID</label><input class="form-control" name="enquiryId" value="<%= filters.enquiryId || '' %>" placeholder="req_..."></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Issue from</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Issue to</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || '' %>"></div>
       <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-3 col-sm-6"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Filter</button><a href="/billing" class="btn btn-light">Clear</a></div>
     </form>
   </div>
 
   <div class="table-responsive">
     <table class="table text-nowrap">
-      <thead><tr><th>No</th><th>Customer</th><th>Provider</th><th>Related enquiry</th><th>Status</th><th>Issue</th><th>Total</th><th class="text-center" style="width: 160px;">Actions</th></tr></thead>
+      <thead><tr><th>No</th><th>Customer</th><th>Provider</th><th>Related requirement</th><th>Status</th><th>Issue</th><th>Total</th><th class="text-center" style="width: 160px;">Actions</th></tr></thead>
       <tbody>
         <% invoices.forEach((invoice) => { %>
           <tr>

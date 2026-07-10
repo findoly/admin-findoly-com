@@ -1,13 +1,13 @@
-<%- include('../partials/pageStart', { subtitle: 'Full enquiry edit' }) %>
+<%- include('../partials/pageStart', { subtitle: 'Requirement verification and edit' }) %>
 
 <div class="card">
   <div class="card-header d-sm-flex align-items-sm-center">
     <div>
-      <h5 class="mb-0">Edit enquiry</h5>
-      <div class="text-muted fs-sm mt-1"><%= enquiry.id %> · update customer, source, booking, pricing and dynamic form fields.</div>
+      <h5 class="mb-0">Edit requirement</h5>
+      <div class="text-muted fs-sm mt-1"><%= enquiry.id %> · update customer, source, requirement status and additional details.</div>
     </div>
     <div class="mt-2 mt-sm-0 ms-sm-auto">
-      <a href="/enquiries/<%= enquiry.id %>" class="btn btn-light"><i class="ph-arrow-left me-2"></i>Back to enquiry</a>
+      <a href="/enquiries/<%= enquiry.id %>" class="btn btn-light"><i class="ph-arrow-left me-2"></i>Back to requirement</a>
     </div>
   </div>
 
@@ -17,7 +17,7 @@
       <input type="hidden" name="dynamicFieldKeys" value="<%= fieldCompletion.editableFields.map((field) => field.name).join(',') %>">
 
       <fieldset class="mb-3">
-        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Website and form mapping</legend>
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Website and category mapping</legend>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Source website <span class="text-danger">*</span></label>
           <div class="col-lg-9">
@@ -40,7 +40,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-lg-3 col-form-label">Template</label>
+          <label class="col-lg-3 col-form-label">Saved category schema</label>
           <div class="col-lg-9">
             <select class="form-select" name="templateId">
               <option value="">Auto match by website/category/form type</option>
@@ -48,7 +48,7 @@
                 <option value="<%= tpl.id %>" <%= enquiry.templateId === tpl.id ? 'selected' : '' %>><%= tpl.name %> — <%= tpl.sourceWebsite %> / <%= tpl.categorySlug %> / <%= tpl.formType %></option>
               <% }) %>
             </select>
-            <div class="form-text">Changing this can change which dynamic fields are expected for this enquiry.</div>
+            <div class="form-text">Changing this can change which additional details are expected in CRM.</div>
           </div>
         </div>
         <div class="row mb-3">
@@ -59,7 +59,7 @@
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Form / external ID</label>
           <div class="col-lg-4"><input class="form-control" name="formId" value="<%= enquiry.source?.formId || '' %>" placeholder="website form ID"></div>
-          <div class="col-lg-5"><input class="form-control" name="externalEnquiryId" value="<%= enquiry.source?.externalEnquiryId || '' %>" placeholder="external lead/enquiry ID"></div>
+          <div class="col-lg-5"><input class="form-control" name="externalEnquiryId" value="<%= enquiry.source?.externalEnquiryId || '' %>" placeholder="external lead/requirement ID"></div>
         </div>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Landing / referrer</label>
@@ -75,7 +75,7 @@
       </fieldset>
 
       <fieldset class="mb-3">
-        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Customer and booking</legend>
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Fixed requirement fields</legend>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Customer</label>
           <div class="col-lg-3"><input class="form-control" name="customerName" value="<%= enquiry.customer?.name || '' %>" placeholder="Name"></div>
@@ -102,14 +102,14 @@
       </fieldset>
 
       <fieldset class="mb-3">
-        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Status and commercial details</legend>
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Status and internal tracking</legend>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Status / priority</label>
           <div class="col-lg-4"><select class="form-select" name="status"><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= enquiry.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div>
           <div class="col-lg-5"><select class="form-select" name="priority"><% priorities.forEach((p)=>{ %><option value="<%= p %>" <%= enquiry.priority === p ? 'selected' : '' %>><%= humanize(p) %></option><% }) %></select></div>
         </div>
         <div class="row mb-3">
-          <label class="col-lg-3 col-form-label">Quoted / final amount</label>
+          <label class="col-lg-3 col-form-label">Estimated / final value</label>
           <div class="col-lg-4"><input class="form-control" type="number" name="quotedAmount" value="<%= enquiry.quotedAmount || 0 %>"></div>
           <div class="col-lg-5"><input class="form-control" type="number" name="finalAmount" value="<%= enquiry.finalAmount || 0 %>"></div>
         </div>
@@ -120,12 +120,12 @@
       </fieldset>
 
       <fieldset class="mb-3">
-        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Dynamic form data <% if (template) { %><span class="fw-normal text-muted">— <%= template.name %></span><% } %></legend>
+        <legend class="fs-base fw-bold border-bottom pb-2 mb-3">Additional details <% if (template) { %><span class="fw-normal text-muted">— <%= template.name %></span><% } %></legend>
         <% if (fieldCompletion.missingRequired.length) { %>
           <div class="alert alert-warning">Missing required fields: <%= fieldCompletion.missingRequired.map((field) => field.label).join(', ') %></div>
         <% } %>
         <% if (fieldCompletion.editableFields.length) { %>
-          <% fieldCompletion.editableFields.forEach((field) => { const value = enquiry.fields?.[field.name]; const valueText = fieldValue(enquiry.fields, field.name); %>
+          <% fieldCompletion.editableFields.forEach((field) => { const details = enquiry.additionalDetails || enquiry.fields || {}; const value = details?.[field.name]; const valueText = fieldValue(details, field.name); %>
             <div class="row mb-3">
               <label class="col-lg-3 col-form-label"><%= field.label %><% if (field.required) { %> <span class="text-danger">*</span><% } %></label>
               <div class="col-lg-9">
@@ -145,37 +145,31 @@
             </div>
           <% }) %>
         <% } else { %>
-          <div class="alert alert-info">No matching template fields are configured yet. Create a template from Website modules → Categories & form builder.</div>
+          <div class="alert alert-info">No saved category schema fields are available. You can still save additional details below.</div>
         <% } %>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Raw additional details</label>
+          <div class="col-lg-9">
+            <textarea class="form-control font-monospace fs-sm" name="additionalDetailsJson" rows="6"><%= JSON.stringify(enquiry.additionalDetails || enquiry.fields || {}, null, 2) %></textarea>
+            <div class="form-text">WordPress-style custom fields for this requirement. Dynamic field inputs above override matching keys.</div>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <label class="col-lg-3 col-form-label">Internal metadata</label>
+          <div class="col-lg-9">
+            <textarea class="form-control font-monospace fs-sm" name="metadataJson" rows="4"><%= JSON.stringify(enquiry.metadata || {}, null, 2) %></textarea>
+            <div class="form-text">Admin-only metadata/tracking. Kept separate from customer additional details.</div>
+          </div>
+        </div>
       </fieldset>
 
       <div class="text-end">
         <a href="/enquiries/<%= enquiry.id %>" class="btn btn-light">Cancel</a>
-        <button class="btn btn-primary ms-2" type="submit">Save enquiry <i class="ph-floppy-disk ms-2"></i></button>
+        <button class="btn btn-primary ms-2" type="submit">Save requirement <i class="ph-floppy-disk ms-2"></i></button>
       </div>
     </form>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header"><h5 class="mb-0">Assign or reassign provider</h5></div>
-  <div class="card-body border-top">
-    <form method="post" action="/enquiries/<%= enquiry.id %>/assign">
-      <div class="row mb-3">
-        <label class="col-lg-3 col-form-label">Recommended providers</label>
-        <div class="col-lg-9">
-          <select class="form-select" name="providerId" required>
-            <% const providerOptions = recommendations.length ? recommendations : providers; %>
-            <% providerOptions.forEach((provider) => { %>
-              <option value="<%= provider.id %>" <%= enquiry.assignedProviderId === provider.id ? 'selected' : '' %>><%= provider.name %><% if (provider.matchScore !== undefined) { %> — score <%= provider.matchScore %><% } %> — <%= provider.city || 'city not set' %></option>
-            <% }) %>
-          </select>
-          <div class="form-text">Provider matching uses category, city/service area, rating and availability.</div>
-        </div>
-      </div>
-      <div class="text-end"><button class="btn btn-primary" type="submit">Assign provider</button></div>
-    </form>
-  </div>
-</div>
 
 <%- include('../partials/pageEnd') %>

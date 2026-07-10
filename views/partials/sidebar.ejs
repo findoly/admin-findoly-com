@@ -1,14 +1,17 @@
 <!-- Main sidebar -->
-<div class="sidebar sidebar-dark sidebar-main sidebar-expand-lg">
+<div class="sidebar sidebar-light sidebar-main sidebar-expand-lg crm-sidebar">
   <div class="sidebar-content">
     <div class="sidebar-section">
       <div class="sidebar-section-body d-flex justify-content-center">
-        <h5 class="sidebar-resize-hide flex-grow-1 my-auto">CRM Navigation</h5>
+        <div class="sidebar-resize-hide flex-grow-1 my-auto">
+          <div class="crm-sidebar-title">LeadOps CRM</div>
+          <div class="crm-sidebar-caption">Requirement workspace</div>
+        </div>
         <div>
-          <button type="button" class="btn btn-flat-white btn-icon btn-sm rounded-pill border-transparent sidebar-control sidebar-main-resize d-none d-lg-inline-flex" aria-label="Resize sidebar">
+          <button type="button" class="btn btn-light btn-icon btn-sm rounded-pill border-transparent sidebar-control sidebar-main-resize d-none d-lg-inline-flex" aria-label="Resize sidebar">
             <svg class="crm-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7H3m0 0 3-3M3 7l3 3"/><path d="M16 17h5m0 0-3-3m3 3-3 3"/><path d="M4 17h16M20 7H4"/></svg>
           </button>
-          <button type="button" class="btn btn-flat-white btn-icon btn-sm rounded-pill border-transparent sidebar-mobile-main-toggle d-lg-none" aria-label="Close navigation">
+          <button type="button" class="btn btn-light btn-icon btn-sm rounded-pill border-transparent sidebar-mobile-main-toggle d-lg-none" aria-label="Close navigation">
             <svg class="crm-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
           </button>
         </div>
@@ -20,11 +23,11 @@
         <li class="nav-item-header pt-0"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Workspace</div><i class="ph-dots-three sidebar-resize-show"></i></li>
         <li class="nav-item"><a href="/dashboard" class="nav-link <%= currentPath.startsWith('/dashboard') ? 'active' : '' %>"><i class="ph-house"></i><span>Dashboard<span class="d-block fw-normal opacity-50">Today and workload</span></span></a></li>
 
-        <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Booking queues</div><i class="ph-dots-three sidebar-resize-show"></i></li>
+        <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Requirement queues</div><i class="ph-dots-three sidebar-resize-show"></i></li>
         <li class="nav-item nav-item-submenu <%= currentPath.startsWith('/enquiries/queue') ? 'nav-item-expanded nav-item-open' : '' %>">
           <a href="#" class="nav-link">
             <i class="ph-calendar-check"></i>
-            <span>Bookings<span class="d-block fw-normal opacity-50">Status-wise action lists</span></span>
+            <span>Requirement queues<span class="d-block fw-normal opacity-50">Verify and approve</span></span>
             <% if ((navCounts.queues && navCounts.queues.new) || 0) { %><span class="badge bg-primary rounded-pill ms-auto"><%= navCounts.queues.new %> New</span><% } %>
           </a>
           <ul class="nav-group-sub collapse <%= currentPath.startsWith('/enquiries/queue') ? 'show' : '' %>">
@@ -37,18 +40,18 @@
               </li>
             <% }) %>
             <li class="nav-item-divider"></li>
-            <li class="nav-item"><a href="/enquiries" class="nav-link <%= currentPath === '/enquiries' ? 'active' : '' %>">All booking list <span class="badge bg-transparent align-self-center ms-auto"><%= navCounts.enquiries || 0 %></span></a></li>
+            <li class="nav-item"><a href="/enquiries" class="nav-link <%= currentPath === '/enquiries' ? 'active' : '' %>">All requirements <span class="badge bg-transparent align-self-center ms-auto"><%= navCounts.enquiries || 0 %></span></a></li>
           </ul>
         </li>
 
         <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Core records</div><i class="ph-dots-three sidebar-resize-show"></i></li>
 
         <li class="nav-item nav-item-submenu <%= (currentPath.startsWith('/enquiries') && !currentPath.startsWith('/enquiries/queue')) || currentPath.startsWith('/search/enquiries') ? 'nav-item-expanded nav-item-open' : '' %>">
-          <a href="#" class="nav-link"><i class="ph-list-checks"></i><span>Enquiries<span class="d-block fw-normal opacity-50">Create, edit, assign</span></span></a>
+          <a href="#" class="nav-link"><i class="ph-list-checks"></i><span>Requirements<span class="d-block fw-normal opacity-50">Verify and approve</span></span></a>
           <ul class="nav-group-sub collapse <%= (currentPath.startsWith('/enquiries') && !currentPath.startsWith('/enquiries/queue')) || currentPath.startsWith('/search/enquiries') ? 'show' : '' %>">
-            <li class="nav-item"><a href="/enquiries" class="nav-link <%= currentPath === '/enquiries' ? 'active' : '' %>">All enquiries</a></li>
-            <li class="nav-item"><a href="/enquiries/new" class="nav-link <%= currentPath === '/enquiries/new' ? 'active' : '' %>">Create enquiry</a></li>
-            <li class="nav-item"><a href="/search/enquiries" class="nav-link <%= currentPath.startsWith('/search/enquiries') ? 'active' : '' %>">Advanced search</a></li>
+            <li class="nav-item"><a href="/enquiries" class="nav-link <%= currentPath === '/enquiries' ? 'active' : '' %>">All requirements</a></li>
+            <li class="nav-item"><a href="/enquiries/new" class="nav-link <%= currentPath === '/enquiries/new' ? 'active' : '' %>">Create lead</a></li>
+            <li class="nav-item"><a href="/search/enquiries" class="nav-link <%= currentPath.startsWith('/search/enquiries') ? 'active' : '' %>">Requirement search</a></li>
           </ul>
         </li>
 
@@ -94,7 +97,7 @@
         <li class="nav-item nav-item-submenu <%= currentPath.startsWith('/search') ? 'nav-item-expanded nav-item-open' : '' %>">
           <a href="#" class="nav-link"><i class="ph-magnifying-glass"></i><span>Search pages<span class="d-block fw-normal opacity-50">Separate tables</span></span></a>
           <ul class="nav-group-sub collapse <%= currentPath.startsWith('/search') ? 'show' : '' %>">
-            <li class="nav-item"><a href="/search/enquiries" class="nav-link <%= currentPath.startsWith('/search/enquiries') ? 'active' : '' %>">Enquiry Search</a></li>
+            <li class="nav-item"><a href="/search/enquiries" class="nav-link <%= currentPath.startsWith('/search/enquiries') ? 'active' : '' %>">Requirement Search</a></li>
             <li class="nav-item"><a href="/search/providers" class="nav-link <%= currentPath.startsWith('/search/providers') ? 'active' : '' %>">Provider Search</a></li>
             <li class="nav-item"><a href="/search/invoices" class="nav-link <%= currentPath.startsWith('/search/invoices') ? 'active' : '' %>">Invoice Search</a></li>
             <li class="nav-item"><a href="/search/follow-ups" class="nav-link <%= currentPath.startsWith('/search/follow-ups') ? 'active' : '' %>">Follow-up Search</a></li>
@@ -102,19 +105,9 @@
           </ul>
         </li>
 
-        <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Configuration</div><i class="ph-dots-three sidebar-resize-show"></i></li>
-        <li class="nav-item nav-item-submenu <%= currentPath.startsWith('/catalog') ? 'nav-item-expanded nav-item-open' : '' %>">
-          <a href="#" class="nav-link"><i class="ph-browser"></i><span>Website modules<span class="d-block fw-normal opacity-50">Form builder</span></span></a>
-          <ul class="nav-group-sub collapse <%= currentPath.startsWith('/catalog') ? 'show' : '' %>">
-            <li class="nav-item"><a href="/catalog/categories" class="nav-link <%= currentPath.startsWith('/catalog/categories') ? 'active' : '' %>">Categories & forms</a></li>
-            <li class="nav-item"><a href="/catalog/templates" class="nav-link <%= currentPath.startsWith('/catalog/templates') ? 'active' : '' %>">Form templates</a></li>
-          </ul>
-        </li>
+        <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Admin</div><i class="ph-dots-three sidebar-resize-show"></i></li>
         <li class="nav-item"><a href="/reports" class="nav-link <%= currentPath.startsWith('/reports') ? 'active' : '' %>"><i class="ph-chart-bar"></i><span>Reports & audit log</span></a></li>
 
-        <li class="nav-item-header"><div class="text-uppercase fs-sm lh-sm opacity-50 sidebar-resize-hide">Developer</div><i class="ph-dots-three sidebar-resize-show"></i></li>
-        <li class="nav-item"><a href="/api/forms/schema?sourceWebsite=woodoly.com&categorySlug=furniture-repair&formType=wardrobe-repair" target="_blank" class="nav-link"><i class="ph-code"></i><span>Schema API</span></a></li>
-        <li class="nav-item"><a href="/api/health" target="_blank" class="nav-link"><i class="ph-pulse"></i><span>Health check</span></a></li>
       </ul>
     </div>
   </div>

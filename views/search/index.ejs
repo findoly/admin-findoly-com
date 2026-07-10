@@ -25,7 +25,7 @@
         <select class="form-select" name="entity">
           <% [
             ['all', 'All records'],
-            ['enquiries', 'Enquiries'],
+            ['requirements', 'Requirements'],
             ['providers', 'Providers'],
             ['followUps', 'Follow-ups'],
             ['communications', 'Communications'],
@@ -70,12 +70,12 @@
   <div class="col-xl-8">
     <div class="card">
       <div class="card-header d-flex align-items-center">
-        <h5 class="mb-0">Enquiries</h5>
+        <h5 class="mb-0">Requirements</h5>
         <span class="badge bg-primary rounded-pill ms-auto"><%= results.enquiries.length %></span>
       </div>
       <div class="table-responsive">
         <table class="table text-nowrap">
-          <thead><tr><th>Customer</th><th>Service</th><th>Website/form</th><th>Status</th><th>Provider</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Service</th><th>Website/form</th><th>Status</th><th>Location</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
           <tbody>
             <% results.enquiries.forEach((enquiry) => { %>
               <tr>
@@ -83,7 +83,7 @@
                 <td><div><%= enquiry.serviceType %></div><div class="text-muted fs-sm"><%= humanize(enquiry.categorySlug) %></div></td>
                 <td><div><%= enquiry.sourceWebsite %></div><div class="text-muted fs-sm"><%= [enquiry.formType, enquiry.source?.channel, enquiry.source?.campaign || enquiry.source?.utm?.campaign].filter(Boolean).join(' · ') %></div></td>
                 <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
-                <td><%= enquiry.assignedProviderName || '-' %></td>
+                <td><%= [enquiry.address?.city, enquiry.address?.state].filter(Boolean).join(', ') || '-' %></td>
                 <td class="text-center">
                   <div class="d-inline-flex gap-2">
                     <a href="/enquiries/<%= enquiry.id %>" class="text-body" title="View"><i class="ph-eye"></i></a>
@@ -92,7 +92,7 @@
                 </td>
               </tr>
             <% }) %>
-            <% if (!results.enquiries.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No enquiries found.</td></tr><% } %>
+            <% if (!results.enquiries.length) { %><tr><td colspan="6" class="text-center text-muted py-4">No requirements found.</td></tr><% } %>
           </tbody>
         </table>
       </div>
@@ -107,7 +107,7 @@
       </div>
       <div class="table-responsive">
         <table class="table text-nowrap">
-          <thead><tr><th>Provider</th><th>Status</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
+          <thead><tr><th>Location</th><th>Status</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
           <tbody>
             <% results.providers.forEach((provider) => { %>
               <tr>

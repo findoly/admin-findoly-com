@@ -55,7 +55,7 @@
         </div>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Service areas</label>
-          <div class="col-lg-9"><input class="form-control" name="serviceAreas" value="<%= (provider.serviceAreas || []).join(', ') %>"><div class="form-text">Comma-separated cities/areas for matching enquiries.</div></div>
+          <div class="col-lg-9"><input class="form-control" name="serviceAreas" value="<%= (provider.serviceAreas || []).join(', ') %>"><div class="form-text">Comma-separated cities/areas for matching requirements.</div></div>
         </div>
         <div class="row mb-3">
           <label class="col-lg-3 col-form-label">Availability / rating</label>
@@ -89,28 +89,5 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header d-sm-flex align-items-sm-center">
-    <h5 class="mb-0">Assigned enquiries</h5>
-    <span class="badge bg-primary rounded-pill ms-sm-auto mt-2 mt-sm-0"><%= enquiries.length %></span>
-  </div>
-  <div class="table-responsive">
-    <table class="table text-nowrap">
-      <thead><tr><th>Customer</th><th>Service</th><th>Status</th><th>Created</th><th class="text-center" style="width: 90px;">Action</th></tr></thead>
-      <tbody>
-        <% enquiries.forEach((enquiry) => { %>
-          <tr>
-            <td><div class="fw-semibold"><%= enquiry.customer?.name || '-' %></div><div class="text-muted fs-sm"><%= enquiry.customer?.mobile || '-' %></div></td>
-            <td><%= enquiry.serviceType %></td>
-            <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
-            <td><%= formatDate(enquiry.createdAt) %></td>
-            <td class="text-center"><a href="/enquiries/<%= enquiry.id %>/edit" class="text-body"><i class="ph-pencil-simple"></i></a></td>
-          </tr>
-        <% }) %>
-        <% if (!enquiries.length) { %><tr><td colspan="5" class="text-muted text-center py-4">No assigned enquiries.</td></tr><% } %>
-      </tbody>
-    </table>
-  </div>
-</div>
 
 <%- include('../partials/pageEnd') %>

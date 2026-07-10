@@ -4,11 +4,12 @@
     <span>© <%= new Date().getFullYear() %> <%= branding.appName %></span>
     <ul class="nav">
       <li class="nav-item"><a href="/api/health" class="navbar-nav-link navbar-nav-link-icon rounded" target="_blank"><div class="d-flex align-items-center mx-md-1"><i class="ph-pulse"></i><span class="d-none d-md-inline-block ms-2">API Health</span></div></a></li>
-      <li class="nav-item ms-md-1"><a href="/catalog/categories" class="navbar-nav-link navbar-nav-link-icon rounded"><div class="d-flex align-items-center mx-md-1"><i class="ph-gear"></i><span class="d-none d-md-inline-block ms-2">Form Builder</span></div></a></li>
     </ul>
   </div>
 </div>
 <!-- /footer -->
+
+<%- include('appearancePanel') %>
 
 <!-- Notifications -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="notifications">
@@ -21,11 +22,11 @@
     <div class="p-3">
       <div class="d-flex align-items-start mb-3">
         <div class="me-3"><div class="bg-primary bg-opacity-10 text-primary rounded-pill"><i class="ph-list-checks p-2"></i></div></div>
-        <div class="flex-fill">Use enquiries to handle incoming website leads and assign them to providers.<div class="fs-sm text-muted mt-1">Operational reminder</div></div>
+        <div class="flex-fill">Use leads to handle incoming website, agent and manual requirements through verification and approval.<div class="fs-sm text-muted mt-1">Operational reminder</div></div>
       </div>
       <div class="d-flex align-items-start">
-        <div class="me-3"><div class="bg-success bg-opacity-10 text-success rounded-pill"><i class="ph-browser p-2"></i></div></div>
-        <div class="flex-fill">Use the form builder to define website/category/form schemas before connecting external forms.<div class="fs-sm text-muted mt-1">Configuration reminder</div></div>
+        <div class="me-3"><div class="bg-success bg-opacity-10 text-success rounded-pill"><i class="ph-check-square p-2"></i></div></div>
+        <div class="flex-fill">Verify customer details and approve valid leads. Additional category data is stored as flexible name/value fields.<div class="fs-sm text-muted mt-1">Workflow reminder</div></div>
       </div>
     </div>
   </div>

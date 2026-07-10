@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('fs-extra');
 const path = require('path');
-const { connectDb, disconnectDb } = require('../src/db/mongoose');
+const { connectDb, disconnectDb } = require('../db/mongoose');
 const {
   AuditLog,
   Category,
@@ -12,8 +12,8 @@ const {
   FormTemplate,
   Invoice,
   Provider
-} = require('../src/models');
-const { buildSourceInfo } = require('../src/services/catalogService');
+} = require('../models');
+const { buildSourceInfo } = require('../services/catalogService');
 
 const seedDir = path.join(__dirname, '..', 'data', 'seed');
 

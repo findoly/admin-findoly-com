@@ -1,15 +1,15 @@
-<%- include('../partials/pageStart', { subtitle: 'Search enquiry records' }) %>
+<%- include('../partials/pageStart', { subtitle: 'Search requirement records' }) %>
 <%- include('../partials/searchTabs') %>
 
 <div class="card">
   <div class="card-header d-sm-flex align-items-sm-center py-sm-0">
     <div>
-      <h5 class="py-sm-2 my-sm-1 mb-0">Enquiry Search</h5>
-      <div class="text-muted fs-sm">Search only enquiry records. Use View to inspect full enquiry and Edit to update customer, source, assignment and dynamic form fields.</div>
+      <h5 class="py-sm-2 my-sm-1 mb-0">Requirement Search</h5>
+      <div class="text-muted fs-sm">Search only lead records. Use View to inspect full details and Edit to update customer, source and additional fields.</div>
     </div>
     <div class="mt-2 mt-sm-0 ms-sm-auto d-flex gap-2">
       <span class="badge bg-primary rounded-pill align-self-center"><%= pagination.total %> found</span>
-      <a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create enquiry</a>
+      <a href="/enquiries/new" class="btn btn-primary btn-sm"><i class="ph-plus me-2"></i>Create lead</a>
     </div>
   </div>
   <div class="card-body border-top">
@@ -25,13 +25,15 @@
       <div class="col-xl-2 col-lg-4 col-sm-6"><label class="form-label">Category</label><select class="form-select" name="categorySlug"><option value="">All categories</option><% categories.forEach((category)=>{ %><option value="<%= category.slug %>" <%= filters.categorySlug === category.slug ? 'selected' : '' %>><%= category.name %> — <%= category.sourceWebsite || 'any' %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-4 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((status)=>{ %><option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= humanize(status) %></option><% }) %></select></div>
       <div class="col-xl-1 col-lg-4 col-sm-6"><label class="form-label">Form</label><input class="form-control" name="formType" placeholder="default" value="<%= filters.formType || '' %>"></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">From</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">To</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || '' %>"></div>
       <div class="col-xl-1 col-lg-2 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-2 col-sm-6"><button class="btn btn-primary w-100" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button></div>
+      <div class="col-xl-2 col-lg-4 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit"><i class="ph-magnifying-glass me-2"></i>Search</button><a href="/search/enquiries" class="btn btn-light">Clear</a></div>
     </form>
   </div>
   <div class="table-responsive">
     <table class="table text-nowrap">
-      <thead><tr><th>Enquiry</th><th>Customer</th><th>Website / form</th><th>Address</th><th>Priority</th><th>Status</th><th>Provider</th><th>Updated</th><th class="text-center" style="width:160px">Action</th></tr></thead>
+      <thead><tr><th>Requirement</th><th>Customer</th><th>Website / form</th><th>Address</th><th>Priority</th><th>Status</th><th>Source</th><th>Updated</th><th class="text-center" style="width:160px">Action</th></tr></thead>
       <tbody>
         <% records.forEach((enquiry) => { %>
           <tr>
@@ -41,12 +43,12 @@
             <td><%= [enquiry.address?.city, enquiry.address?.state, enquiry.address?.pincode].filter(Boolean).join(', ') || '-' %></td>
             <td><%- include('../partials/statusBadge', { value: enquiry.priority, humanize }) %></td>
             <td><%- include('../partials/statusBadge', { value: enquiry.status, humanize }) %></td>
-            <td><%= enquiry.assignedProviderName || '-' %></td>
+            <td><%= enquiry.source?.sourceName || enquiry.source?.channel || enquiry.sourceWebsite || '-' %></td>
             <td><%= formatDate(enquiry.updatedAt || enquiry.createdAt) %></td>
             <td class="text-center"><div class="d-inline-flex gap-2"><a href="/enquiries/<%= enquiry.id %>" class="btn btn-outline-primary btn-sm"><i class="ph-eye me-1"></i>View</a><a href="/enquiries/<%= enquiry.id %>/edit" class="btn btn-light btn-sm"><i class="ph-pencil-simple me-1"></i>Edit</a></div></td>
           </tr>
         <% }) %>
-        <% if (!records.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No enquiries found.</td></tr><% } %>
+        <% if (!records.length) { %><tr><td colspan="9" class="text-center text-muted py-4">No requirements found.</td></tr><% } %>
       </tbody>
     </table>
   </div>

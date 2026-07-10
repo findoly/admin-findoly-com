@@ -6,7 +6,7 @@
       <div class="card-header d-sm-flex align-items-sm-center"><h5 class="mb-0">Create invoice</h5><div class="ms-sm-auto mt-2 mt-sm-0"><a href="/billing" class="btn btn-light btn-sm"><i class="ph-list me-2"></i>Back to list</a></div></div>
       <div class="card-body border-top">
         <form method="post" action="/billing">
-          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related enquiry</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">Manual invoice</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>"><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
+          <div class="row mb-3"><label class="col-lg-3 col-form-label">Related requirement</label><div class="col-lg-9"><select class="form-select" name="enquiryId"><option value="">Manual invoice</option><% enquiries.forEach((e)=>{ %><option value="<%= e.id %>"><%= e.customer.name %> — <%= e.serviceType %></option><% }) %></select></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Customer name <span class="text-danger">*</span></label><div class="col-lg-9"><input class="form-control" name="customerName" required></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Provider name</label><div class="col-lg-9"><input class="form-control" name="providerName"></div></div>
           <div class="row mb-3"><label class="col-lg-3 col-form-label">Issue / due</label><div class="col-lg-4"><input class="form-control" type="date" name="issueDate"></div><div class="col-lg-5"><input class="form-control" type="date" name="dueDate"></div></div>

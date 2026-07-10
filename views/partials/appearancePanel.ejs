@@ -1,0 +1,120 @@
+<% if (admin) { %>
+<div class="crm-appearance-backdrop" data-crm-appearance-backdrop hidden></div>
+<aside class="crm-appearance-panel" data-crm-appearance-panel aria-hidden="true" aria-label="Appearance settings">
+  <div class="crm-appearance-panel-header">
+    <div>
+      <h5 class="mb-1">Appearance settings</h5>
+      <div class="text-muted fs-sm">Saved only in this browser for <strong><%= admin.email %></strong>.</div>
+    </div>
+    <button type="button" class="btn btn-light btn-icon rounded-pill" data-crm-appearance-close aria-label="Close appearance settings">
+      <svg class="crm-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+
+  <div class="crm-appearance-panel-body">
+    <section class="crm-appearance-section">
+      <div class="crm-appearance-section-title">Quick themes</div>
+      <div class="crm-theme-presets">
+        <button type="button" class="crm-theme-preset" data-appearance-preset="slate"><span style="--preset-a:#356ae6;--preset-b:#dde6f0;--preset-c:#eef2f6"></span>Soft slate</button>
+        <button type="button" class="crm-theme-preset" data-appearance-preset="ocean"><span style="--preset-a:#1677c8;--preset-b:#d5e6f2;--preset-c:#eaf2f7"></span>Ocean</button>
+        <button type="button" class="crm-theme-preset" data-appearance-preset="sage"><span style="--preset-a:#397a5a;--preset-b:#dbe8df;--preset-c:#edf3ef"></span>Sage</button>
+        <button type="button" class="crm-theme-preset" data-appearance-preset="sand"><span style="--preset-a:#a35f1f;--preset-b:#e9dfd0;--preset-c:#f3eee7"></span>Warm sand</button>
+        <button type="button" class="crm-theme-preset" data-appearance-preset="lavender"><span style="--preset-a:#6b55b5;--preset-b:#e2ddef;--preset-c:#f0edf6"></span>Lavender</button>
+        <button type="button" class="crm-theme-preset" data-appearance-preset="graphite"><span style="--preset-a:#4b6478;--preset-b:#d4dce3;--preset-c:#e8edf1"></span>Graphite</button>
+      </div>
+    </section>
+
+    <details class="crm-appearance-section" open>
+      <summary>Shell and navigation</summary>
+      <div class="crm-appearance-grid">
+        <label class="crm-color-control"><span>Accent</span><input type="color" data-appearance-key="accent"></label>
+        <label class="crm-color-control"><span>Page background</span><input type="color" data-appearance-key="pageBg"></label>
+        <label class="crm-color-control"><span>Header</span><input type="color" data-appearance-key="headerBg"></label>
+        <label class="crm-color-control"><span>Header text</span><input type="color" data-appearance-key="headerText"></label>
+        <label class="crm-color-control"><span>Sidebar</span><input type="color" data-appearance-key="sidebarBg"></label>
+        <label class="crm-color-control"><span>Sidebar text</span><input type="color" data-appearance-key="sidebarText"></label>
+        <label class="crm-color-control"><span>Active menu</span><input type="color" data-appearance-key="sidebarActiveBg"></label>
+        <label class="crm-color-control"><span>Active text</span><input type="color" data-appearance-key="sidebarActiveText"></label>
+        <label class="crm-color-control"><span>Main text</span><input type="color" data-appearance-key="mainText"></label>
+        <label class="crm-color-control"><span>Muted text</span><input type="color" data-appearance-key="mutedText"></label>
+      </div>
+      <label class="crm-range-control">
+        <span>Sidebar width <output data-appearance-output="sidebarWidth"></output></span>
+        <input type="range" min="230" max="360" step="2" data-appearance-key="sidebarWidth">
+      </label>
+      <label class="crm-range-control">
+        <span>Navigation edge <output data-appearance-output="navRadius"></output></span>
+        <input type="range" min="0" max="20" step="1" data-appearance-key="navRadius">
+      </label>
+    </details>
+
+    <details class="crm-appearance-section" open>
+      <summary>Cards and forms</summary>
+      <div class="crm-appearance-grid">
+        <label class="crm-color-control"><span>Card surface</span><input type="color" data-appearance-key="cardBg"></label>
+        <label class="crm-color-control"><span>Card header</span><input type="color" data-appearance-key="cardHeaderBg"></label>
+        <label class="crm-color-control"><span>Card edge</span><input type="color" data-appearance-key="cardBorder"></label>
+        <label class="crm-color-control"><span>Input surface</span><input type="color" data-appearance-key="inputBg"></label>
+        <label class="crm-color-control"><span>Input edge</span><input type="color" data-appearance-key="inputBorder"></label>
+      </div>
+      <div class="crm-appearance-two-col">
+        <label class="crm-range-control">
+          <span>Card edge radius <output data-appearance-output="cardRadius"></output></span>
+          <input type="range" min="0" max="24" step="1" data-appearance-key="cardRadius">
+        </label>
+        <label class="crm-range-control">
+          <span>Card border <output data-appearance-output="cardBorderWidth"></output></span>
+          <input type="range" min="0" max="3" step="1" data-appearance-key="cardBorderWidth">
+        </label>
+      </div>
+      <div class="crm-appearance-two-col">
+        <label class="crm-range-control">
+          <span>Button edge <output data-appearance-output="buttonRadius"></output></span>
+          <input type="range" min="0" max="20" step="1" data-appearance-key="buttonRadius">
+        </label>
+        <label class="crm-select-control"><span>Card shadow</span><select class="form-select" data-appearance-key="shadow"><option value="none">None</option><option value="subtle">Subtle</option><option value="soft">Soft</option><option value="strong">Strong</option></select></label>
+      </div>
+    </details>
+
+    <details class="crm-appearance-section" open>
+      <summary>Tables</summary>
+      <div class="crm-appearance-grid">
+        <label class="crm-color-control"><span>Header surface</span><input type="color" data-appearance-key="tableHeadBg"></label>
+        <label class="crm-color-control"><span>Header text</span><input type="color" data-appearance-key="tableHeadText"></label>
+        <label class="crm-color-control"><span>Table edge</span><input type="color" data-appearance-key="tableBorder"></label>
+        <label class="crm-color-control"><span>Row surface</span><input type="color" data-appearance-key="tableRowBg"></label>
+        <label class="crm-color-control"><span>Alternate row</span><input type="color" data-appearance-key="tableAltBg"></label>
+        <label class="crm-color-control"><span>Row hover</span><input type="color" data-appearance-key="tableHover"></label>
+      </div>
+      <div class="crm-appearance-two-col">
+        <label class="crm-range-control">
+          <span>Table edge radius <output data-appearance-output="tableRadius"></output></span>
+          <input type="range" min="0" max="24" step="1" data-appearance-key="tableRadius">
+        </label>
+        <label class="crm-range-control">
+          <span>Table border <output data-appearance-output="tableBorderWidth"></output></span>
+          <input type="range" min="0" max="3" step="1" data-appearance-key="tableBorderWidth">
+        </label>
+      </div>
+      <label class="crm-select-control"><span>Row style</span><select class="form-select" data-appearance-key="tableStyle"><option value="striped">Alternating rows</option><option value="plain">Plain rows</option></select></label>
+    </details>
+
+    <details class="crm-appearance-section" open>
+      <summary>Spacing and readability</summary>
+      <div class="crm-appearance-two-col">
+        <label class="crm-select-control"><span>Interface density</span><select class="form-select" data-appearance-key="density"><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="spacious">Spacious</option></select></label>
+        <label class="crm-range-control">
+          <span>Font scale <output data-appearance-output="fontScale"></output></span>
+          <input type="range" min="90" max="112" step="1" data-appearance-key="fontScale">
+        </label>
+      </div>
+    </details>
+  </div>
+
+  <div class="crm-appearance-panel-footer">
+    <span class="crm-appearance-status" data-appearance-status>Saved in this browser</span>
+    <button type="button" class="btn btn-light" data-appearance-reset>Restore default</button>
+    <button type="button" class="btn btn-primary" data-crm-appearance-close>Done</button>
+  </div>
+</aside>
+<% } %>

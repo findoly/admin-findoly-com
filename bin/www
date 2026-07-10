@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+
+require('dotenv').config();
+
+const http = require('http');
+const app = require('../app');
+const { connectDb } = require('../db/mongoose');
+
+const port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+const server = http.createServer(app);
+server.on('error', onError);
+server.on('listening', onListening);
+
+connectDb()
+  .then(() => {
+    server.listen(port);
+  })
+  .catch((error) => {
+    console.error('Failed to connect MongoDB. Check MONGODB_URI in .env and make sure MongoDB is running.');
+    console.error(error.message);
+    process.exit(1);
+  });
+
+function normalizePort(value) {
+  const parsedPort = parseInt(value, 10);
+
+  if (Number.isNaN(parsedPort)) return value;
+  if (parsedPort >= 0) return parsedPort;
+  return false;
+}
+
+function onError(error) {
+  if (error.syscall !== 'listen') throw error;
+
+  const bind = typeof port === 'string' ? `Pipe ${port}` : `Port ${port}`;
+
+  switch (error.code) {
+    case 'EACCES':
+      console.error(`${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(`${bind} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+function onListening() {
+  const address = server.address();
+  const bind = typeof address === 'string' ? `pipe ${address}` : `port ${address.port}`;
+  console.log(`LeadOps CRM listening on ${bind}`);
+}

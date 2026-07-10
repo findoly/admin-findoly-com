@@ -18,9 +18,11 @@
       <div class="col-xl-4 col-lg-6"><label class="form-label">Search</label><div class="form-control-feedback form-control-feedback-start"><input class="form-control" name="q" placeholder="Recipient, contact, message..." value="<%= filters.q || filters.search || '' %>"><div class="form-control-feedback-icon"><i class="ph-magnifying-glass"></i></div></div></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Channel</label><select class="form-select" name="channel"><option value="">All channels</option><% ['call','whatsapp','email','sms','note'].forEach((channel)=>{ %><option value="<%= channel %>" <%= filters.channel === channel ? 'selected' : '' %>><%= humanize(channel) %></option><% }) %></select></div>
       <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All statuses</option><% statuses.forEach((s)=>{ %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= humanize(s) %></option><% }) %></select></div>
-      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Enquiry ID</label><input class="form-control" name="enquiryId" value="<%= filters.enquiryId || '' %>" placeholder="enq_..."></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6"><label class="form-label">Requirement ID</label><input class="form-control" name="enquiryId" value="<%= filters.enquiryId || '' %>" placeholder="req_..."></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">From</label><input type="date" class="form-control" name="dateFrom" value="<%= filters.dateFrom || '' %>"></div>
+      <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">To</label><input type="date" class="form-control" name="dateTo" value="<%= filters.dateTo || '' %>"></div>
       <div class="col-xl-1 col-lg-3 col-sm-6"><label class="form-label">Per page</label><select class="form-select" name="pageSize"><% [10,25,50,100].forEach((size)=>{ %><option value="<%= size %>" <%= String(filters.pageSize || 25) === String(size) ? 'selected' : '' %>><%= size %></option><% }) %></select></div>
-      <div class="col-xl-1 col-lg-3 col-sm-6"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
+      <div class="col-xl-2 col-lg-3 col-sm-6 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Filter</button><a href="/communications" class="btn btn-light">Clear</a></div>
     </form>
   </div>
 

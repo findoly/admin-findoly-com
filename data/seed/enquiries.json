@@ -5,7 +5,7 @@
     "categorySlug": "veterinary-care",
     "serviceType": "Home consultation",
     "priority": "high",
-    "status": "assigned",
+    "status": "approved",
     "customer": {
       "name": "Priya Nair",
       "mobile": "9876500001",
@@ -19,8 +19,6 @@
     },
     "preferredDate": "2026-07-08",
     "preferredSlot": "10 AM - 1 PM",
-    "assignedProviderId": "provider_vet_01",
-    "assignedProviderName": "Dr. Meera Kapoor",
     "quotedAmount": 899,
     "finalAmount": 0,
     "notes": "Dog has fever since yesterday.",
@@ -34,14 +32,14 @@
       {
         "id": "time_demo_01",
         "type": "created",
-        "message": "Enquiry received from vetskart.com",
+        "message": "Requirement received from vetskart.com",
         "actor": "system",
         "createdAt": "2026-07-06T08:30:00.000Z"
       },
       {
         "id": "time_demo_02",
-        "type": "assigned",
-        "message": "Assigned to Dr. Meera Kapoor",
+        "type": "status_changed",
+        "message": "Status changed from verification_pending to approved",
         "actor": "admin@example.com",
         "createdAt": "2026-07-06T09:00:00.000Z"
       }
@@ -67,7 +65,13 @@
       }
     },
     "formType": "default",
-    "templateId": "tpl_vet"
+    "templateId": "tpl_vet",
+    "additionalDetails": {
+      "petType": "Dog",
+      "petAge": "3 years",
+      "symptoms": "Fever and low appetite",
+      "consultationMode": "Home visit"
+    }
   },
   {
     "id": "enq_demo_02",
@@ -89,8 +93,6 @@
     },
     "preferredDate": "2026-07-09",
     "preferredSlot": "2 PM - 5 PM",
-    "assignedProviderId": "",
-    "assignedProviderName": "",
     "quotedAmount": 0,
     "finalAmount": 0,
     "notes": "Customer asked for photo review before visit.",
@@ -104,7 +106,7 @@
       {
         "id": "time_demo_03",
         "type": "created",
-        "message": "Enquiry received from carpenter.example.com",
+        "message": "Requirement received from carpenter.example.com",
         "actor": "system",
         "createdAt": "2026-07-06T08:45:00.000Z"
       }
@@ -130,7 +132,13 @@
       }
     },
     "formType": "default",
-    "templateId": "tpl_carpentry"
+    "templateId": "tpl_carpentry",
+    "additionalDetails": {
+      "workType": "Wardrobe repair",
+      "material": "Plywood",
+      "measurements": "6 ft wardrobe",
+      "issueDescription": "Door hinge broken"
+    }
   },
   {
     "id": "enq_demo_03",
@@ -138,7 +146,7 @@
     "categorySlug": "painting",
     "serviceType": "2BHK repainting",
     "priority": "urgent",
-    "status": "contacted",
+    "status": "verification_pending",
     "customer": {
       "name": "Neha Gupta",
       "mobile": "9876500003",
@@ -152,8 +160,6 @@
     },
     "preferredDate": "2026-07-10",
     "preferredSlot": "Morning",
-    "assignedProviderId": "",
-    "assignedProviderName": "",
     "quotedAmount": 15000,
     "finalAmount": 0,
     "notes": "Needs work completed before shifting.",
@@ -167,14 +173,14 @@
       {
         "id": "time_demo_04",
         "type": "created",
-        "message": "Enquiry received from painting.example.com",
+        "message": "Requirement received from painting.example.com",
         "actor": "system",
         "createdAt": "2026-07-06T09:15:00.000Z"
       },
       {
         "id": "time_demo_05",
         "type": "status_changed",
-        "message": "Status changed from new to contacted",
+        "message": "Status changed from new to verification_pending",
         "actor": "admin@example.com",
         "createdAt": "2026-07-06T09:45:00.000Z"
       }
@@ -200,7 +206,13 @@
       }
     },
     "formType": "default",
-    "templateId": "tpl_painting"
+    "templateId": "tpl_painting",
+    "additionalDetails": {
+      "propertyType": "Apartment",
+      "rooms": "3",
+      "paintType": "washable emulsion",
+      "wallCondition": "Minor dampness in one bedroom"
+    }
   },
   {
     "id": "enq_demo_woodoly_01",
@@ -224,8 +236,6 @@
     },
     "preferredDate": "2026-07-11",
     "preferredSlot": "Afternoon",
-    "assignedProviderId": "",
-    "assignedProviderName": "",
     "quotedAmount": 0,
     "finalAmount": 0,
     "notes": "Demo Woodoly lead intentionally missing material and measurements so admin can fill later.",
@@ -238,7 +248,7 @@
       {
         "id": "time_demo_woodoly_01",
         "type": "created",
-        "message": "Enquiry received from woodoly.com",
+        "message": "Requirement received from woodoly.com",
         "actor": "system",
         "createdAt": "2026-07-06T10:10:00.000Z"
       }
@@ -262,6 +272,11 @@
       "metadata": {
         "device": "mobile"
       }
+    },
+    "additionalDetails": {
+      "workType": "Wardrobe repair",
+      "furnitureItem": "Sliding wardrobe",
+      "issueDescription": "One shutter is not sliding properly"
     }
   }
 ]
