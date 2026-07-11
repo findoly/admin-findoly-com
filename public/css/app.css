@@ -3701,3 +3701,178 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .crm-page-subtitle { font-size: .72rem; }
   .content { padding: .75rem !important; }
 }
+
+/* CRM additions: managed categories, Indian mobile fields and lead journeys */
+.crm-mobile-prefix {
+  min-width: 3.6rem;
+  justify-content: center;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+.crm-multi-select {
+  min-height: 9.5rem;
+}
+
+.crm-journey {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.crm-journey-step {
+  position: relative;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.crm-journey-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  left: calc(50% + 1rem);
+  right: calc(-50% + 1rem);
+  height: 2px;
+  background: #e2e8f0;
+}
+
+.crm-journey-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 700;
+}
+
+.crm-journey-label {
+  margin-top: .55rem;
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.crm-journey-step.is-complete,
+.crm-journey-step.is-current {
+  color: #2563eb;
+}
+
+.crm-journey-step.is-complete .crm-journey-dot,
+.crm-journey-step.is-current .crm-journey-dot {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.crm-journey-step.is-complete:not(:last-child)::after {
+  background: #2563eb;
+}
+
+.crm-journey-step.is-rejected-stage {
+  color: #dc2626;
+}
+
+.crm-journey-step.is-rejected-stage .crm-journey-dot {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.crm-timeline {
+  position: relative;
+}
+
+.crm-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  gap: .75rem;
+  padding-bottom: 1.25rem;
+}
+
+.crm-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: .85rem;
+  bottom: 0;
+  left: .36rem;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.crm-timeline-marker {
+  position: relative;
+  z-index: 1;
+  width: .8rem;
+  height: .8rem;
+  margin-top: .2rem;
+  border: 2px solid #2563eb;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.crm-provider-journey-card {
+  padding: 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.crm-provider-journey-card:last-child {
+  border-bottom: 0;
+}
+
+.crm-provider-journey-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crm-provider-note {
+  padding: .7rem .8rem;
+  border-radius: .45rem;
+  background: #f8fafc;
+}
+
+.crm-provider-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .9rem 1.4rem;
+  padding-top: .9rem;
+  border-top: 1px dashed #dbe3ee;
+}
+
+.crm-provider-timeline-item {
+  display: grid;
+  grid-template-columns: .65rem minmax(0, 1fr);
+  gap: .55rem;
+  min-width: 12rem;
+  max-width: 20rem;
+}
+
+.crm-provider-timeline-dot {
+  width: .55rem;
+  height: .55rem;
+  margin-top: .35rem;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+@media (max-width: 767.98px) {
+  .crm-journey-label {
+    font-size: .72rem;
+  }
+
+  .crm-provider-journey-head {
+    flex-direction: column;
+  }
+
+  .crm-provider-journey-head .text-end {
+    text-align: left !important;
+  }
+}
+
+.status-verification { background: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; }

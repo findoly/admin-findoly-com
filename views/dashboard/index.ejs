@@ -122,7 +122,7 @@
                               <div x-text="leadCategory(lead)"></div>
                               <div class="text-muted fs-sm" x-text="leadCity(lead)"></div>
                             </td>
-                            <td><span class="crm-status" :class="statusClass(lead.status)" x-text="humanize(lead.status)"></span></td>
+                            <td><span class="crm-status" :class="statusClass(lead.journeyStatus || lead.status)" x-text="humanize(lead.journeyStatus || lead.status)"></span></td>
                             <td class="text-end fw-semibold" x-text="money(lead.leadPricePaise)"></td>
                             <td class="crm-nowrap" x-text="formatDateOnly(lead.createdAt)"></td>
                             <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + recordId(lead, 'enquiryId')">Open</a></td>

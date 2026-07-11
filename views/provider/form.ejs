@@ -18,70 +18,69 @@
             </div>
           </div>
           <div class="content">
-            <div
-              x-show="shellError"
-              x-cloak
-              class="alert alert-danger"
-              x-text="shellError"
-            ></div>
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
             <div x-data="providerForm()" x-init="init()">
-              <div
-                x-show="error"
-                class="alert alert-danger"
-                x-text="error"
-              ></div>
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <form class="card" @submit.prevent="save">
                 <div class="card-body" :class="loading && 'crm-loading'">
                   <div class="row g-3">
                     <div class="col-md-6">
-                      <label class="form-label">Name</label
-                      ><input
-                        class="form-control"
-                        x-model="form.name"
+                      <label class="form-label">Name</label>
+                      <input class="form-control" x-model="form.name" required />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Business name</label>
+                      <input class="form-control" x-model="form.businessName" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Mobile</label>
+                      <div class="input-group">
+                        <span class="input-group-text crm-mobile-prefix">+91</span>
+                        <input
+                          class="form-control"
+                          x-model="form.mobile"
+                          @input="form.mobile = digitsOnly(form.mobile)"
+                          inputmode="numeric"
+                          autocomplete="tel-national"
+                          pattern="[0-9]{10}"
+                          minlength="10"
+                          maxlength="10"
+                          placeholder="10 digit mobile number"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Email</label>
+                      <input class="form-control" type="email" x-model="form.email" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">City</label>
+                      <input class="form-control" x-model="form.city" />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Categories</label>
+                      <select
+                        class="form-select crm-multi-select"
+                        x-model="form.categorySlugs"
+                        multiple
+                        size="6"
                         required
-                      />
+                      >
+                        <template x-for="category in categories" :key="category.slug">
+                          <option :value="category.slug" x-text="category.name"></option>
+                        </template>
+                      </select>
+                      <div class="form-text">Select one or more categories. Options are managed from the Categories feature.</div>
                     </div>
                     <div class="col-md-6">
-                      <label class="form-label">Business name</label
-                      ><input
-                        class="form-control"
-                        x-model="form.businessName"
-                      />
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">Mobile</label
-                      ><input
-                        class="form-control"
-                        x-model="form.mobile"
-                        required
-                      />
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">Email</label
-                      ><input
-                        class="form-control"
-                        type="email"
-                        x-model="form.email"
-                      />
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">City</label
-                      ><input class="form-control" x-model="form.city" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label"
-                        >Categories (comma separated)</label
-                      ><input class="form-control" x-model="categoryText" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label"
-                        >Service areas (comma separated)</label
-                      ><input class="form-control" x-model="areaText" />
+                      <label class="form-label">Service areas (comma separated)</label>
+                      <input class="form-control" x-model="areaText" />
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Status</label
-                      ><select class="form-select" x-model="form.status">
+                      <label class="form-label">Status</label>
+                      <select class="form-select" x-model="form.status">
                         <option>active</option>
                         <option>inactive</option>
                         <option>pending</option>
@@ -89,11 +88,8 @@
                       </select>
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Onboarding</label
-                      ><select
-                        class="form-select"
-                        x-model="form.onboardingStage"
-                      >
+                      <label class="form-label">Onboarding</label>
+                      <select class="form-select" x-model="form.onboardingStage">
                         <option>new</option>
                         <option>documents_pending</option>
                         <option>training_pending</option>
@@ -102,61 +98,34 @@
                       </select>
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Availability</label
-                      ><input
-                        class="form-control"
-                        x-model="form.availability"
-                      />
+                      <label class="form-label">Availability</label>
+                      <input class="form-control" x-model="form.availability" />
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Rating</label
-                      ><input
-                        type="number"
-                        min="0"
-                        max="5"
-                        step=".1"
-                        class="form-control"
-                        x-model.number="form.rating"
-                      />
+                      <label class="form-label">Rating</label>
+                      <input type="number" min="0" max="5" step=".1" class="form-control" x-model.number="form.rating" />
                     </div>
                     <div class="col-md-6">
                       <div class="form-check mt-4">
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          x-model="form.portalAccessEnabled"
-                          id="portal"
-                        /><label class="form-check-label" for="portal"
-                          >Portal access enabled</label
-                        >
+                        <input class="form-check-input" type="checkbox" x-model="form.portalAccessEnabled" id="portal" />
+                        <label class="form-check-label" for="portal">Portal access enabled</label>
                       </div>
                     </div>
                     <div class="col-md-6">
                       <div class="form-check mt-4">
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          x-model="form.documentsVerified"
-                          id="docs"
-                        /><label class="form-check-label" for="docs"
-                          >Documents verified</label
-                        >
+                        <input class="form-check-input" type="checkbox" x-model="form.documentsVerified" id="docs" />
+                        <label class="form-check-label" for="docs">Documents verified</label>
                       </div>
                     </div>
                     <div class="col-12">
-                      <label class="form-label">Notes</label
-                      ><textarea
-                        class="form-control"
-                        x-model="form.notes"
-                      ></textarea>
+                      <label class="form-label">Notes</label>
+                      <textarea class="form-control" x-model="form.notes"></textarea>
                     </div>
                   </div>
                 </div>
                 <div class="card-footer d-flex">
-                  <a href="/providers" class="btn btn-light">Cancel</a
-                  ><button class="btn btn-primary ms-auto" :disabled="saving">
-                    Save provider
-                  </button>
+                  <a href="/providers" class="btn btn-light">Cancel</a>
+                  <button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : 'Save provider'"></button>
                 </div>
               </form>
             </div>
@@ -165,6 +134,7 @@
                 return {
                   mode: pageMode(),
                   recordId: pageMode() === "edit" ? pathRecordId(true) : "",
+                  categories: [],
                   form: {
                     name: "",
                     businessName: "",
@@ -174,25 +144,34 @@
                     state: "",
                     status: "active",
                     onboardingStage: "new",
+                    categorySlugs: [],
                     availability: "available_today",
                     rating: 0,
                     portalAccessEnabled: true,
                     documentsVerified: false,
                     notes: "",
                   },
-                  categoryText: "",
                   areaText: "",
                   loading: true,
                   saving: false,
                   error: "",
+                  digitsOnly(value) {
+                    let digits = String(value || "").replace(/\D/g, "");
+                    if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+                    if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+                    return digits.slice(0, 10);
+                  },
                   async init() {
                     try {
+                      this.categories = (await apiFetch("/api/catalog/categories")).data || [];
                       if (this.mode === "edit") {
-                        const d = (
-                          await apiFetch("/api/provider/" + this.recordId)
-                        ).data;
-                        this.form = { ...this.form, ...d };
-                        this.categoryText = (d.categorySlugs || []).join(", ");
+                        const d = (await apiFetch("/api/provider/" + this.recordId)).data;
+                        this.form = {
+                          ...this.form,
+                          ...d,
+                          mobile: this.digitsOnly(d.mobile),
+                          categorySlugs: Array.isArray(d.categorySlugs) ? d.categorySlugs : [],
+                        };
                         this.areaText = (d.serviceAreas || []).join(", ");
                       }
                     } catch (e) {
@@ -203,23 +182,23 @@
                   },
                   async save() {
                     this.saving = true;
+                    this.error = "";
                     try {
+                      if (!/^\d{10}$/.test(this.form.mobile)) {
+                        throw new Error("Provider mobile number must contain exactly 10 digits");
+                      }
+                      if (!this.form.categorySlugs.length) {
+                        throw new Error("Select at least one category");
+                      }
                       const payload = {
                         ...this.form,
-                        categorySlugs: this.categoryText
-                          .split(",")
-                          .map((v) => v.trim())
-                          .filter(Boolean),
-                        skills: this.categoryText
-                          .split(",")
-                          .map((v) => v.trim())
-                          .filter(Boolean),
+                        skills: [...this.form.categorySlugs],
                         serviceAreas: this.areaText
                           .split(",")
-                          .map((v) => v.trim())
+                          .map((value) => value.trim())
                           .filter(Boolean),
                       };
-                      const b = await apiFetch(
+                      const response = await apiFetch(
                         this.mode === "edit"
                           ? "/api/provider/" + this.recordId
                           : "/api/provider",
@@ -228,7 +207,7 @@
                           body: JSON.stringify(payload),
                         },
                       );
-                      location.href = "/providers/" + b.data.providerId;
+                      location.href = "/providers/" + response.data.providerId;
                     } catch (e) {
                       this.error = e.message;
                     } finally {

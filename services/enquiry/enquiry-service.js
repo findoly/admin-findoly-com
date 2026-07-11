@@ -2,6 +2,11 @@ const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const LeadDistribution = require("../../models/LeadDistribution");
 const uuid = require("../../utils/uuid");
+const { validateMobile } = require("../../utils/mobile");
+const {
+  canonicalLeadStatus,
+  resolveLeadStatusTransition,
+} = require("../../utils/lead-journey");
 const { getPagination, pageResult } = require("../../utils/pagination");
 
 function text(value, fallback = "") {
@@ -10,10 +15,13 @@ function text(value, fallback = "") {
 
 function normalizeInput(input = {}, current = {}) {
   const categorySlug = text(input.categorySlug, current.categorySlug);
+  const mobile = validateMobile(input.mobile ?? current.mobile ?? "", {
+    label: "Customer mobile number",
+  });
 
   return {
     name: text(input.name, current.name),
-    mobile: text(input.mobile, current.mobile),
+    mobile,
     email: text(input.email, current.email).toLowerCase(),
     addressLine: text(input.addressLine, current.addressLine),
     city: text(input.city, current.city),
@@ -24,7 +32,6 @@ function normalizeInput(input = {}, current = {}) {
     serviceType: text(input.serviceType, current.serviceType),
     requirementTitle: text(input.requirementTitle, current.requirementTitle),
     priority: text(input.priority, current.priority || "normal"),
-    status: text(input.status, current.status || "new"),
     preferredDate: text(input.preferredDate, current.preferredDate),
     preferredSlot: text(input.preferredSlot, current.preferredSlot),
     leadPricePaise: Math.max(
@@ -51,12 +58,12 @@ function normalizeInput(input = {}, current = {}) {
   };
 }
 
-
 function presentEnquiry(row = {}) {
   const customer = row.customer || {};
   const address = row.address || {};
   const source = row.source || {};
-  const categoryObject = row.category && typeof row.category === "object" ? row.category : {};
+  const categoryObject =
+    row.category && typeof row.category === "object" ? row.category : {};
   return {
     ...row,
     enquiryId: row.enquiryId || row.id || "",
@@ -67,12 +74,17 @@ function presentEnquiry(row = {}) {
     city: row.city || address.city || "",
     state: row.state || address.state || "",
     pincode: row.pincode || address.pincode || "",
-    category: typeof row.category === "string" ? row.category : (categoryObject.name || ""),
+    category:
+      typeof row.category === "string"
+        ? row.category
+        : categoryObject.name || "",
     categorySlug: row.categorySlug || categoryObject.slug || "",
     sourceWebsite: row.sourceWebsite || source.website || "",
     sourceChannel: row.sourceChannel || source.channel || "",
     sourceName: row.sourceName || source.sourceName || "",
-    externalEnquiryId: row.externalEnquiryId || source.externalEnquiryId || "",
+    externalEnquiryId:
+      row.externalEnquiryId || source.externalEnquiryId || "",
+    journeyStatus: canonicalLeadStatus(row.status),
   };
 }
 
@@ -84,19 +96,129 @@ function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const STATUS_FILTERS = Object.freeze({
+  new: ["new"],
+  verification: ["verification", "verification_pending", "verified"],
+  approved: ["approved"],
+  distributed: ["distributed", "in_progress", "completed", "closed"],
+  rejected: ["rejected"],
+});
+
+function historyArrays(distribution = {}) {
+  return [
+    distribution.providerLeadStatusHistory,
+    distribution.providerStatusHistory,
+    distribution.providerTimeline,
+  ].filter(Array.isArray);
+}
+
+function providerJourney(distribution = {}) {
+  const events = [];
+  if (distribution.distributedAt || distribution.createdAt) {
+    events.push({
+      type: "distributed",
+      status: "offered",
+      message: "Lead offered to provider",
+      actor: distribution.distributedBy || "system",
+      createdAt: distribution.distributedAt || distribution.createdAt,
+    });
+  }
+
+  if (distribution.contactUnlocked || distribution.status === "unlocked") {
+    events.push({
+      type: "unlocked",
+      status: "unlocked",
+      message: "Contact details unlocked",
+      actor: distribution.providerId || "provider",
+      createdAt:
+        distribution.unlockedAt ||
+        distribution.updatedAt ||
+        distribution.distributedAt,
+    });
+  }
+
+  for (const history of historyArrays(distribution)) {
+    for (const item of history) {
+      if (!item || typeof item !== "object") continue;
+      const status = text(
+        item.status || item.providerLeadStatus || item.toStatus,
+      );
+      const createdAt =
+        item.createdAt || item.updatedAt || item.statusUpdatedAt || null;
+      if (!status && !item.message) continue;
+      events.push({
+        type: "provider_status",
+        status,
+        reason: text(item.reason || item.providerLeadReason),
+        note: text(item.note || item.providerLeadNote),
+        message: text(item.message),
+        actor: text(
+          item.actor || item.updatedBy || item.providerLeadStatusUpdatedBy,
+          distribution.providerId || "provider",
+        ),
+        createdAt,
+      });
+    }
+  }
+
+  if (distribution.providerLeadStatus) {
+    const currentTime = distribution.providerLeadStatusUpdatedAt || null;
+    const alreadyIncluded = events.some(
+      (event) =>
+        event.type === "provider_status" &&
+        event.status === distribution.providerLeadStatus &&
+        String(event.createdAt || "") === String(currentTime || ""),
+    );
+    if (!alreadyIncluded) {
+      events.push({
+        type: "provider_status",
+        status: distribution.providerLeadStatus,
+        reason: distribution.providerLeadReason || "",
+        note: distribution.providerLeadNote || "",
+        message: "",
+        actor:
+          distribution.providerLeadStatusUpdatedBy ||
+          distribution.providerId ||
+          "provider",
+        createdAt: currentTime,
+      });
+    }
+  }
+
+  return events.sort((a, b) => {
+    const left = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const right = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return left - right;
+  });
+}
+
+function presentDistribution(row = {}) {
+  return {
+    ...row,
+    providerJourney: providerJourney(row),
+  };
+}
+
 async function create(input, actor = "admin") {
   const data = normalizeInput(input);
   if (!data.categorySlug) {
     throw Object.assign(new Error("Category is required"), { status: 400 });
   }
 
+  const initialStatus = canonicalLeadStatus(input.status || "new");
+  const now = new Date();
+  data.status = initialStatus;
+  data.statusUpdatedAt = now;
+  data.statusUpdatedBy = actor;
   data.timeline = [
     {
       timelineId: uuid(),
       type: "created",
-      message: "Lead created",
+      message: `Lead created with ${initialStatus} status`,
+      fromStatus: "",
+      toStatus: initialStatus,
       actor,
-      createdAt: new Date(),
+      createdAt: now,
     },
   ];
 
@@ -112,19 +234,27 @@ async function list(filters = {}) {
   const { page, limit, skip } = getPagination(filters);
   const query = {};
 
-  if (filters.status) query.status = filters.status;
+  if (filters.status) {
+    query.status = {
+      $in: STATUS_FILTERS[filters.status] || [String(filters.status)],
+    };
+  }
   if (filters.categorySlug) query.categorySlug = filters.categorySlug;
   if (filters.city) query.city = new RegExp(escapeRegex(filters.city), "i");
   if (filters.sourceWebsite) query.sourceWebsite = filters.sourceWebsite;
 
   if (filters.startDate || filters.endDate) {
     query.createdAt = {};
-    if (filters.startDate)
+    if (filters.startDate) {
       query.createdAt.$gte = new Date(
         `${filters.startDate}T00:00:00.000+05:30`,
       );
-    if (filters.endDate)
-      query.createdAt.$lte = new Date(`${filters.endDate}T23:59:59.999+05:30`);
+    }
+    if (filters.endDate) {
+      query.createdAt.$lte = new Date(
+        `${filters.endDate}T23:59:59.999+05:30`,
+      );
+    }
   }
 
   if (filters.q) {
@@ -155,11 +285,16 @@ async function get(enquiryId) {
     throw Object.assign(new Error("Lead not found"), { status: 404 });
   }
 
-  const distributions = await LeadDistribution.find({ enquiryId })
+  const distributions = await LeadDistribution.find({
+    enquiryId: enquiry.enquiryId || enquiry.id || enquiryId,
+  })
     .sort({ distributedAt: -1 })
     .lean();
 
-  return { ...presentEnquiry(enquiry), distributions };
+  return {
+    ...presentEnquiry(enquiry),
+    distributions: distributions.map(presentDistribution),
+  };
 }
 
 async function update(enquiryId, input, actor = "admin") {
@@ -168,30 +303,91 @@ async function update(enquiryId, input, actor = "admin") {
     throw Object.assign(new Error("Lead not found"), { status: 404 });
   }
 
-  const data = normalizeInput(input, existing);
-  const timeline = Array.isArray(existing.timeline)
-    ? [...existing.timeline]
-    : [];
-
-  if (data.status !== existing.status) {
-    timeline.push({
-      timelineId: uuid(),
-      type: "status_changed",
-      message: `Status changed from ${existing.status} to ${data.status}`,
-      actor,
-      createdAt: new Date(),
-    });
+  if (
+    input.status !== undefined &&
+    canonicalLeadStatus(input.status) !== canonicalLeadStatus(existing.status)
+  ) {
+    throw Object.assign(
+      new Error("Use the lead journey controls to change status"),
+      { status: 400 },
+    );
   }
 
-  await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: { ...data, timeline } });
-  const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
+  const data = normalizeInput(input, existing);
+  data.status = existing.status;
+  data.statusUpdatedAt = existing.statusUpdatedAt || null;
+  data.statusUpdatedBy = existing.statusUpdatedBy || "";
 
-  if (["approved", "distributed"].includes(updated.status)) {
+  await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: data });
+  const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
+  const distributionEnquiryId = existing.enquiryId || existing.id || enquiryId;
+
+  if (["approved", "distributed"].includes(canonicalLeadStatus(updated.status))) {
     await distribute(updated, actor);
   } else {
     await LeadDistribution.updateMany(
-      { enquiryId, contactUnlocked: { $ne: true } },
+      { enquiryId: distributionEnquiryId, contactUnlocked: { $ne: true } },
       { $set: { status: "withdrawn", updatedAt: new Date() } },
+    );
+  }
+
+  return get(enquiryId);
+}
+
+async function updateStatus(enquiryId, input = {}, actor = "admin") {
+  const existing = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
+  if (!existing) {
+    throw Object.assign(new Error("Lead not found"), { status: 404 });
+  }
+
+  const metadata = { ...(existing.metadata || {}) };
+  const transition = resolveLeadStatusTransition(
+    existing.status,
+    input,
+    metadata,
+  );
+  const now = new Date();
+
+  if (transition.action === "reject") {
+    metadata.rejectedFromStatus = transition.fromStatus;
+    metadata.rejectionReason = transition.note;
+  } else if (transition.action === "restore") {
+    metadata.lastRejectedFromStatus = metadata.rejectedFromStatus || "";
+    delete metadata.rejectionReason;
+  }
+  metadata.lastStatusNote = transition.note;
+
+  const timelineEntry = {
+    timelineId: uuid(),
+    type: "status_changed",
+    message: `Status changed from ${transition.fromStatus} to ${transition.toStatus}`,
+    fromStatus: transition.fromStatus,
+    toStatus: transition.toStatus,
+    action: transition.action,
+    note: transition.note,
+    actor,
+    createdAt: now,
+  };
+
+  await Enquiry.updateOne(enquiryQuery(enquiryId), {
+    $set: {
+      status: transition.toStatus,
+      statusUpdatedAt: now,
+      statusUpdatedBy: actor,
+      metadata,
+      updatedAt: now,
+    },
+    $push: { timeline: timelineEntry },
+  });
+
+  const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
+  const distributionEnquiryId = existing.enquiryId || existing.id || enquiryId;
+  if (["approved", "distributed"].includes(transition.toStatus)) {
+    await distribute(updated, actor);
+  } else {
+    await LeadDistribution.updateMany(
+      { enquiryId: distributionEnquiryId, contactUnlocked: { $ne: true } },
+      { $set: { status: "withdrawn", updatedAt: now } },
     );
   }
 
@@ -267,7 +463,9 @@ async function distribute(enquiryDocument, actor = "system") {
     categorySlugs: enquiry.categorySlug,
   }).lean();
 
-  const providerIds = providers.map((provider) => provider.providerId || provider.id).filter(Boolean);
+  const providerIds = providers
+    .map((provider) => provider.providerId || provider.id)
+    .filter(Boolean);
 
   for (const provider of providers) {
     const data = distributionData(enquiry, provider);
@@ -313,19 +511,26 @@ async function distribute(enquiryDocument, actor = "system") {
     }),
   ]);
 
-  await Enquiry.updateOne(
-    enquiryQuery(enquiry.enquiryId),
-    {
-      $set: {
-        distributionCount,
-        unlockedCount,
-        distributedAt: new Date(),
-        updatedAt: new Date(),
-      },
+  await Enquiry.updateOne(enquiryQuery(enquiry.enquiryId), {
+    $set: {
+      distributionCount,
+      unlockedCount,
+      distributedAt: new Date(),
+      updatedAt: new Date(),
     },
-  );
+  });
 
   return { distributionCount, unlockedCount };
 }
 
-module.exports = { create, list, get, update, addNote, distribute, presentEnquiry };
+module.exports = {
+  create,
+  list,
+  get,
+  update,
+  updateStatus,
+  addNote,
+  distribute,
+  presentEnquiry,
+  providerJourney,
+};

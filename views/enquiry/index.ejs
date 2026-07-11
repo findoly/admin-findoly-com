@@ -86,7 +86,7 @@
                           </td>
                           <td class="crm-hide-mobile"><div class="fw-semibold" x-text="leadName(lead)"></div><div class="text-muted fs-sm" x-text="leadMobile(lead)"></div></td>
                           <td><div class="fw-semibold" x-text="leadCategory(lead)"></div><div class="text-muted fs-sm" x-text="[leadCity(lead), leadState(lead)].filter(Boolean).join(', ')"></div></td>
-                          <td><span class="crm-status" :class="statusClass(lead.status)" x-text="humanize(lead.status)"></span><div class="text-muted fs-sm mt-1" x-text="humanize(lead.priority || 'normal') + ' priority'"></div></td>
+                          <td><span class="crm-status" :class="statusClass(lead.journeyStatus || lead.status)" x-text="humanize(lead.journeyStatus || lead.status)"></span><div class="text-muted fs-sm mt-1" x-text="humanize(lead.priority || 'normal') + ' priority'"></div></td>
                           <td><div class="crm-distribution-count"><strong x-text="lead.distributionCount || 0"></strong><span>offered</span></div><div class="text-muted fs-sm"><span x-text="lead.unlockedCount || 0"></span> unlocked</div></td>
                           <td class="text-end"><div class="fw-semibold" x-text="money(lead.leadPricePaise)"></div><div class="text-muted fs-sm">per unlock</div></td>
                           <td class="text-end crm-nowrap">
@@ -122,7 +122,7 @@
         return {
           rows: [],
           categories: [],
-          statuses: ['new','verification_pending','verified','approved','distributed','in_progress','completed','rejected','closed'],
+          statuses: ['new','verification','approved','distributed','rejected'],
           filters: {
             q: params.get('q') || '',
             status: params.get('status') || '',

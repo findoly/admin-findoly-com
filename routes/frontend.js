@@ -15,6 +15,7 @@ router.get("/requirements/:enquiryId/edit", pageAuth, page.enquiryEdit);
 router.get("/enquiries/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/requirements/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/providers", pageAuth, page.providers);
+router.get("/categories", pageAuth, page.categories);
 router.get("/providers/new", pageAuth, page.providerCreate);
 router.get("/providers/:providerId/edit", pageAuth, page.providerEdit);
 router.get("/providers/:providerId", pageAuth, page.providerShow);

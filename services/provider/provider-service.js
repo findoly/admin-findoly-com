@@ -2,7 +2,7 @@ const Provider = require("../../models/Provider");
 const Enquiry = require("../../models/Enquiry");
 const LeadDistribution = require("../../models/LeadDistribution");
 const WalletTransaction = require("../../models/WalletTransaction");
-const { normalizeMobile } = require("../../utils/mobile");
+const { validateMobile } = require("../../utils/mobile");
 const { getPagination, pageResult } = require("../../utils/pagination");
 const enquiryService = require("../enquiry/enquiry-service");
 
@@ -12,14 +12,16 @@ function toArray(value) {
 }
 
 function normalize(input = {}, current = {}) {
-  const mobile = String(input.mobile ?? current.mobile ?? "").trim();
+  const mobile = validateMobile(input.mobile ?? current.mobile ?? "", {
+    label: "Provider mobile number",
+  });
   return {
     name: String(input.name ?? current.name ?? "").trim(),
     businessName: String(
       input.businessName ?? current.businessName ?? "",
     ).trim(),
     mobile,
-    normalizedMobile: normalizeMobile(input.normalizedMobile || mobile),
+    normalizedMobile: mobile,
     email: String(input.email ?? current.email ?? "")
       .trim()
       .toLowerCase(),

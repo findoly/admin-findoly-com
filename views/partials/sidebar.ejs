@@ -30,6 +30,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a href="/categories" class="nav-link" :class="{active:pathIs('/categories')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg>
+            <span>Categories</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="/distributions" class="nav-link" :class="{active:pathIs('/distributions')}" @click="sidebarOpen=false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>
             <span>Distribution</span>

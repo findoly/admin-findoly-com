@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Catalog management</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Create the category options used by requirements and providers.</p>
+              </div>
+            </div>
+          </div>
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+            <div x-data="categoryManager()" x-init="load()">
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
+
+              <div class="row g-3">
+                <div class="col-xl-4">
+                  <form class="card" @submit.prevent="save()">
+                    <div class="card-header">
+                      <h5 class="mb-0" x-text="editingId ? 'Edit category' : 'Create category'"></h5>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3">
+                        <label class="form-label">Category name</label>
+                        <input class="form-control" x-model="form.name" @input="syncSlug()" required />
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Slug</label>
+                        <input class="form-control" x-model="form.slug" @input="slugTouched = true" :disabled="Boolean(editingId)" required />
+                        <div class="form-text" x-show="editingId">The slug stays unchanged so existing provider and requirement links are preserved.</div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="4" x-model="form.description"></textarea>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="category-active" x-model="form.active" />
+                        <label class="form-check-label" for="category-active">Active and available in dropdowns</label>
+                      </div>
+                    </div>
+                    <div class="card-footer d-flex gap-2">
+                      <button type="button" class="btn btn-light" x-show="editingId" @click="resetForm()">Cancel</button>
+                      <button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : (editingId ? 'Update category' : 'Create category')"></button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="col-xl-8">
+                  <div class="card" :class="loading && 'crm-loading'">
+                    <div class="card-header d-flex align-items-center">
+                      <h5 class="mb-0">Category list</h5>
+                      <span class="badge bg-light text-dark ms-auto" x-text="categories.length + ' categories'"></span>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table mb-0">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Slug</th>
+                            <th>Status</th>
+                            <th>Updated</th>
+                            <th class="text-end">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template x-for="category in categories" :key="category.categoryId || category.slug">
+                            <tr>
+                              <td>
+                                <div class="fw-semibold" x-text="category.name"></div>
+                                <small class="text-muted" x-text="category.description || 'No description'"></small>
+                              </td>
+                              <td><code x-text="category.slug"></code></td>
+                              <td>
+                                <span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span>
+                              </td>
+                              <td x-text="formatDate(category.updatedAt || category.createdAt)"></td>
+                              <td class="text-end">
+                                <button class="btn btn-light btn-sm" @click="edit(category)">Edit</button>
+                              </td>
+                            </tr>
+                          </template>
+                          <tr x-show="!categories.length && !loading">
+                            <td colspan="5" class="text-center text-muted py-4">No categories created yet</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <script>
+              function categoryManager() {
+                return {
+                  categories: [],
+                  editingId: "",
+                  loading: true,
+                  saving: false,
+                  error: "",
+                  success: "",
+                  form: { name: "", slug: "", description: "", active: true },
+                  slugTouched: false,
+                  slugify(value) {
+                    return String(value || "")
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-+|-+$/g, "");
+                  },
+                  syncSlug() {
+                    if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name);
+                  },
+                  async load() {
+                    this.loading = true;
+                    try {
+                      this.categories = (await apiFetch("/api/catalog/categories?includeInactive=true")).data || [];
+                    } catch (e) {
+                      this.error = e.message;
+                    } finally {
+                      this.loading = false;
+                    }
+                  },
+                  edit(category) {
+                    this.editingId = category.categoryId;
+                    this.form = {
+                      name: category.name || "",
+                      slug: category.slug || "",
+                      description: category.description || "",
+                      active: category.active !== false,
+                    };
+                    this.error = "";
+                    this.success = "";
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  },
+                  resetForm() {
+                    this.editingId = "";
+                    this.form = { name: "", slug: "", description: "", active: true };
+                    this.slugTouched = false;
+                  },
+                  async save() {
+                    this.saving = true;
+                    this.error = "";
+                    this.success = "";
+                    try {
+                      const url = this.editingId
+                        ? "/api/catalog/categories/" + this.editingId
+                        : "/api/catalog/categories";
+                      await apiFetch(url, {
+                        method: this.editingId ? "PUT" : "POST",
+                        body: JSON.stringify(this.form),
+                      });
+                      this.success = this.editingId ? "Category updated" : "Category created";
+                      this.resetForm();
+                      await this.load();
+                    } catch (e) {
+                      this.error = e.message;
+                    } finally {
+                      this.saving = false;
+                    }
+                  },
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

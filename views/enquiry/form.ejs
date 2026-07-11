@@ -18,106 +18,82 @@
             </div>
           </div>
           <div class="content">
-            <div
-              x-show="shellError"
-              x-cloak
-              class="alert alert-danger"
-              x-text="shellError"
-            ></div>
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
             <div x-data="leadForm()" x-init="init()">
-              <div
-                x-show="error"
-                x-cloak
-                class="alert alert-danger"
-                x-text="error"
-              ></div>
-              <div
-                x-show="success"
-                x-cloak
-                class="alert alert-success"
-                x-text="success"
-              ></div>
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
               <form class="card" @submit.prevent="save">
                 <div class="card-body" :class="loading && 'crm-loading'">
                   <div class="row g-3">
                     <div class="col-md-6">
-                      <label class="form-label">Customer name</label
-                      ><input
-                        class="form-control"
-                        x-model="form.name"
-                        required
-                      />
+                      <label class="form-label">Customer name</label>
+                      <input class="form-control" x-model="form.name" required />
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Mobile</label
-                      ><input
-                        class="form-control"
-                        x-model="form.mobile"
-                        required
-                      />
+                      <label class="form-label">Mobile</label>
+                      <div class="input-group">
+                        <span class="input-group-text crm-mobile-prefix">+91</span>
+                        <input
+                          class="form-control"
+                          x-model="form.mobile"
+                          @input="form.mobile = digitsOnly(form.mobile)"
+                          inputmode="numeric"
+                          autocomplete="tel-national"
+                          pattern="[0-9]{10}"
+                          minlength="10"
+                          maxlength="10"
+                          placeholder="10 digit number"
+                          required
+                        />
+                      </div>
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Email</label
-                      ><input
-                        type="email"
-                        class="form-control"
-                        x-model="form.email"
-                      />
+                      <label class="form-label">Email</label>
+                      <input type="email" class="form-control" x-model="form.email" />
                     </div>
                     <div class="col-md-6">
-                      <label class="form-label">Address</label
-                      ><input class="form-control" x-model="form.addressLine" />
+                      <label class="form-label">Address</label>
+                      <input class="form-control" x-model="form.addressLine" />
                     </div>
                     <div class="col-md-2">
-                      <label class="form-label">City</label
-                      ><input class="form-control" x-model="form.city" />
+                      <label class="form-label">City</label>
+                      <input class="form-control" x-model="form.city" />
                     </div>
                     <div class="col-md-2">
-                      <label class="form-label">State</label
-                      ><input class="form-control" x-model="form.state" />
+                      <label class="form-label">State</label>
+                      <input class="form-control" x-model="form.state" />
                     </div>
                     <div class="col-md-2">
-                      <label class="form-label">Pincode</label
-                      ><input class="form-control" x-model="form.pincode" />
+                      <label class="form-label">Pincode</label>
+                      <input class="form-control" x-model="form.pincode" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Category</label
-                      ><select
-                        class="form-select"
-                        x-model="form.categorySlug"
-                        @change="syncCategory()"
-                        required
-                      >
+                      <label class="form-label">Category</label>
+                      <select class="form-select" x-model="form.categorySlug" @change="syncCategory()" required>
                         <option value="">Select</option>
-                        <template x-for="c in categories" :key="c.slug"
-                          ><option :value="c.slug" x-text="c.name"></option
-                        ></template>
+                        <template x-for="category in categories" :key="category.slug">
+                          <option :value="category.slug" x-text="category.name"></option>
+                        </template>
                       </select>
+                      <div class="form-text">Options are managed from the Categories feature.</div>
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Service type</label
-                      ><input class="form-control" x-model="form.serviceType" />
+                      <label class="form-label">Service type</label>
+                      <input class="form-control" x-model="form.serviceType" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Requirement title</label
-                      ><input
-                        class="form-control"
-                        x-model="form.requirementTitle"
-                        required
-                      />
+                      <label class="form-label">Requirement title</label>
+                      <input class="form-control" x-model="form.requirementTitle" required />
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Status</label
-                      ><select class="form-select" x-model="form.status">
-                        <template x-for="s in statuses"
-                          ><option :value="s" x-text="humanize(s)"></option
-                        ></template>
-                      </select>
+                      <label class="form-label">Journey status</label>
+                      <div class="form-control bg-light" x-text="humanize(form.status || 'new')"></div>
+                      <div class="form-text">Status moves from the requirement details page using Next or Previous.</div>
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Priority</label
-                      ><select class="form-select" x-model="form.priority">
+                      <label class="form-label">Priority</label>
+                      <select class="form-select" x-model="form.priority">
                         <option>low</option>
                         <option>normal</option>
                         <option>high</option>
@@ -125,96 +101,52 @@
                       </select>
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Lead price (₹)</label
-                      ><input
-                        type="number"
-                        min="0"
-                        step="1"
-                        class="form-control"
-                        x-model.number="priceRupees"
-                      />
+                      <label class="form-label">Lead price (₹)</label>
+                      <input type="number" min="0" step="1" class="form-control" x-model.number="priceRupees" />
                     </div>
                     <div class="col-md-3">
-                      <label class="form-label">Preferred date</label
-                      ><input
-                        type="date"
-                        class="form-control"
-                        x-model="form.preferredDate"
-                      />
+                      <label class="form-label">Preferred date</label>
+                      <input type="date" class="form-control" x-model="form.preferredDate" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Preferred slot</label
-                      ><input
-                        class="form-control"
-                        x-model="form.preferredSlot"
-                      />
+                      <label class="form-label">Preferred slot</label>
+                      <input class="form-control" x-model="form.preferredSlot" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Source website</label
-                      ><input
-                        class="form-control"
-                        x-model="form.sourceWebsite"
-                      />
+                      <label class="form-label">Source website</label>
+                      <input class="form-control" x-model="form.sourceWebsite" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Source name</label
-                      ><input class="form-control" x-model="form.sourceName" />
+                      <label class="form-label">Source name</label>
+                      <input class="form-control" x-model="form.sourceName" />
                     </div>
                     <div class="col-12">
-                      <label class="form-label">Notes</label
-                      ><textarea
-                        class="form-control"
-                        rows="3"
-                        x-model="form.notes"
-                      ></textarea>
+                      <label class="form-label">Notes</label>
+                      <textarea class="form-control" rows="3" x-model="form.notes"></textarea>
                     </div>
                   </div>
                   <hr />
                   <div class="d-flex align-items-center mb-2">
                     <h6 class="mb-0">Additional details</h6>
-                    <button
-                      type="button"
-                      class="btn btn-light btn-sm ms-auto"
-                      @click="details.push({key:'',value:''})"
-                    >
-                      Add field
-                    </button>
+                    <button type="button" class="btn btn-light btn-sm ms-auto" @click="details.push({key:'',value:''})">Add field</button>
                   </div>
-                  <template x-for="(item,index) in details" :key="index"
-                    ><div class="row g-2 mb-2">
+                  <template x-for="(item,index) in details" :key="index">
+                    <div class="row g-2 mb-2">
                       <div class="col-md-5">
-                        <input
-                          class="form-control"
-                          placeholder="Field name"
-                          x-model="item.key"
-                        />
+                        <input class="form-control" placeholder="Field name" x-model="item.key" />
                       </div>
                       <div class="col-md-6">
-                        <input
-                          class="form-control"
-                          placeholder="Value"
-                          x-model="item.value"
-                        />
+                        <input class="form-control" placeholder="Value" x-model="item.value" />
                       </div>
                       <div class="col-md-1">
-                        <button
-                          type="button"
-                          class="btn btn-light w-100"
-                          @click="details.splice(index,1)"
-                        >
-                          ×
-                        </button>
+                        <button type="button" class="btn btn-light w-100" @click="details.splice(index,1)">×</button>
                       </div>
-                    </div></template
-                  >
+                    </div>
+                  </template>
                 </div>
                 <div class="card-footer d-flex">
-                  <a href="/enquiries" class="btn btn-light">Cancel</a
-                  ><button
-                    class="btn btn-primary ms-auto"
-                    :disabled="saving"
-                    x-text="saving ? 'Saving…' : 'Save requirement'"
-                  ></button>
+                  <a href="/enquiries" class="btn btn-light">Cancel</a>
+                  <button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : 'Save requirement'"></button>
                 </div>
               </form>
             </div>
@@ -224,17 +156,6 @@
                   mode: pageMode(),
                   recordId: pageMode() === "edit" ? pathRecordId(true) : "",
                   categories: [],
-                  statuses: [
-                    "new",
-                    "verification_pending",
-                    "verified",
-                    "approved",
-                    "distributed",
-                    "in_progress",
-                    "completed",
-                    "rejected",
-                    "closed",
-                  ],
                   form: {
                     name: "",
                     mobile: "",
@@ -254,7 +175,6 @@
                     sourceWebsite: "manual-admin",
                     sourceName: "",
                     notes: "",
-                    leadPricePaise: 10000,
                   },
                   priceRupees: 100,
                   details: [],
@@ -262,25 +182,26 @@
                   saving: false,
                   error: "",
                   success: "",
+                  digitsOnly(value) {
+                    let digits = String(value || "").replace(/\D/g, "");
+                    if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+                    if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+                    return digits.slice(0, 10);
+                  },
                   async init() {
                     try {
-                      this.categories = (
-                        await apiFetch("/api/catalog/categories")
-                      ).data;
+                      this.categories = (await apiFetch("/api/catalog/categories")).data || [];
                       if (this.mode === "edit") {
-                        const d = (
-                          await apiFetch("/api/enquiry/" + this.recordId)
-                        ).data;
-                        this.form = { ...this.form, ...d };
-                        this.priceRupees = Number(d.leadPricePaise || 0) / 100;
-                        this.details = Object.entries(
-                          d.additionalDetails || {},
-                        ).map(([key, value]) => ({
+                        const data = (await apiFetch("/api/enquiry/" + this.recordId)).data;
+                        this.form = {
+                          ...this.form,
+                          ...data,
+                          mobile: this.digitsOnly(data.mobile),
+                        };
+                        this.priceRupees = Number(data.leadPricePaise || 0) / 100;
+                        this.details = Object.entries(data.additionalDetails || {}).map(([key, value]) => ({
                           key,
-                          value:
-                            typeof value === "object"
-                              ? JSON.stringify(value)
-                              : value,
+                          value: typeof value === "object" ? JSON.stringify(value) : value,
                         }));
                       }
                     } catch (e) {
@@ -290,22 +211,33 @@
                     }
                   },
                   syncCategory() {
-                    const c = this.categories.find(
-                      (x) => x.slug === this.form.categorySlug,
-                    );
-                    this.form.category = c?.name || this.form.categorySlug;
+                    const category = this.categories.find((item) => item.slug === this.form.categorySlug);
+                    this.form.category = category?.name || this.form.categorySlug;
                   },
                   payload() {
                     const additionalDetails = {};
-                    this.details.forEach((x) => {
-                      if (x.key.trim())
-                        additionalDetails[x.key.trim()] = x.value;
+                    this.details.forEach((item) => {
+                      if (item.key.trim()) additionalDetails[item.key.trim()] = item.value;
                     });
                     return {
-                      ...this.form,
-                      leadPricePaise: Math.round(
-                        Number(this.priceRupees || 0) * 100,
-                      ),
+                      name: this.form.name,
+                      mobile: this.form.mobile,
+                      email: this.form.email,
+                      addressLine: this.form.addressLine,
+                      city: this.form.city,
+                      state: this.form.state,
+                      pincode: this.form.pincode,
+                      category: this.form.category,
+                      categorySlug: this.form.categorySlug,
+                      serviceType: this.form.serviceType,
+                      requirementTitle: this.form.requirementTitle,
+                      priority: this.form.priority,
+                      preferredDate: this.form.preferredDate,
+                      preferredSlot: this.form.preferredSlot,
+                      sourceWebsite: this.form.sourceWebsite,
+                      sourceName: this.form.sourceName,
+                      notes: this.form.notes,
+                      leadPricePaise: Math.round(Number(this.priceRupees || 0) * 100),
                       additionalDetails,
                     };
                   },
@@ -313,16 +245,18 @@
                     this.saving = true;
                     this.error = "";
                     try {
-                      const url =
-                        this.mode === "edit"
-                          ? "/api/enquiry/" + this.recordId
-                          : "/api/enquiry";
-                      const b = await apiFetch(url, {
+                      if (!/^\d{10}$/.test(this.form.mobile)) {
+                        throw new Error("Customer mobile number must contain exactly 10 digits");
+                      }
+                      const url = this.mode === "edit"
+                        ? "/api/enquiry/" + this.recordId
+                        : "/api/enquiry";
+                      const response = await apiFetch(url, {
                         method: this.mode === "edit" ? "PUT" : "POST",
                         body: JSON.stringify(this.payload()),
                       });
                       this.success = "Saved";
-                      location.href = "/enquiries/" + b.data.enquiryId;
+                      location.href = "/enquiries/" + response.data.enquiryId;
                     } catch (e) {
                       this.error = e.message;
                     } finally {

@@ -9,7 +9,7 @@ async function connectDatabase() {
     return mongoose.connection;
 
   const uri =
-    process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/service_crm_admin";
+    process.env.MONGODB_URI
   mongoose.set("strictQuery", true);
   await mongoose.connect(uri, {
     serverSelectionTimeoutMS: Number(

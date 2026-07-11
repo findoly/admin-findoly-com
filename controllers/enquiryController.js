@@ -52,6 +52,20 @@ async function update(req, res, next) {
     next(e);
   }
 }
+async function status(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await service.updateStatus(
+        req.params.enquiryId,
+        req.body,
+        req.admin?.email || "admin",
+      ),
+    });
+  } catch (e) {
+    next(e);
+  }
+}
 async function note(req, res, next) {
   try {
     res.json({
@@ -69,6 +83,12 @@ async function note(req, res, next) {
 async function distribute(req, res, next) {
   try {
     const lead = await service.get(req.params.enquiryId);
+    if (!["approved", "distributed"].includes(lead.journeyStatus)) {
+      throw Object.assign(
+        new Error("Approve the lead before synchronizing providers"),
+        { status: 400 },
+      );
+    }
     res.json({
       success: true,
       data: await service.distribute(lead, req.admin?.email || "admin"),
@@ -77,4 +97,4 @@ async function distribute(req, res, next) {
     next(e);
   }
 }
-module.exports = { list, get, create, createPublic, update, note, distribute };
+module.exports = { list, get, create, createPublic, update, status, note, distribute };

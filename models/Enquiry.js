@@ -18,6 +18,8 @@ const enquirySchema = new mongoose.Schema(
     requirementTitle: { type: String, default: "", trim: true },
     priority: { type: String, default: "normal", index: true },
     status: { type: String, default: "new", index: true },
+    statusUpdatedAt: { type: Date, default: null },
+    statusUpdatedBy: { type: String, default: "" },
     preferredDate: { type: String, default: "" },
     preferredSlot: { type: String, default: "" },
     leadPricePaise: { type: Number, default: 10000, min: 0 },

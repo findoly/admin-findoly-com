@@ -6,20 +6,20 @@ const LeadDistribution = require("../../models/LeadDistribution");
 const { presentEnquiry } = require("../enquiry/enquiry-service");
 
 async function getDashboard() {
-  const statuses = [
-    "new",
-    "verification_pending",
-    "verified",
-    "approved",
-    "distributed",
-    "in_progress",
-    "completed",
-    "rejected",
-  ];
+  const statusGroups = {
+    new: ["new"],
+    verification: ["verification", "verification_pending", "verified"],
+    approved: ["approved"],
+    distributed: ["distributed", "in_progress", "completed", "closed"],
+    rejected: ["rejected"],
+  };
+
   const statusCounts = {};
   await Promise.all(
-    statuses.map(async (status) => {
-      statusCounts[status] = await Enquiry.countDocuments({ status });
+    Object.entries(statusGroups).map(async ([status, values]) => {
+      statusCounts[status] = await Enquiry.countDocuments({
+        status: { $in: values },
+      });
     }),
   );
   const [

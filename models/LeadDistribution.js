@@ -14,6 +14,7 @@ const leadDistributionSchema = new mongoose.Schema(
     categorySlug: { type: String, default: "", index: true },
     status: { type: String, default: "offered", index: true },
     leadPricePaise: { type: Number, required: true, min: 0 },
+    leadCostCredits: { type: Number, min: 0, default: undefined },
     currency: { type: String, default: "INR" },
     contactUnlocked: { type: Boolean, default: false, index: true },
     leadTitle: { type: String, default: "" },
@@ -41,6 +42,15 @@ const leadDistributionSchema = new mongoose.Schema(
     distributedAt: { type: Date, default: Date.now, index: true },
     unlockedAt: { type: Date, default: null },
     walletTransactionId: { type: String, default: "" },
+    providerLeadStatus: { type: String, default: "", index: true },
+    providerLeadReason: { type: String, default: "" },
+    providerLeadNote: { type: String, default: "" },
+    providerLeadStatusUpdatedAt: { type: Date, default: null },
+    providerLeadStatusUpdatedBy: { type: String, default: "" },
+    providerLeadStatusHistory: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: undefined,
+    },
   },
   {
     collection: "leaddistributions",
