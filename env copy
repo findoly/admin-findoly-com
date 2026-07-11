@@ -1,0 +1,20 @@
+# App
+PORT=3000
+APP_NAME="Service CRM Admin"
+APP_BASE_URL=http://localhost:3000
+NODE_ENV=production
+
+# Admin login for local/demo use. Replace with proper SSO/user DB in production.
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change-me
+AUTH_COOKIE_NAME=service_crm_admin
+
+# Optional communication webhook/AWS API Gateway/Lambda endpoint.
+# When set, communication events are POSTed here after local logging.
+COMMUNICATION_WEBHOOK_URL=
+COMMUNICATION_WEBHOOK_TOKEN=
+
+# Optional external event Lambda/API endpoint for booking reminders, assignment events, etc.
+EVENT_WEBHOOK_URL=
+EVENT_WEBHOOK_TOKEN=
+MONGO_URI=mongodb://localhost:27017/crm-test
