@@ -1,244 +1,331 @@
-const Enquiry = require('../../models/Enquiry');
-const Provider = require('../../models/Provider');
-const LeadDistribution = require('../../models/LeadDistribution');
-const { createId } = require('../../utils/id');
-const { getPagination, pageResult } = require('../../utils/pagination');
+const Enquiry = require("../../models/Enquiry");
+const Provider = require("../../models/Provider");
+const LeadDistribution = require("../../models/LeadDistribution");
+const uuid = require("../../utils/uuid");
+const { getPagination, pageResult } = require("../../utils/pagination");
 
-function value(input, flatKey, nestedObject, nestedKey, fallback = '') {
-  if (input[flatKey] !== undefined) return input[flatKey];
-  if (input[nestedObject] && input[nestedObject][nestedKey] !== undefined) return input[nestedObject][nestedKey];
-  return fallback;
+function text(value, fallback = "") {
+  return String(value ?? fallback).trim();
 }
 
 function normalizeInput(input = {}, current = {}) {
-  const categoryObject = input.category && typeof input.category === 'object' ? input.category : {};
-  const sourceObject = input.source && typeof input.source === 'object' ? input.source : {};
-  const additionalDetails = input.additionalDetails || input.fields || input.formData || input.dynamicFields || current.additionalDetails || {};
-  const categorySlug = String(input.categorySlug || categoryObject.slug || current.categorySlug || '').trim();
-  const categoryName = String(
-    (typeof input.category === 'string' ? input.category : categoryObject.name) || (typeof current.category === 'string' ? current.category : current.category?.name) || categorySlug
-  ).trim();
+  const categorySlug = text(input.categorySlug, current.categorySlug);
 
-  const doc = {
-    name: String(value(input, 'name', 'customer', 'name', current.name || current.customer?.name || '')).trim(),
-    mobile: String(value(input, 'mobile', 'customer', 'mobile', current.mobile || current.customer?.mobile || '')).trim(),
-    email: String(value(input, 'email', 'customer', 'email', current.email || current.customer?.email || '')).trim().toLowerCase(),
-    addressLine: String(value(input, 'addressLine', 'address', 'line1', current.addressLine || current.address?.line1 || '')).trim(),
-    city: String(value(input, 'city', 'address', 'city', current.city || current.address?.city || '')).trim(),
-    state: String(value(input, 'state', 'address', 'state', current.state || current.address?.state || '')).trim(),
-    pincode: String(value(input, 'pincode', 'address', 'pincode', current.pincode || current.address?.pincode || '')).trim(),
-    category: categoryName,
+  return {
+    name: text(input.name, current.name),
+    mobile: text(input.mobile, current.mobile),
+    email: text(input.email, current.email).toLowerCase(),
+    addressLine: text(input.addressLine, current.addressLine),
+    city: text(input.city, current.city),
+    state: text(input.state, current.state),
+    pincode: text(input.pincode, current.pincode),
+    category: text(input.category, current.category || categorySlug),
     categorySlug,
-    serviceType: String(input.serviceType ?? current.serviceType ?? '').trim(),
-    requirementTitle: String(input.requirementTitle ?? input.title ?? current.requirementTitle ?? '').trim(),
-    priority: String(input.priority ?? current.priority ?? 'normal'),
-    status: String(input.status ?? current.status ?? 'new'),
-    preferredDate: String(input.preferredDate ?? current.preferredDate ?? ''),
-    preferredSlot: String(input.preferredSlot ?? current.preferredSlot ?? ''),
-    leadPricePaise: Math.max(0, Number(input.leadPricePaise ?? current.leadPricePaise ?? 10000)),
-    currency: 'INR',
-    sourceWebsite: String(input.sourceWebsite || sourceObject.website || current.sourceWebsite || current.source?.website || 'manual-admin'),
-    sourceChannel: String(input.sourceChannel || sourceObject.channel || current.sourceChannel || current.source?.channel || 'admin'),
-    sourceType: String(input.sourceType || sourceObject.sourceType || current.sourceType || current.source?.sourceType || 'manual'),
-    sourceName: String(input.sourceName || sourceObject.sourceName || current.sourceName || current.source?.sourceName || ''),
-    campaign: String(input.campaign || sourceObject.campaign || current.campaign || current.source?.campaign || ''),
-    externalEnquiryId: String(input.externalEnquiryId || sourceObject.externalEnquiryId || current.externalEnquiryId || current.source?.externalEnquiryId || ''),
-    notes: String(input.notes ?? current.notes ?? ''),
-    additionalDetails,
-    metadata: input.metadata || current.metadata || {},
-    // Legacy mirrors remain so existing integrations do not break.
-    customer: {
-      name: String(value(input, 'name', 'customer', 'name', current.name || current.customer?.name || '')).trim(),
-      mobile: String(value(input, 'mobile', 'customer', 'mobile', current.mobile || current.customer?.mobile || '')).trim(),
-      email: String(value(input, 'email', 'customer', 'email', current.email || current.customer?.email || '')).trim().toLowerCase()
-    },
-    address: {
-      line1: String(value(input, 'addressLine', 'address', 'line1', current.addressLine || current.address?.line1 || '')).trim(),
-      city: String(value(input, 'city', 'address', 'city', current.city || current.address?.city || '')).trim(),
-      state: String(value(input, 'state', 'address', 'state', current.state || current.address?.state || '')).trim(),
-      pincode: String(value(input, 'pincode', 'address', 'pincode', current.pincode || current.address?.pincode || '')).trim()
-    },
-    source: {
-      ...(current.source || {}), ...(sourceObject || {}),
-      website: String(input.sourceWebsite || sourceObject.website || current.sourceWebsite || current.source?.website || 'manual-admin'),
-      channel: String(input.sourceChannel || sourceObject.channel || current.sourceChannel || current.source?.channel || 'admin'),
-      sourceType: String(input.sourceType || sourceObject.sourceType || current.sourceType || current.source?.sourceType || 'manual'),
-      sourceName: String(input.sourceName || sourceObject.sourceName || current.sourceName || current.source?.sourceName || ''),
-      campaign: String(input.campaign || sourceObject.campaign || current.campaign || current.source?.campaign || ''),
-      externalEnquiryId: String(input.externalEnquiryId || sourceObject.externalEnquiryId || current.externalEnquiryId || current.source?.externalEnquiryId || '')
-    },
-    fields: additionalDetails,
-    updatedAt: new Date()
+    serviceType: text(input.serviceType, current.serviceType),
+    requirementTitle: text(input.requirementTitle, current.requirementTitle),
+    priority: text(input.priority, current.priority || "normal"),
+    status: text(input.status, current.status || "new"),
+    preferredDate: text(input.preferredDate, current.preferredDate),
+    preferredSlot: text(input.preferredSlot, current.preferredSlot),
+    leadPricePaise: Math.max(
+      0,
+      Math.round(
+        Number(input.leadPricePaise ?? current.leadPricePaise ?? 10000),
+      ),
+    ),
+    currency: "INR",
+    sourceWebsite: text(
+      input.sourceWebsite,
+      current.sourceWebsite || "manual-admin",
+    ),
+    sourceChannel: text(input.sourceChannel, current.sourceChannel || "admin"),
+    sourceType: text(input.sourceType, current.sourceType || "manual"),
+    sourceName: text(input.sourceName, current.sourceName),
+    campaign: text(input.campaign, current.campaign),
+    externalEnquiryId: text(input.externalEnquiryId, current.externalEnquiryId),
+    notes: text(input.notes, current.notes),
+    additionalDetails:
+      input.additionalDetails ?? current.additionalDetails ?? {},
+    metadata: input.metadata ?? current.metadata ?? {},
+    updatedAt: new Date(),
   };
-
-  return doc;
 }
 
-function idQuery(enquiryId) {
-  return { $or: [{ enquiryId }, { id: enquiryId }, { _id: enquiryId }] };
+
+function presentEnquiry(row = {}) {
+  const customer = row.customer || {};
+  const address = row.address || {};
+  const source = row.source || {};
+  const categoryObject = row.category && typeof row.category === "object" ? row.category : {};
+  return {
+    ...row,
+    enquiryId: row.enquiryId || row.id || "",
+    name: row.name || customer.name || "",
+    mobile: row.mobile || customer.mobile || "",
+    email: row.email || customer.email || "",
+    addressLine: row.addressLine || address.line1 || "",
+    city: row.city || address.city || "",
+    state: row.state || address.state || "",
+    pincode: row.pincode || address.pincode || "",
+    category: typeof row.category === "string" ? row.category : (categoryObject.name || ""),
+    categorySlug: row.categorySlug || categoryObject.slug || "",
+    sourceWebsite: row.sourceWebsite || source.website || "",
+    sourceChannel: row.sourceChannel || source.channel || "",
+    sourceName: row.sourceName || source.sourceName || "",
+    externalEnquiryId: row.externalEnquiryId || source.externalEnquiryId || "",
+  };
 }
 
-async function create(input, actor = 'admin') {
+function enquiryQuery(enquiryId) {
+  return { $or: [{ enquiryId }, { id: enquiryId }] };
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function create(input, actor = "admin") {
   const data = normalizeInput(input);
-  if (!data.categorySlug) throw Object.assign(new Error('Category is required'), { status: 400 });
-  const now = new Date();
-  data.timeline = [{ id: createId('time'), type: 'created', message: 'Lead created', actor, createdAt: now }];
+  if (!data.categorySlug) {
+    throw Object.assign(new Error("Category is required"), { status: 400 });
+  }
+
+  data.timeline = [
+    {
+      timelineId: uuid(),
+      type: "created",
+      message: "Lead created",
+      actor,
+      createdAt: new Date(),
+    },
+  ];
+
   const enquiry = await Enquiry.create(data);
-  if (['approved', 'distributed'].includes(enquiry.status)) await distribute(enquiry, actor);
+  if (["approved", "distributed"].includes(enquiry.status)) {
+    await distribute(enquiry, actor);
+  }
+
   return get(enquiry.enquiryId);
 }
 
 async function list(filters = {}) {
   const { page, limit, skip } = getPagination(filters);
   const query = {};
+
   if (filters.status) query.status = filters.status;
   if (filters.categorySlug) query.categorySlug = filters.categorySlug;
-  if (filters.city) query.city = new RegExp(String(filters.city), 'i');
+  if (filters.city) query.city = new RegExp(escapeRegex(filters.city), "i");
   if (filters.sourceWebsite) query.sourceWebsite = filters.sourceWebsite;
+
   if (filters.startDate || filters.endDate) {
     query.createdAt = {};
-    if (filters.startDate) query.createdAt.$gte = new Date(`${filters.startDate}T00:00:00.000+05:30`);
-    if (filters.endDate) query.createdAt.$lte = new Date(`${filters.endDate}T23:59:59.999+05:30`);
+    if (filters.startDate)
+      query.createdAt.$gte = new Date(
+        `${filters.startDate}T00:00:00.000+05:30`,
+      );
+    if (filters.endDate)
+      query.createdAt.$lte = new Date(`${filters.endDate}T23:59:59.999+05:30`);
   }
+
   if (filters.q) {
-    const q = new RegExp(String(filters.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const search = new RegExp(escapeRegex(String(filters.q).trim()), "i");
     query.$or = [
-      { enquiryId: q }, { id: q }, { requirementTitle: q }, { name: q }, { mobile: q },
-      { category: q }, { categorySlug: q }, { city: q }, { externalEnquiryId: q },
-      { 'customer.name': q }, { 'customer.mobile': q }
+      { enquiryId: search },
+      { requirementTitle: search },
+      { name: search },
+      { mobile: search },
+      { category: search },
+      { categorySlug: search },
+      { city: search },
+      { externalEnquiryId: search },
     ];
   }
-  const [data, total] = await Promise.all([
+
+  const [rows, total] = await Promise.all([
     Enquiry.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    Enquiry.countDocuments(query)
+    Enquiry.countDocuments(query),
   ]);
-  return pageResult(data.map(flattenLegacy), total, page, limit);
+
+  return pageResult(rows.map(presentEnquiry), total, page, limit);
 }
 
 async function get(enquiryId) {
-  const enquiry = await Enquiry.findOne(idQuery(enquiryId)).lean();
-  if (!enquiry) throw Object.assign(new Error('Lead not found'), { status: 404 });
-  const distributions = await LeadDistribution.find({ requirementId: enquiry.enquiryId || enquiry.id }).sort({ distributedAt: -1 }).lean();
-  return { ...flattenLegacy(enquiry), distributions };
-}
-
-async function update(enquiryId, input, actor = 'admin') {
-  const existing = await Enquiry.findOne(idQuery(enquiryId)).lean();
-  if (!existing) throw Object.assign(new Error('Lead not found'), { status: 404 });
-  const data = normalizeInput(input, existing);
-  const timeline = Array.isArray(existing.timeline) ? existing.timeline : [];
-  if (data.status !== existing.status) {
-    timeline.push({ id: createId('time'), type: 'status_changed', message: `Status changed from ${existing.status} to ${data.status}`, actor, createdAt: new Date() });
+  const enquiry = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
+  if (!enquiry) {
+    throw Object.assign(new Error("Lead not found"), { status: 404 });
   }
-  data.timeline = timeline;
-  await Enquiry.updateOne(idQuery(enquiryId), { $set: data });
-  const updated = await Enquiry.findOne(idQuery(enquiryId));
-  if (['approved', 'distributed'].includes(updated.status)) await distribute(updated, actor);
-  else await LeadDistribution.updateMany({ requirementId: updated.enquiryId, contactUnlocked: { $ne: true } }, { $set: { status: 'withdrawn', updatedAt: new Date() } });
-  return get(updated.enquiryId);
+
+  const distributions = await LeadDistribution.find({ enquiryId })
+    .sort({ distributedAt: -1 })
+    .lean();
+
+  return { ...presentEnquiry(enquiry), distributions };
 }
 
-async function addNote(enquiryId, note, actor = 'admin') {
-  const message = String(note || '').trim();
-  if (!message) throw Object.assign(new Error('Note is required'), { status: 400 });
-  const result = await Enquiry.updateOne(idQuery(enquiryId), {
-    $set: { notes: message, updatedAt: new Date() },
-    $push: { timeline: { id: createId('time'), type: 'note', message, actor, createdAt: new Date() } }
-  });
-  if (!result.matchedCount) throw Object.assign(new Error('Lead not found'), { status: 404 });
+async function update(enquiryId, input, actor = "admin") {
+  const existing = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
+  if (!existing) {
+    throw Object.assign(new Error("Lead not found"), { status: 404 });
+  }
+
+  const data = normalizeInput(input, existing);
+  const timeline = Array.isArray(existing.timeline)
+    ? [...existing.timeline]
+    : [];
+
+  if (data.status !== existing.status) {
+    timeline.push({
+      timelineId: uuid(),
+      type: "status_changed",
+      message: `Status changed from ${existing.status} to ${data.status}`,
+      actor,
+      createdAt: new Date(),
+    });
+  }
+
+  await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: { ...data, timeline } });
+  const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
+
+  if (["approved", "distributed"].includes(updated.status)) {
+    await distribute(updated, actor);
+  } else {
+    await LeadDistribution.updateMany(
+      { enquiryId, contactUnlocked: { $ne: true } },
+      { $set: { status: "withdrawn", updatedAt: new Date() } },
+    );
+  }
+
   return get(enquiryId);
 }
 
-function flattenLegacy(doc) {
+async function addNote(enquiryId, note, actor = "admin") {
+  const message = text(note);
+  if (!message) {
+    throw Object.assign(new Error("Note is required"), { status: 400 });
+  }
+
+  const result = await Enquiry.updateOne(
+    enquiryQuery(enquiryId),
+    {
+      $set: { notes: message, updatedAt: new Date() },
+      $push: {
+        timeline: {
+          timelineId: uuid(),
+          type: "note",
+          message,
+          actor,
+          createdAt: new Date(),
+        },
+      },
+    },
+  );
+
+  if (!result.matchedCount) {
+    throw Object.assign(new Error("Lead not found"), { status: 404 });
+  }
+
+  return get(enquiryId);
+}
+
+function distributionData(enquiry, provider) {
   return {
-    ...doc,
-    enquiryId: doc.enquiryId || doc.id || String(doc._id),
-    name: doc.name || doc.customer?.name || '',
-    mobile: doc.mobile || doc.customer?.mobile || '',
-    email: doc.email || doc.customer?.email || '',
-    addressLine: doc.addressLine || doc.address?.line1 || '',
-    city: doc.city || doc.address?.city || '',
-    state: doc.state || doc.address?.state || '',
-    pincode: doc.pincode || doc.address?.pincode || '',
-    category: typeof doc.category === 'string' ? doc.category : (doc.category?.name || doc.categorySlug || ''),
-    sourceWebsite: doc.sourceWebsite || doc.source?.website || '',
-    sourceChannel: doc.sourceChannel || doc.source?.channel || '',
-    sourceType: doc.sourceType || doc.source?.sourceType || '',
-    sourceName: doc.sourceName || doc.source?.sourceName || '',
-    campaign: doc.campaign || doc.source?.campaign || '',
-    externalEnquiryId: doc.externalEnquiryId || doc.source?.externalEnquiryId || '',
-    additionalDetails: doc.additionalDetails || doc.fields || {}
+    enquiryId: enquiry.enquiryId || enquiry.id,
+    providerId: provider.providerId || provider.id,
+    categorySlug: enquiry.categorySlug,
+    leadPricePaise: Number(enquiry.leadPricePaise || 0),
+    currency: "INR",
+    leadTitle: enquiry.requirementTitle,
+    serviceType: enquiry.serviceType,
+    category: enquiry.category,
+    city: enquiry.city,
+    state: enquiry.state,
+    pincode: enquiry.pincode,
+    preferredDate: enquiry.preferredDate,
+    preferredSlot: enquiry.preferredSlot,
+    priority: enquiry.priority,
+    sourceWebsite: enquiry.sourceWebsite,
+    customerName: enquiry.name,
+    customerMobile: enquiry.mobile,
+    customerEmail: enquiry.email,
+    customerAddress: enquiry.addressLine,
+    providerName: provider.name,
+    providerBusinessName: provider.businessName,
+    providerMobile: provider.mobile,
+    additionalDetails: enquiry.additionalDetails || {},
+    updatedAt: new Date(),
   };
 }
 
-async function distribute(enquiryDocument, actor = 'system') {
-  const enquiry = flattenLegacy(enquiryDocument.toObject ? enquiryDocument.toObject() : enquiryDocument);
-  const requirementId = enquiry.enquiryId;
+async function distribute(enquiryDocument, actor = "system") {
+  const rawEnquiry = enquiryDocument.toObject
+    ? enquiryDocument.toObject()
+    : enquiryDocument;
+  const enquiry = presentEnquiry(rawEnquiry);
   const providers = await Provider.find({
-    status: 'active', portalAccessEnabled: { $ne: false }, categorySlugs: enquiry.categorySlug
+    status: "active",
+    portalAccessEnabled: { $ne: false },
+    categorySlugs: enquiry.categorySlug,
   }).lean();
 
-  const providerIds = [];
+  const providerIds = providers.map((provider) => provider.providerId || provider.id).filter(Boolean);
+
   for (const provider of providers) {
-    const providerId = provider.providerId || provider.id || String(provider._id);
-    providerIds.push(providerId);
-    const existing = await LeadDistribution.findOne({ requirementId, providerId });
-    const data = {
-      requirementId,
-      providerId,
-      categorySlug: enquiry.categorySlug,
-      leadPricePaise: Number(enquiry.leadPricePaise || 0),
-      currency: 'INR',
-      leadTitle: enquiry.requirementTitle,
-      serviceType: enquiry.serviceType,
-      category: enquiry.category,
-      city: enquiry.city,
-      state: enquiry.state,
-      pincode: enquiry.pincode,
-      preferredDate: enquiry.preferredDate,
-      preferredSlot: enquiry.preferredSlot,
-      priority: enquiry.priority,
-      sourceWebsite: enquiry.sourceWebsite,
-      customerName: enquiry.name,
-      customerMobile: enquiry.mobile,
-      customerEmail: enquiry.email,
-      customerAddress: enquiry.addressLine,
-      providerName: provider.name,
-      providerBusinessName: provider.businessName,
-      providerMobile: provider.mobile,
-      additionalDetails: enquiry.additionalDetails || {},
-      leadPreview: {
-        title: enquiry.requirementTitle, serviceType: enquiry.serviceType, categorySlug: enquiry.categorySlug,
-        categoryName: enquiry.category, city: enquiry.city, state: enquiry.state, pincode: enquiry.pincode,
-        preferredDate: enquiry.preferredDate, preferredSlot: enquiry.preferredSlot, priority: enquiry.priority,
-        sourceWebsite: enquiry.sourceWebsite, additionalDetails: enquiry.additionalDetails || {}
-      },
-      contactSnapshot: {
-        name: enquiry.name, mobile: enquiry.mobile, email: enquiry.email, addressLine1: enquiry.addressLine,
-        city: enquiry.city, state: enquiry.state, pincode: enquiry.pincode
-      },
-      providerSnapshot: { name: provider.name, businessName: provider.businessName, mobile: provider.mobile, city: provider.city },
-      updatedAt: new Date()
-    };
+    const data = distributionData(enquiry, provider);
+    const existing = await LeadDistribution.findOne({
+      enquiryId: enquiry.enquiryId || enquiry.id,
+      providerId: provider.providerId || provider.id,
+    }).lean();
+
     if (!existing) {
-      await LeadDistribution.create({ ...data, status: 'offered', contactUnlocked: false, distributedBy: actor, distributedAt: new Date() });
+      await LeadDistribution.create({
+        ...data,
+        status: "offered",
+        contactUnlocked: false,
+        distributedBy: actor,
+        distributedAt: new Date(),
+      });
     } else if (!existing.contactUnlocked) {
-      await LeadDistribution.updateOne({ leadDistributionId: existing.leadDistributionId }, { $set: { ...data, status: 'offered' } });
+      await LeadDistribution.updateOne(
+        { leadDistributionId: existing.leadDistributionId },
+        { $set: { ...data, status: "offered" } },
+      );
     }
   }
 
-  await LeadDistribution.updateMany({
-    requirementId,
+  const withdrawQuery = {
+    enquiryId: enquiry.enquiryId || enquiry.id,
     contactUnlocked: { $ne: true },
-    ...(providerIds.length ? { providerId: { $nin: providerIds } } : {})
-  }, { $set: { status: 'withdrawn', updatedAt: new Date() } });
+  };
+  if (providerIds.length) withdrawQuery.providerId = { $nin: providerIds };
+
+  await LeadDistribution.updateMany(withdrawQuery, {
+    $set: { status: "withdrawn", updatedAt: new Date() },
+  });
 
   const [distributionCount, unlockedCount] = await Promise.all([
-    LeadDistribution.countDocuments({ requirementId, status: { $ne: 'withdrawn' } }),
-    LeadDistribution.countDocuments({ requirementId, contactUnlocked: true })
+    LeadDistribution.countDocuments({
+      enquiryId: enquiry.enquiryId || enquiry.id,
+      status: { $ne: "withdrawn" },
+    }),
+    LeadDistribution.countDocuments({
+      enquiryId: enquiry.enquiryId || enquiry.id,
+      contactUnlocked: true,
+    }),
   ]);
-  await Enquiry.updateOne(idQuery(requirementId), { $set: { distributionCount, unlockedCount, distributedAt: new Date(), updatedAt: new Date() } });
+
+  await Enquiry.updateOne(
+    enquiryQuery(enquiry.enquiryId),
+    {
+      $set: {
+        distributionCount,
+        unlockedCount,
+        distributedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    },
+  );
+
   return { distributionCount, unlockedCount };
 }
 
-module.exports = { normalizeInput, flattenLegacy, create, list, get, update, addNote, distribute };
+module.exports = { create, list, get, update, addNote, distribute, presentEnquiry };

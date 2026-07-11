@@ -1,3 +1,54 @@
+<div class="navbar navbar-expand-lg navbar-static crm-topbar">
+  <div class="container-fluid px-3 px-lg-4">
+    <button type="button" class="crm-mobile-menu d-lg-none me-2" @click="sidebarOpen = true" aria-label="Open navigation">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+
+    <div class="navbar-brand flex-1 flex-lg-0 me-lg-4">
+      <a href="/dashboard" class="crm-brand-link">
+        <span class="crm-brand-mark">C</span>
+        <span class="crm-brand-copy">
+          <strong><%= appName %></strong>
+          <small>Lead operations</small>
+        </span>
+      </a>
+    </div>
+
+    <form class="crm-global-search d-none d-md-flex" action="/enquiries" method="get">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input type="search" name="q" placeholder="Search leads, customers or mobile" aria-label="Search requirements">
+      <kbd>⌘ K</kbd>
+    </form>
+
+    <ul class="nav flex-row align-items-center gap-2 ms-auto">
+      <li class="nav-item">
+        <button type="button" class="crm-topbar-icon" data-crm-appearance-open aria-label="Appearance settings" title="Appearance">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1.25a1.75 1.75 0 0 0 0-3.5H12a1.5 1.5 0 0 1 0-3h2.25A6.75 6.75 0 0 0 21 7.75 4.75 4.75 0 0 0 16.25 3Z"/><circle cx="7.5" cy="10" r=".8"/><circle cx="10" cy="6.8" r=".8"/><circle cx="14" cy="6.5" r=".8"/></svg>
+        </button>
+      </li>
+      <li class="nav-item dropdown">
+        <button type="button" class="crm-admin-menu" data-bs-toggle="dropdown" aria-expanded="false">
+          <span class="crm-admin-avatar" x-text="(admin.name || admin.email || 'A').charAt(0).toUpperCase()">A</span>
+          <span class="crm-admin-copy d-none d-sm-flex">
+            <strong x-text="admin.name || 'Admin'">Admin</strong>
+            <small x-text="admin.email || 'Administrator'">Administrator</small>
+          </span>
+          <svg class="crm-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end crm-admin-dropdown">
+          <div class="px-3 py-2 border-bottom">
+            <div class="fw-semibold" x-text="admin.name || 'Admin'">Admin</div>
+            <div class="text-muted fs-sm" x-text="admin.email"></div>
+          </div>
+          <button type="button" class="dropdown-item text-danger" @click="logout()">
+            <svg class="crm-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg>
+            Sign out
+          </button>
+        </div>
+      </li>
+    </ul>
+  </div>
+</div>
 <div class="crm-appearance-backdrop" data-crm-appearance-backdrop hidden></div>
 <aside class="crm-appearance-panel" data-crm-appearance-panel aria-hidden="true" aria-label="Appearance settings">
   <div class="crm-appearance-panel-header">

@@ -1,1 +1,119 @@
-<%- include('../partials/pageStart') %><div x-data="distPage()" x-init="load()"><div class="card mb-3"><div class="card-body row g-2"><div class="col-md-3"><input class="form-control" x-model="filters.requirementId" placeholder="Requirement ID"></div><div class="col-md-3"><input class="form-control" x-model="filters.providerId" placeholder="Provider ID"></div><div class="col-md-2"><select class="form-select" x-model="filters.status"><option value="">All statuses</option><option>offered</option><option>unlocked</option><option>withdrawn</option><option>expired</option></select></div><div class="col-md-2"><button class="btn btn-primary w-100" @click="load">Apply</button></div></div></div><div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Lead</th><th>Provider</th><th>Category</th><th>Status</th><th>Price</th><th>Date</th></tr></thead><tbody><template x-for="d in rows" :key="d.leadDistributionId"><tr><td><a :href="'/enquiries/'+d.requirementId" x-text="d.leadTitle||d.requirementId"></a></td><td><a :href="'/providers/'+d.providerId" x-text="d.providerName||d.providerId"></a></td><td x-text="d.categorySlug"></td><td x-text="humanize(d.status)"></td><td x-text="money(d.leadPricePaise)"></td><td x-text="formatDate(d.distributedAt)"></td></tr></template></tbody></table></div></div></div><script>function distPage(){return{rows:[],filters:{requirementId:'',providerId:'',status:''},async load(){const b=await apiFetch('/api/distribution?'+new URLSearchParams(this.filters));this.rows=b.data}}}</script><%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Lead distribution</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Inspect provider-specific lead offers and unlocks.</p>
+              </div>
+              
+            </div>
+          </div>
+          <div class="content">
+            <div
+              x-show="shellError"
+              x-cloak
+              class="alert alert-danger"
+              x-text="shellError"
+            ></div>
+            <div x-data="distPage()" x-init="load()">
+              <div class="card mb-3">
+                <div class="card-body row g-2">
+                  <div class="col-md-3">
+                    <input
+                      class="form-control"
+                      x-model="filters.enquiryId"
+                      placeholder="Enquiry ID"
+                    />
+                  </div>
+                  <div class="col-md-3">
+                    <input
+                      class="form-control"
+                      x-model="filters.providerId"
+                      placeholder="Provider ID"
+                    />
+                  </div>
+                  <div class="col-md-2">
+                    <select class="form-select" x-model="filters.status">
+                      <option value="">All statuses</option>
+                      <option>offered</option>
+                      <option>unlocked</option>
+                      <option>withdrawn</option>
+                      <option>expired</option>
+                    </select>
+                  </div>
+                  <div class="col-md-2">
+                    <button class="btn btn-primary w-100" @click="load">
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="table-responsive">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Lead</th>
+                        <th>Provider</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Price</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="d in rows" :key="d.leadDistributionId"
+                        ><tr>
+                          <td>
+                            <a
+                              :href="'/enquiries/'+d.enquiryId"
+                              x-text="d.leadTitle||d.enquiryId"
+                            ></a>
+                          </td>
+                          <td>
+                            <a
+                              :href="'/providers/'+d.providerId"
+                              x-text="d.providerName||d.providerId"
+                            ></a>
+                          </td>
+                          <td x-text="d.categorySlug"></td>
+                          <td x-text="humanize(d.status)"></td>
+                          <td x-text="money(d.leadPricePaise)"></td>
+                          <td x-text="formatDate(d.distributedAt)"></td></tr
+                      ></template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <script>
+              function distPage() {
+                return {
+                  rows: [],
+                  filters: { enquiryId: "", providerId: "", status: "" },
+                  async load() {
+                    const b = await apiFetch(
+                      "/api/distribution?" + new URLSearchParams(this.filters),
+                    );
+                    this.rows = b.data;
+                  },
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

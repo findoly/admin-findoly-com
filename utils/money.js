@@ -4,8 +4,11 @@ function toPaise(value, fallback = 0) {
 }
 
 function formatInr(paise) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(Number(paise || 0) / 100);
 }
 

@@ -1,4 +1,111 @@
-<%- include('../partials/pageStart') %>
-<div x-data="providerList()" x-init="load()"><div class="card mb-3"><div class="card-body py-3"><form class="row g-2 align-items-end" @submit.prevent="search"><div class="col-md-5"><label class="form-label">Search</label><input class="form-control" x-model="filters.q" placeholder="Name, mobile, business or city"></div><div class="col-md-3"><label class="form-label">Status</label><select class="form-select" x-model="filters.status"><option value="">All</option><option>active</option><option>inactive</option><option>pending</option><option>blocked</option></select></div><div class="col-md-2"><button class="btn btn-primary w-100">Apply</button></div><div class="col-md-2"><a href="/providers/new" class="btn btn-light w-100">New provider</a></div></form></div></div><div x-show="error" class="alert alert-danger" x-text="error"></div><div class="card"><div class="table-responsive"><table class="table table-hover"><thead><tr><th>Provider</th><th>Mobile</th><th>Categories</th><th>Status</th><th>Wallet</th><th></th></tr></thead><tbody><template x-for="p in rows" :key="p.providerId"><tr><td><div class="fw-semibold" x-text="p.name"></div><div class="text-muted fs-sm" x-text="p.businessName || p.providerId"></div></td><td x-text="p.mobile"></td><td x-text="(p.categorySlugs||[]).join(', ') || '—'"></td><td><span class="badge bg-light text-body border" x-text="humanize(p.status)"></span><div class="fs-sm text-muted" x-text="p.portalAccessEnabled === false ? 'Portal disabled' : 'Portal enabled'"></div></td><td x-text="money(p.walletBalancePaise)"></td><td><a class="btn btn-light btn-sm" :href="'/providers/'+p.providerId">View</a><a class="btn btn-light btn-sm ms-1" :href="'/providers/'+p.providerId+'/edit'">Edit</a></td></tr></template><tr x-show="!rows.length"><td colspan="6" class="text-center text-muted py-4">No providers found</td></tr></tbody></table></div><div class="card-footer d-flex"><span x-text="pagination.total+' records'"></span><div class="ms-auto btn-group"><button class="btn btn-light btn-sm" :disabled="pagination.page<=1" @click="go(-1)">Previous</button><button class="btn btn-light btn-sm" disabled x-text="pagination.page+' / '+pagination.pages"></button><button class="btn btn-light btn-sm" :disabled="pagination.page>=pagination.pages" @click="go(1)">Next</button></div></div></div></div>
-<script>function providerList(){return{rows:[],filters:{q:'',status:''},pagination:{page:1,pages:1,total:0},error:'',async load(){try{const q=new URLSearchParams({...this.filters,page:this.pagination.page,limit:20});const b=await apiFetch('/api/provider?'+q);this.rows=b.data;this.pagination=b.pagination;}catch(e){this.error=e.message;}},search(){this.pagination.page=1;this.load()},go(n){this.pagination.page+=n;this.load()}}}</script>
-<%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Provider network</div>
+                <h1 class="page-title mb-1">Providers</h1>
+                <p class="crm-page-subtitle mb-0">Manage provider eligibility, categories and wallet visibility.</p>
+              </div>
+              <a href="/providers/new" class="btn btn-primary crm-primary-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New provider</a>
+            </div>
+          </div>
+
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+
+            <main x-data="providerList()" x-init="load()">
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+              <section class="card crm-filter-card mb-3">
+                <form class="crm-filter-bar" @submit.prevent="search()">
+                  <label class="crm-search-control">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                    <input type="search" x-model="filters.q" placeholder="Search provider, business, mobile or city" aria-label="Search providers">
+                  </label>
+                  <label class="crm-inline-select"><span>Status</span><select x-model="filters.status"><option value="">All providers</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></label>
+                  <button type="submit" class="btn btn-primary">Search</button>
+                  <button type="button" class="btn btn-light" x-show="filters.q || filters.status" @click="reset()">Clear</button>
+                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label>
+                </form>
+              </section>
+
+              <section class="card crm-data-card">
+                <div class="card-header crm-card-heading crm-list-heading">
+                  <div><h2 class="card-title mb-1">Provider directory</h2><p class="text-muted mb-0"><span x-text="pagination.total"></span> provider records</p></div>
+                  <span class="crm-list-refresh" x-show="loading"><span></span>Refreshing</span>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="table crm-table mb-0">
+                    <thead><tr><th>Provider</th><th>Contact</th><th>Categories & area</th><th>Access</th><th class="text-end">Wallet</th><th aria-label="Actions"></th></tr></thead>
+                    <tbody>
+                      <template x-if="loading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                      <template x-for="provider in rows" :key="recordId(provider, 'providerId')">
+                        <tr>
+                          <td>
+                            <div class="crm-provider-cell"><span class="crm-provider-avatar" x-text="(provider.name || 'P').charAt(0).toUpperCase()"></span><div><a class="crm-record-title" :href="'/providers/' + recordId(provider, 'providerId')" x-text="provider.name || 'Unnamed provider'"></a><div class="text-muted fs-sm" x-text="provider.businessName || recordId(provider, 'providerId')"></div></div></div>
+                          </td>
+                          <td><div class="fw-semibold" x-text="provider.mobile || '—'"></div><div class="text-muted fs-sm" x-text="provider.email || 'No email'"></div></td>
+                          <td><div class="crm-category-tags"><template x-for="category in (provider.categorySlugs || []).slice(0, 3)" :key="category"><span x-text="humanize(category)"></span></template><span x-show="!(provider.categorySlugs || []).length">No category</span></div><div class="text-muted fs-sm mt-1" x-text="[provider.city, provider.state].filter(Boolean).join(', ') || 'No service city'"></div></td>
+                          <td><span class="crm-status" :class="statusClass(provider.status)" x-text="humanize(provider.status)"></span><div class="crm-access-line" :class="provider.portalAccessEnabled === false ? 'is-off' : 'is-on'"><span></span><b x-text="provider.portalAccessEnabled === false ? 'Portal disabled' : 'Portal enabled'"></b></div></td>
+                          <td class="text-end"><div class="fw-semibold" x-text="money(provider.walletBalancePaise)"></div><div class="text-muted fs-sm">INR balance</div></td>
+                          <td class="text-end crm-nowrap"><a class="crm-row-action" :href="'/providers/' + recordId(provider, 'providerId')">View</a><a class="crm-row-action crm-row-action-muted" :href="'/providers/' + recordId(provider, 'providerId') + '/edit'">Edit</a></td>
+                        </tr>
+                      </template>
+                      <tr x-show="!loading && !rows.length"><td colspan="6"><div class="crm-empty-state"><span class="crm-empty-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M13 20a4.5 4.5 0 0 1 8 0"/></svg></span><strong>No providers found</strong><span>Add a provider or change your filters.</span><a href="/providers/new" class="btn btn-primary btn-sm">New provider</a></div></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="crm-table-footer">
+                  <div class="text-muted">Page <strong x-text="pagination.page"></strong> of <strong x-text="pagination.pages"></strong></div>
+                  <div class="crm-pagination"><button type="button" :disabled="pagination.page <= 1 || loading" @click="go(pagination.page - 1)">Previous</button><span x-text="pagination.page"></span><button type="button" :disabled="pagination.page >= pagination.pages || loading" @click="go(pagination.page + 1)">Next</button></div>
+                </div>
+              </section>
+            </main>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function providerList() {
+        return {
+          rows: [],
+          filters: { q: '', status: '' },
+          pagination: { page: 1, pages: 1, total: 0, limit: 20 },
+          loading: false,
+          error: '',
+          async load() {
+            this.loading = true;
+            this.error = '';
+            try {
+              const query = new URLSearchParams({ ...this.filters, page: this.pagination.page, limit: this.pagination.limit });
+              [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
+              const body = await apiFetch('/api/provider?' + query.toString());
+              this.rows = body.data || [];
+              this.pagination = { ...this.pagination, ...(body.pagination || {}) };
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          search() { this.pagination.page = 1; this.load(); },
+          reset() { this.filters = { q: '', status: '' }; this.search(); },
+          go(page) { this.pagination.page = page; this.load(); }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

@@ -1,48 +1,57 @@
 # Service CRM Admin
 
-A simple Express + EJS + Alpine.js CRM that shares MongoDB with the provider portal.
+A simple Express, EJS and Alpine.js CRM that shares MongoDB with the provider portal.
 
-## Code flow
+## Required code flow
 
 ```text
-Browser page
-  -> views/*.ejs (Alpine.js only)
-  -> /api route
-  -> controller
+/frontend or normal browser URL
+  -> routes/frontend.js
+  -> render an EJS page shell only
+  -> Alpine.js fetches /api/*
+  -> API controller
   -> small service
-  -> Mongoose model
+  -> simple Mongoose model
   -> MongoDB
 ```
 
-The frontend route only renders the page shell, title, and URL record ID. It never sends MongoDB records into EJS.
+Frontend routes do not query MongoDB and do not pass lead, provider, distribution, follow-up, communication, invoice, or dashboard records into EJS. EJS receives only page-title metadata. Alpine reads route IDs and query filters from `window.location`.
 
-## Main structure
+Each page is a complete EJS document. Only these structural partials are shared:
 
 ```text
-app.js
-bin/www
-db/connection.js
-routes/frontend.js       # browser pages
-routes/main.js           # /api router
-routes/enquiry.js
-routes/provider.js
-controllers/frontendController.js
-controllers/enquiryController.js
-services/enquiry/enquiry-service.js
-models/Enquiry.js
-views/enquiry/*.ejs      # Alpine fetches /api/enquiry
+head.ejs
+navbar.ejs
+sidebar.ejs
+footer.ejs
+scripts.ejs
 ```
 
-There is no repository layer, no shared model factory, no `models/index.js`, and no Mongoose populate logic.
+There are no body/content partials, repository layer, model factory, `models/index.js`, `populate()` calls, or server-rendered database records.
 
-Every module exports with `module.exports`.
+All application modules use `module.exports`.
+
+## Main folders
+
+```text
+routes/frontend.js       browser pages
+routes/main.js           /api JSON router
+controllers/             HTTP input/output only
+services/                simple business operations
+models/                  simple denormalized schemas
+views/                   complete Alpine.js pages
+scripts/migrate-structure.js
+```
 
 ## IDs and collections
 
-Existing MongoDB `_id` and `id` values are not changed. The migration copies the same value into the named ID field:
+MongoDB keeps its own `_id`. The migration never changes existing `_id` or existing `id` fields.
 
-| Collection | Named ID |
+Application queries use one named identifier per collection:
+
+| Collection | Application identifier |
 |---|---|
+| `categories` | `categoryId` |
 | `enquiries` | `enquiryId` |
 | `providers` | `providerId` |
 | `leaddistributions` | `leadDistributionId` |
@@ -51,28 +60,38 @@ Existing MongoDB `_id` and `id` values are not changed. The migration copies the
 | `followups` | `followUpId` |
 | `communications` | `communicationId` |
 | `invoices` | `invoiceId` |
+| `formtemplates` | `formTemplateId` |
 
-New documents use UUID string IDs. Each Mongoose model explicitly names its MongoDB collection.
+New values are plain UUID v4 values with hyphens removed:
 
-## Denormalized lead model
+```text
+6f6fb7f73593409898de8c18808ae3b1
+```
 
-Frequently queried values are flat:
+They are exactly 32 hexadecimal characters with no collection prefix.
+
+## Simple denormalized lead model
 
 ```json
 {
-  "enquiryId": "req_uuid",
+  "enquiryId": "6f6fb7f73593409898de8c18808ae3b1",
   "name": "Customer name",
   "mobile": "9000000000",
+  "email": "customer@example.com",
+  "addressLine": "Flat 10, Main Road",
   "city": "Mumbai",
+  "state": "Maharashtra",
+  "pincode": "400001",
   "category": "Painting",
   "categorySlug": "painting",
   "requirementTitle": "Paint 2 BHK",
   "status": "approved",
-  "leadPricePaise": 15000
+  "leadPricePaise": 15000,
+  "additionalDetails": {}
 }
 ```
 
-Legacy `customer`, `address`, `source`, and `fields` objects remain as mirrors so existing integrations keep working.
+The application services query only named ID fields. Legacy nested documents are flattened by the one-time migration instead of adding fallback queries to every service.
 
 ## Install and migrate
 
@@ -85,23 +104,30 @@ npm start
 
 `migrate:structure`:
 
-- keeps existing `_id` and `id`
-- adds named ID fields
-- adds flat denormalized lead fields
-- normalizes provider mobiles
-- synchronizes approved leads to eligible providers
+- preserves existing `_id` and `id`
+- adds 32-character named UUID fields
+- remaps relation fields to the new named identifiers
+- flattens legacy enquiry data
+- normalizes provider mobile numbers
+- rebuilds approved lead offers for eligible providers
+
+The old command remains an alias:
+
+```bash
+npm run migrate:lead-distribution
+```
 
 ## Frontend and API examples
 
 ```text
-GET  /enquiries             -> renders EJS only
-GET  /api/enquiry           -> returns JSON list
-GET  /api/enquiry/:id       -> returns JSON record
-POST /api/enquiry           -> creates record
-PUT  /api/enquiry/:id       -> updates record
+GET  /enquiries             renders an EJS shell only
+GET  /api/enquiry           returns JSON list
+GET  /api/enquiry/:id       returns JSON record
+POST /api/enquiry           creates a record
+PUT  /api/enquiry/:id       updates a record
 ```
 
-Public website intake aliases remain:
+Public website intake aliases remain JSON endpoints:
 
 ```text
 POST /api/enquiries
@@ -115,3 +141,15 @@ POST /api/leads
 npm run check
 npm test
 ```
+
+## CRM UI restoration
+
+The CRM frontend keeps the Alpine.js + JSON API separation while restoring the polished admin interface:
+
+- compact page headers and contextual actions
+- visible sidebar icons and responsive navigation
+- compact expandable requirement filters
+- dashboard metric cards, recent requirements and quick actions
+- provider directory with category, access and wallet summaries
+- loading, empty and pagination states
+- compatibility display IDs for legacy records that still use `id`

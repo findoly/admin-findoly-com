@@ -1,14 +1,84 @@
-<%- include('../partials/head') %>
-<body class="login-cover" x-data="loginPage()">
-  <div class="page-content"><div class="content-wrapper"><div class="content-inner"><div class="content d-flex justify-content-center align-items-center">
-    <form class="login-form" @submit.prevent="submit"><div class="card mb-0"><div class="card-body"><div class="text-center mb-3"><div class="crm-brand-mark mx-auto mb-3">C</div><h5 class="mb-0">CRM sign in</h5><span class="d-block text-muted">Use your admin credentials</span></div>
-      <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-      <div class="mb-3"><label class="form-label">Email</label><input class="form-control" type="email" x-model="form.email" required></div>
-      <div class="mb-3"><label class="form-label">Password</label><input class="form-control" type="password" x-model="form.password" required></div>
-      <button class="btn btn-primary w-100" :disabled="loading"><span x-text="loading ? 'Signing in…' : 'Sign in'"></span></button>
-    </div></div></form>
-  </div></div></div></div>
-  <script>
-    function loginPage(){return{form:{email:'admin@example.com',password:'change-me'},loading:false,error:'',async submit(){this.loading=true;this.error='';try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.form)});const b=await r.json();if(!r.ok)throw new Error(b.message||'Login failed');location.href=<%- JSON.stringify(returnTo) %>;}catch(e){this.error=e.message;}finally{this.loading=false;}}}}
-  </script>
-</body></html>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body class="login-cover" x-data="loginPage()">
+    <div class="page-content">
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="content d-flex justify-content-center align-items-center">
+            <form class="login-form" @submit.prevent="submit">
+              <div class="card mb-0">
+                <div class="card-body">
+                  <div class="text-center mb-3">
+                    <div class="crm-brand-mark mx-auto mb-3">C</div>
+                    <h5 class="mb-0">CRM sign in</h5>
+                    <span class="d-block text-muted"
+                      >Use your admin credentials</span
+                    >
+                  </div>
+                  <div
+                    x-show="error"
+                    x-cloak
+                    class="alert alert-danger"
+                    x-text="error"
+                  ></div>
+                  <div class="mb-3">
+                    <label class="form-label">Email</label
+                    ><input
+                      class="form-control"
+                      type="email"
+                      x-model="form.email"
+                      required
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Password</label
+                    ><input
+                      class="form-control"
+                      type="password"
+                      x-model="form.password"
+                      required
+                    />
+                  </div>
+                  <button class="btn btn-primary w-100" :disabled="loading">
+                    <span x-text="loading ? 'Signing in…' : 'Sign in'"></span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      function loginPage() {
+        return {
+          form: { email: "admin@example.com", password: "change-me" },
+          loading: false,
+          error: "",
+          returnTo:
+            new URLSearchParams(location.search).get("returnTo") ||
+            "/dashboard",
+          async submit() {
+            this.loading = true;
+            this.error = "";
+            try {
+              const response = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(this.form),
+              });
+              const body = await response.json();
+              if (!response.ok) throw new Error(body.message || "Login failed");
+              location.href = this.returnTo;
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

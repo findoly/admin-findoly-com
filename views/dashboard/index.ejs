@@ -1,15 +1,184 @@
-<%- include('../partials/pageStart') %>
-<div x-data="dashboardPage()" x-init="load()" :class="loading && 'crm-loading'">
-  <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-  <div class="row g-3 mb-3">
-    <template x-for="card in cards" :key="card.label"><div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted" x-text="card.label"></div><div class="crm-stat-value" x-text="card.value"></div><div class="small text-muted" x-text="card.note"></div></div></div></div></template>
-  </div>
-  <div class="card"><div class="card-header d-flex align-items-center"><h5 class="mb-0">Recent requirements</h5><a href="/enquiries" class="btn btn-light btn-sm ms-auto">View all</a></div><div class="table-responsive"><table class="table table-hover"><thead><tr><th>Lead</th><th>Customer</th><th>Category</th><th>Status</th><th>Price</th><th>Created</th></tr></thead><tbody>
-    <template x-for="lead in data.recentLeads || []" :key="lead.enquiryId || lead.id"><tr><td><a :href="'/enquiries/' + (lead.enquiryId || lead.id)" x-text="lead.requirementTitle || lead.serviceType || 'Requirement'"></a></td><td x-text="lead.name || lead.customer?.name || '—'"></td><td x-text="lead.categorySlug"></td><td><span class="badge bg-light text-body border" x-text="humanize(lead.status)"></span></td><td x-text="money(lead.leadPricePaise)"></td><td x-text="formatDate(lead.createdAt)"></td></tr></template>
-    <tr x-show="!loading && !(data.recentLeads || []).length"><td colspan="6" class="text-center text-muted py-4">No leads yet</td></tr>
-  </tbody></table></div></div>
-</div>
-<script>
-  function dashboardPage(){return{data:{},loading:true,error:'',get cards(){return[{label:'All requirements',value:this.data.totalLeads||0,note:(this.data.statusCounts?.new||0)+' new'},{label:'Active providers',value:this.data.activeProviders||0,note:(this.data.providers||0)+' total'},{label:'Available offers',value:this.data.offered||0,note:(this.data.unlocked||0)+' unlocked'},{label:'Open follow-ups',value:this.data.openFollowUps||0,note:(this.data.invoices||0)+' invoices'}]},async load(){try{this.data=(await apiFetch('/api/dashboard')).data;}catch(e){this.error=e.message;}finally{this.loading=false;}}}}
-</script>
-<%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Overview</div>
+                <h1 class="page-title mb-1">Dashboard</h1>
+                <p class="crm-page-subtitle mb-0">Monitor incoming requirements, providers and distributed offers.</p>
+              </div>
+              <a href="/enquiries/new" class="btn btn-primary crm-primary-action">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Create lead
+              </a>
+            </div>
+          </div>
+
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+
+            <main x-data="dashboardPage()" x-init="load()">
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+              <section class="crm-metric-grid mb-4" aria-label="Dashboard totals">
+                <article class="crm-metric-card crm-metric-blue">
+                  <div class="crm-metric-top">
+                    <div>
+                      <span class="crm-metric-label">All requirements</span>
+                      <strong class="crm-metric-value" x-text="data.totalLeads || 0">0</strong>
+                    </div>
+                    <span class="crm-metric-icon">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                    </span>
+                  </div>
+                  <div class="crm-metric-note"><b x-text="data.statusCounts?.new || 0">0</b> new leads awaiting review</div>
+                </article>
+
+                <article class="crm-metric-card crm-metric-green">
+                  <div class="crm-metric-top">
+                    <div>
+                      <span class="crm-metric-label">Active providers</span>
+                      <strong class="crm-metric-value" x-text="data.activeProviders || 0">0</strong>
+                    </div>
+                    <span class="crm-metric-icon">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M13 20a4.5 4.5 0 0 1 8 0"/></svg>
+                    </span>
+                  </div>
+                  <div class="crm-metric-note"><b x-text="data.providers || 0">0</b> providers in the directory</div>
+                </article>
+
+                <article class="crm-metric-card crm-metric-purple">
+                  <div class="crm-metric-top">
+                    <div>
+                      <span class="crm-metric-label">Available offers</span>
+                      <strong class="crm-metric-value" x-text="data.offered || 0">0</strong>
+                    </div>
+                    <span class="crm-metric-icon">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>
+                    </span>
+                  </div>
+                  <div class="crm-metric-note"><b x-text="data.unlocked || 0">0</b> provider unlocks completed</div>
+                </article>
+
+                <article class="crm-metric-card crm-metric-amber">
+                  <div class="crm-metric-top">
+                    <div>
+                      <span class="crm-metric-label">Open follow-ups</span>
+                      <strong class="crm-metric-value" x-text="data.openFollowUps || 0">0</strong>
+                    </div>
+                    <span class="crm-metric-icon">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    </span>
+                  </div>
+                  <div class="crm-metric-note"><b x-text="data.invoices || 0">0</b> billing records created</div>
+                </article>
+              </section>
+
+              <section class="crm-dashboard-grid">
+                <div class="card crm-data-card">
+                  <div class="card-header crm-card-heading">
+                    <div>
+                      <h2 class="card-title mb-1">Recent requirements</h2>
+                      <p class="text-muted mb-0">Latest customer requests received by the CRM.</p>
+                    </div>
+                    <a href="/enquiries" class="btn btn-light btn-sm">View all requirements</a>
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table crm-table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Requirement</th>
+                          <th>Customer</th>
+                          <th>Category</th>
+                          <th>Status</th>
+                          <th class="text-end">Price</th>
+                          <th>Created</th>
+                          <th aria-label="Actions"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-if="loading">
+                          <tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
+                        </template>
+                        <template x-for="lead in (data.recentLeads || [])" :key="recordId(lead, 'enquiryId')">
+                          <tr>
+                            <td>
+                              <a class="crm-record-title" :href="'/enquiries/' + recordId(lead, 'enquiryId')" x-text="lead.requirementTitle || lead.serviceType || 'Customer requirement'"></a>
+                              <div class="crm-record-id" x-text="recordId(lead, 'enquiryId')"></div>
+                            </td>
+                            <td>
+                              <div class="fw-semibold" x-text="leadName(lead)"></div>
+                              <div class="text-muted fs-sm" x-text="leadMobile(lead)"></div>
+                            </td>
+                            <td>
+                              <div x-text="leadCategory(lead)"></div>
+                              <div class="text-muted fs-sm" x-text="leadCity(lead)"></div>
+                            </td>
+                            <td><span class="crm-status" :class="statusClass(lead.status)" x-text="humanize(lead.status)"></span></td>
+                            <td class="text-end fw-semibold" x-text="money(lead.leadPricePaise)"></td>
+                            <td class="crm-nowrap" x-text="formatDateOnly(lead.createdAt)"></td>
+                            <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + recordId(lead, 'enquiryId')">Open</a></td>
+                          </tr>
+                        </template>
+                        <tr x-show="!loading && !(data.recentLeads || []).length">
+                          <td colspan="7">
+                            <div class="crm-empty-state">
+                              <span class="crm-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+                              <strong>No requirements yet</strong>
+                              <span>Create the first lead to start the workflow.</span>
+                              <a href="/enquiries/new" class="btn btn-primary btn-sm">Create lead</a>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <aside class="card crm-quick-card">
+                  <div class="card-header crm-card-heading"><div><h2 class="card-title mb-1">Quick actions</h2><p class="text-muted mb-0">Common CRM tasks.</p></div></div>
+                  <div class="crm-quick-actions">
+                    <a href="/enquiries/new"><span><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><div><strong>Create requirement</strong><small>Add a customer lead</small></div><b>›</b></a>
+                    <a href="/providers/new"><span><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="3"/><path d="M4 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg></span><div><strong>Add provider</strong><small>Onboard a service partner</small></div><b>›</b></a>
+                    <a href="/distributions"><span><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg></span><div><strong>Review distribution</strong><small>Inspect provider offers</small></div><b>›</b></a>
+                    <a href="/reports"><span><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7M3 20h18"/></svg></span><div><strong>Open reports</strong><small>View operational totals</small></div><b>›</b></a>
+                  </div>
+                </aside>
+              </section>
+            </main>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function dashboardPage() {
+        return {
+          data: {},
+          loading: true,
+          error: '',
+          async load() {
+            this.loading = true;
+            try {
+              this.data = (await apiFetch('/api/dashboard')).data || {};
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

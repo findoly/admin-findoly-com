@@ -1,1 +1,119 @@
-<%- include('../partials/pageStart') %><div x-data="listPage()" x-init="load()"><div class="d-flex gap-2 mb-3"><input class="form-control" style="max-width:360px" x-model="q" @keyup.enter="load" placeholder="Search follow-ups"><select class="form-select" style="max-width:180px" x-model="status" @change="load"><option value="">All statuses</option><option>open</option><option>pending</option><option>completed</option><option>cancelled</option></select><a href="/follow-ups/new" class="btn btn-primary ms-auto">New follow-up</a></div><div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Title</th><th>Lead</th><th>Due</th><th>Channel</th><th>Status</th><th></th></tr></thead><tbody><template x-for="r in rows" :key="r.followUpId"><tr><td><div class="fw-semibold" x-text="r.title"></div><div class="text-muted fs-sm" x-text="r.customerName"></div></td><td><a :href="'/enquiries/'+r.enquiryId" x-text="r.enquiryId||'—'"></a></td><td x-text="r.dueAt||'—'"></td><td x-text="humanize(r.channel)"></td><td x-text="humanize(r.status)"></td><td><a class="btn btn-light btn-sm" :href="'/follow-ups/'+r.followUpId+'/edit'">Edit</a></td></tr></template></tbody></table></div></div></div><script>function listPage(){return{rows:[],q:'',status:'',async load(){const b=await apiFetch('/api/follow-up?'+new URLSearchParams({q:this.q,status:this.status}));this.rows=b.data}}}</script><%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Operations</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Manage scheduled customer and provider follow-ups.</p>
+              </div>
+              <a href="/follow-ups/new" class="btn btn-primary crm-primary-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New follow-up</a>
+            </div>
+          </div>
+          <div class="content">
+            <div
+              x-show="shellError"
+              x-cloak
+              class="alert alert-danger"
+              x-text="shellError"
+            ></div>
+            <div x-data="listPage()" x-init="load()">
+              <div class="d-flex gap-2 mb-3">
+                <input
+                  class="form-control"
+                  style="max-width: 360px"
+                  x-model="q"
+                  @keyup.enter="load"
+                  placeholder="Search follow-ups"
+                /><select
+                  class="form-select"
+                  style="max-width: 180px"
+                  x-model="status"
+                  @change="load"
+                >
+                  <option value="">All statuses</option>
+                  <option>open</option>
+                  <option>pending</option>
+                  <option>completed</option>
+                  <option>cancelled</option></select
+                ><a href="/follow-ups/new" class="btn btn-primary ms-auto"
+                  >New follow-up</a
+                >
+              </div>
+              <div class="card">
+                <div class="table-responsive">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th>Lead</th>
+                        <th>Due</th>
+                        <th>Channel</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="r in rows" :key="r.followUpId"
+                        ><tr>
+                          <td>
+                            <div class="fw-semibold" x-text="r.title"></div>
+                            <div
+                              class="text-muted fs-sm"
+                              x-text="r.customerName"
+                            ></div>
+                          </td>
+                          <td>
+                            <a
+                              :href="'/enquiries/'+r.enquiryId"
+                              x-text="r.enquiryId||'—'"
+                            ></a>
+                          </td>
+                          <td x-text="r.dueAt||'—'"></td>
+                          <td x-text="humanize(r.channel)"></td>
+                          <td x-text="humanize(r.status)"></td>
+                          <td>
+                            <a
+                              class="btn btn-light btn-sm"
+                              :href="'/follow-ups/'+r.followUpId+'/edit'"
+                              >Edit</a
+                            >
+                          </td>
+                        </tr></template
+                      >
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <script>
+              function listPage() {
+                return {
+                  rows: [],
+                  q: "",
+                  status: "",
+                  async load() {
+                    const b = await apiFetch(
+                      "/api/follow-up?" +
+                        new URLSearchParams({ q: this.q, status: this.status }),
+                    );
+                    this.rows = b.data;
+                  },
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

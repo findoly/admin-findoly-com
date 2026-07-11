@@ -1,97 +1,173 @@
-const Provider = require('../../models/Provider');
-const Enquiry = require('../../models/Enquiry');
-const LeadDistribution = require('../../models/LeadDistribution');
-const WalletTransaction = require('../../models/WalletTransaction');
-const { normalizeMobile } = require('../../utils/mobile');
-const { getPagination, pageResult } = require('../../utils/pagination');
-const enquiryService = require('../enquiry/enquiry-service');
+const Provider = require("../../models/Provider");
+const Enquiry = require("../../models/Enquiry");
+const LeadDistribution = require("../../models/LeadDistribution");
+const WalletTransaction = require("../../models/WalletTransaction");
+const { normalizeMobile } = require("../../utils/mobile");
+const { getPagination, pageResult } = require("../../utils/pagination");
+const enquiryService = require("../enquiry/enquiry-service");
 
-function idQuery(providerId) { return { $or: [{ providerId }, { id: providerId }, { _id: providerId }] }; }
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  return String(value || "").split(",");
+}
 
 function normalize(input = {}, current = {}) {
-  const categorySlugs = Array.isArray(input.categorySlugs) ? input.categorySlugs : String(input.categorySlugs ?? current.categorySlugs ?? '').split(',');
-  const skills = Array.isArray(input.skills) ? input.skills : String(input.skills ?? current.skills ?? '').split(',');
-  const serviceAreas = Array.isArray(input.serviceAreas) ? input.serviceAreas : String(input.serviceAreas ?? current.serviceAreas ?? '').split(',');
-  const mobile = String(input.mobile ?? current.mobile ?? '').trim();
+  const mobile = String(input.mobile ?? current.mobile ?? "").trim();
   return {
-    name: String(input.name ?? current.name ?? '').trim(),
-    businessName: String(input.businessName ?? current.businessName ?? '').trim(),
+    name: String(input.name ?? current.name ?? "").trim(),
+    businessName: String(
+      input.businessName ?? current.businessName ?? "",
+    ).trim(),
     mobile,
     normalizedMobile: normalizeMobile(input.normalizedMobile || mobile),
-    email: String(input.email ?? current.email ?? '').trim().toLowerCase(),
-    status: String(input.status ?? current.status ?? 'active'),
-    onboardingStage: String(input.onboardingStage ?? current.onboardingStage ?? 'new'),
-    categorySlugs: categorySlugs.map(v => String(v).trim()).filter(Boolean),
-    skills: skills.map(v => String(v).trim()).filter(Boolean),
-    city: String(input.city ?? current.city ?? '').trim(),
-    state: String(input.state ?? current.state ?? '').trim(),
-    serviceAreas: serviceAreas.map(v => String(v).trim()).filter(Boolean),
-    availability: String(input.availability ?? current.availability ?? 'available_today'),
+    email: String(input.email ?? current.email ?? "")
+      .trim()
+      .toLowerCase(),
+    status: String(input.status ?? current.status ?? "active"),
+    onboardingStage: String(
+      input.onboardingStage ?? current.onboardingStage ?? "new",
+    ),
+    categorySlugs: toArray(input.categorySlugs ?? current.categorySlugs)
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+    skills: toArray(input.skills ?? current.skills)
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+    city: String(input.city ?? current.city ?? "").trim(),
+    state: String(input.state ?? current.state ?? "").trim(),
+    serviceAreas: toArray(input.serviceAreas ?? current.serviceAreas)
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+    availability: String(
+      input.availability ?? current.availability ?? "available_today",
+    ),
     rating: Number(input.rating ?? current.rating ?? 0),
-    notes: String(input.notes ?? current.notes ?? ''),
-    documentsVerified: input.documentsVerified !== undefined ? Boolean(input.documentsVerified) : Boolean(current.documentsVerified),
-    portalAccessEnabled: input.portalAccessEnabled !== undefined ? Boolean(input.portalAccessEnabled) : current.portalAccessEnabled !== false,
-    updatedAt: new Date()
+    notes: String(input.notes ?? current.notes ?? ""),
+    documentsVerified:
+      input.documentsVerified !== undefined
+        ? Boolean(input.documentsVerified)
+        : Boolean(current.documentsVerified),
+    portalAccessEnabled:
+      input.portalAccessEnabled !== undefined
+        ? Boolean(input.portalAccessEnabled)
+        : current.portalAccessEnabled !== false,
+    updatedAt: new Date(),
   };
+}
+
+
+function presentProvider(row = {}) {
+  return {
+    ...row,
+    providerId: row.providerId || row.id || "",
+  };
+}
+
+function providerQuery(providerId) {
+  return { $or: [{ providerId }, { id: providerId }] };
 }
 
 async function list(filters = {}) {
   const { page, limit, skip } = getPagination(filters);
   const query = {};
+
   if (filters.status) query.status = filters.status;
   if (filters.categorySlug) query.categorySlugs = filters.categorySlug;
-  if (filters.city) query.city = new RegExp(String(filters.city), 'i');
+  if (filters.city) query.city = new RegExp(String(filters.city), "i");
   if (filters.q) {
-    const q = new RegExp(String(filters.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    query.$or = [{ providerId: q }, { id: q }, { name: q }, { businessName: q }, { mobile: q }, { email: q }, { city: q }];
+    const search = new RegExp(String(filters.q), "i");
+    query.$or = [
+      { providerId: search },
+      { name: search },
+      { businessName: search },
+      { mobile: search },
+      { email: search },
+      { city: search },
+    ];
   }
-  const [data,total] = await Promise.all([
+
+  const [rows, total] = await Promise.all([
     Provider.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    Provider.countDocuments(query)
+    Provider.countDocuments(query),
   ]);
-  return pageResult(data.map(p => ({ ...p, providerId: p.providerId || p.id || String(p._id) })), total, page, limit);
+
+  return pageResult(rows.map(presentProvider), total, page, limit);
 }
 
 async function get(providerId) {
-  const provider = await Provider.findOne(idQuery(providerId)).lean();
-  if (!provider) throw Object.assign(new Error('Provider not found'), { status: 404 });
-  const id = provider.providerId || provider.id || String(provider._id);
+  const provider = await Provider.findOne(providerQuery(providerId)).lean();
+  if (!provider)
+    throw Object.assign(new Error("Provider not found"), { status: 404 });
+
   const [distributions, transactions] = await Promise.all([
-    LeadDistribution.find({ providerId: id }).sort({ distributedAt: -1 }).limit(50).lean(),
-    WalletTransaction.find({ providerId: id }).sort({ createdAt: -1 }).limit(50).lean()
+    LeadDistribution.find({ providerId })
+      .sort({ distributedAt: -1 })
+      .limit(50)
+      .lean(),
+    WalletTransaction.find({ providerId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean(),
   ]);
-  return { ...provider, providerId: id, distributions, transactions };
+
+  return { ...presentProvider(provider), distributions, transactions };
 }
 
 async function create(input) {
   const data = normalize(input);
-  if (!data.name) throw Object.assign(new Error('Provider name is required'), { status: 400 });
+  if (!data.name)
+    throw Object.assign(new Error("Provider name is required"), {
+      status: 400,
+    });
   const provider = await Provider.create(data);
   await syncApprovedLeads(provider);
   return get(provider.providerId);
 }
 
 async function update(providerId, input) {
-  const current = await Provider.findOne(idQuery(providerId)).lean();
-  if (!current) throw Object.assign(new Error('Provider not found'), { status: 404 });
-  const data = normalize(input, current);
-  await Provider.updateOne(idQuery(providerId), { $set: data });
-  const provider = await Provider.findOne(idQuery(providerId));
+  const current = await Provider.findOne(providerQuery(providerId)).lean();
+  if (!current)
+    throw Object.assign(new Error("Provider not found"), { status: 404 });
+
+  await Provider.updateOne(providerQuery(providerId), { $set: normalize(input, current) });
+  const provider = await Provider.findOne(providerQuery(providerId));
   await syncApprovedLeads(provider);
-  return get(provider.providerId);
+  return get(providerId);
 }
 
 async function syncApprovedLeads(providerDocument) {
-  const provider = providerDocument.toObject ? providerDocument.toObject() : providerDocument;
-  const providerId = provider.providerId || provider.id || String(provider._id);
-  const eligible = provider.status === 'active' && provider.portalAccessEnabled !== false;
+  const rawProvider = providerDocument.toObject
+    ? providerDocument.toObject()
+    : providerDocument;
+  const provider = presentProvider(rawProvider);
+  const eligible =
+    provider.status === "active" && provider.portalAccessEnabled !== false;
+
   if (!eligible) {
-    await LeadDistribution.updateMany({ providerId, contactUnlocked: { $ne: true } }, { $set: { status: 'withdrawn', updatedAt: new Date() } });
+    await LeadDistribution.updateMany(
+      { providerId: provider.providerId, contactUnlocked: { $ne: true } },
+      { $set: { status: "withdrawn", updatedAt: new Date() } },
+    );
     return;
   }
-  const leads = await Enquiry.find({ status: { $in: ['approved', 'distributed'] }, categorySlug: { $in: provider.categorySlugs || [] } });
-  for (const lead of leads) await enquiryService.distribute(lead, 'provider-sync');
-  await LeadDistribution.updateMany({ providerId, categorySlug: { $nin: provider.categorySlugs || [] }, contactUnlocked: { $ne: true } }, { $set: { status: 'withdrawn', updatedAt: new Date() } });
+
+  const enquiries = await Enquiry.find({
+    status: { $in: ["approved", "distributed"] },
+    categorySlug: { $in: provider.categorySlugs || [] },
+  });
+
+  for (const enquiry of enquiries) {
+    await enquiryService.distribute(enquiry, "provider-sync");
+  }
+
+  await LeadDistribution.updateMany(
+    {
+      providerId: provider.providerId,
+      categorySlug: { $nin: provider.categorySlugs || [] },
+      contactUnlocked: { $ne: true },
+    },
+    { $set: { status: "withdrawn", updatedAt: new Date() } },
+  );
 }
 
-module.exports = { normalize, list, get, create, update, syncApprovedLeads };
+module.exports = { list, get, create, update, syncApprovedLeads, presentProvider };

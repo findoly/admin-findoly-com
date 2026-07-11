@@ -1,0 +1,117 @@
+<script>
+  function pathParts() {
+    return location.pathname.split('/').filter(Boolean);
+  }
+
+  function pathRecordId(editPage = false) {
+    const parts = pathParts();
+    return editPage ? (parts[parts.length - 2] || '') : (parts[parts.length - 1] || '');
+  }
+
+  function pageMode() {
+    return location.pathname.endsWith('/new') ? 'create' : 'edit';
+  }
+
+  function queryValue(name, fallback = '') {
+    return new URLSearchParams(location.search).get(name) || fallback;
+  }
+
+  async function apiFetch(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    const body = await response.json().catch(() => ({ success: false, message: 'Invalid server response' }));
+    if (response.status === 401) {
+      window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname + location.search);
+      throw new Error('Authentication required');
+    }
+    if (!response.ok || body.success === false) throw new Error(body.message || 'Request failed');
+    return body;
+  }
+
+  function recordId(record, field) {
+    if (!record) return '';
+    const value = record[field] || record.id || record._id || '';
+    if (value && typeof value === 'object') return value.$oid || value.toString?.() || '';
+    return String(value || '');
+  }
+
+  function leadName(lead) {
+    return lead?.name || lead?.customer?.name || '—';
+  }
+
+  function leadMobile(lead) {
+    return lead?.mobile || lead?.customer?.mobile || '—';
+  }
+
+  function leadCity(lead) {
+    return lead?.city || lead?.address?.city || '—';
+  }
+
+  function leadState(lead) {
+    return lead?.state || lead?.address?.state || '';
+  }
+
+  function leadCategory(lead) {
+    if (!lead) return '—';
+    if (typeof lead.category === 'string' && lead.category) return lead.category;
+    if (lead.category && typeof lead.category === 'object' && lead.category.name) return lead.category.name;
+    return humanize(lead.categorySlug || lead.category?.slug || '');
+  }
+
+  function money(paise) {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 2
+    }).format(Number(paise || 0) / 100);
+  }
+
+  function formatDate(value) {
+    return value
+      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+      : '—';
+  }
+
+  function formatDateOnly(value) {
+    return value
+      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value))
+      : '—';
+  }
+
+  function humanize(value) {
+    return String(value || '—').replace(/[_-]/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
+  function statusClass(value) {
+    return 'status-' + String(value || 'unknown').toLowerCase().replace(/_/g, '-');
+  }
+
+  function crmShell() {
+    return {
+      admin: {},
+      shellError: '',
+      sidebarOpen: false,
+      async initShell() {
+        try {
+          this.admin = (await apiFetch('/api/auth/me')).data || {};
+        } catch (error) {
+          this.shellError = error.message;
+        }
+      },
+      pathIs(path) {
+        return location.pathname === path || location.pathname.startsWith(path + '/');
+      },
+      async logout() {
+        try {
+          await apiFetch('/api/auth/logout', { method: 'POST', body: '{}' });
+          location.href = '/login';
+        } catch (error) {
+          this.shellError = error.message;
+        }
+      }
+    };
+  }
+</script>

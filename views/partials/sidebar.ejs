@@ -1,0 +1,75 @@
+<div class="sidebar sidebar-main sidebar-expand-lg crm-sidebar" :class="{'crm-sidebar-open': sidebarOpen}">
+  <div class="sidebar-content">
+    <div class="crm-sidebar-mobile-head d-lg-none">
+      <div class="d-flex align-items-center gap-2">
+        <span class="crm-brand-mark">C</span>
+        <strong>CRM navigation</strong>
+      </div>
+      <button type="button" class="crm-sidebar-close" @click="sidebarOpen = false" aria-label="Close navigation">×</button>
+    </div>
+
+    <div class="sidebar-section pt-2">
+      <ul class="nav nav-sidebar" data-nav-type="accordion">
+        <li class="nav-item-header"><span>Workspace</span></li>
+        <li class="nav-item">
+          <a href="/dashboard" class="nav-link" :class="{active:pathIs('/dashboard')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.7 12 3l9 7.7v9.8a.5.5 0 0 1-.5.5h-5.2v-6.2H8.7V21H3.5a.5.5 0 0 1-.5-.5Z"/><path d="M9.2 21v-6.2h5.6V21"/></svg>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/enquiries" class="nav-link" :class="{active:pathIs('/enquiries') || pathIs('/requirements')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+            <span>Requirements</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/providers" class="nav-link" :class="{active:pathIs('/providers')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M13 20a4.5 4.5 0 0 1 8 0"/></svg>
+            <span>Providers</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/distributions" class="nav-link" :class="{active:pathIs('/distributions')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>
+            <span>Distribution</span>
+          </a>
+        </li>
+
+        <li class="nav-item-header"><span>Operations</span></li>
+        <li class="nav-item">
+          <a href="/follow-ups" class="nav-link" :class="{active:pathIs('/follow-ups')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M4.5 5.5 3 8"/></svg>
+            <span>Follow-ups</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/communications" class="nav-link" :class="{active:pathIs('/communications')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg>
+            <span>Communications</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/billing" class="nav-link" :class="{active:pathIs('/billing')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg>
+            <span>Billing</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/reports" class="nav-link" :class="{active:pathIs('/reports')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg>
+            <span>Reports</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="crm-sidebar-foot">
+      <div class="crm-sidebar-support">
+        <span class="crm-sidebar-support-icon">?</span>
+        <div><strong>Need help?</strong><small>Check platform setup</small></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="crm-sidebar-overlay" x-show="sidebarOpen" x-cloak @click="sidebarOpen=false"></div>

@@ -1,1 +1,139 @@
-<%- include('../partials/pageStart') %><div x-data="formPage()" x-init="init()"><div x-show="error" class="alert alert-danger" x-text="error"></div><form class="card" @submit.prevent="save"><div class="card-body"><div class="row g-3"><div class="col-md-4"><label class="form-label">Requirement ID</label><input class="form-control" x-model="form.enquiryId"></div><div class="col-md-4"><label class="form-label">Recipient</label><input class="form-control" x-model="form.recipientName"></div><div class="col-md-4"><label class="form-label">Contact</label><input class="form-control" x-model="form.recipientContact"></div><div class="col-md-3"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel"><option>call</option><option>whatsapp</option><option>email</option><option>sms</option></select></div><div class="col-md-3"><label class="form-label">Direction</label><select class="form-select" x-model="form.direction"><option>outbound</option><option>inbound</option></select></div><div class="col-md-3"><label class="form-label">Status</label><input class="form-control" x-model="form.status"></div><div class="col-12"><label class="form-label">Message</label><textarea class="form-control" rows="5" x-model="form.message"></textarea></div></div></div><div class="card-footer"><button class="btn btn-primary">Save</button></div></form></div><script>function formPage(){return{mode:<%- JSON.stringify(mode) %>,recordId:<%- JSON.stringify(recordId) %>,form:{enquiryId:<%- JSON.stringify(enquiryId) %>,recipientName:'',recipientContact:'',channel:'call',direction:'outbound',status:'logged',message:''},error:'',async init(){if(this.mode==='edit')this.form={...this.form,...(await apiFetch('/api/communication/'+this.recordId)).data}},async save(){try{await apiFetch(this.mode==='edit'?'/api/communication/'+this.recordId:'/api/communication',{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.form)});location.href='/communications'}catch(e){this.error=e.message}}}}</script><%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Operations</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Record a call, message, email or internal note.</p>
+              </div>
+              <a href="/communications" class="btn btn-light crm-primary-action"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to communications</a>
+            </div>
+          </div>
+          <div class="content">
+            <div
+              x-show="shellError"
+              x-cloak
+              class="alert alert-danger"
+              x-text="shellError"
+            ></div>
+            <div x-data="formPage()" x-init="init()">
+              <div
+                x-show="error"
+                class="alert alert-danger"
+                x-text="error"
+              ></div>
+              <form class="card" @submit.prevent="save">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Requirement ID</label
+                      ><input class="form-control" x-model="form.enquiryId" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Recipient</label
+                      ><input
+                        class="form-control"
+                        x-model="form.recipientName"
+                      />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Contact</label
+                      ><input
+                        class="form-control"
+                        x-model="form.recipientContact"
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Channel</label
+                      ><select class="form-select" x-model="form.channel">
+                        <option>call</option>
+                        <option>whatsapp</option>
+                        <option>email</option>
+                        <option>sms</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Direction</label
+                      ><select class="form-select" x-model="form.direction">
+                        <option>outbound</option>
+                        <option>inbound</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Status</label
+                      ><input class="form-control" x-model="form.status" />
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Message</label
+                      ><textarea
+                        class="form-control"
+                        rows="5"
+                        x-model="form.message"
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <button class="btn btn-primary">Save</button>
+                </div>
+              </form>
+            </div>
+            <script>
+              function formPage() {
+                return {
+                  mode: pageMode(),
+                  recordId: pageMode() === "edit" ? pathRecordId(true) : "",
+                  form: {
+                    enquiryId: queryValue("enquiryId"),
+                    recipientName: "",
+                    recipientContact: "",
+                    channel: "call",
+                    direction: "outbound",
+                    status: "logged",
+                    message: "",
+                  },
+                  error: "",
+                  async init() {
+                    if (this.mode === "edit")
+                      this.form = {
+                        ...this.form,
+                        ...(
+                          await apiFetch("/api/communication/" + this.recordId)
+                        ).data,
+                      };
+                  },
+                  async save() {
+                    try {
+                      await apiFetch(
+                        this.mode === "edit"
+                          ? "/api/communication/" + this.recordId
+                          : "/api/communication",
+                        {
+                          method: this.mode === "edit" ? "PUT" : "POST",
+                          body: JSON.stringify(this.form),
+                        },
+                      );
+                      location.href = "/communications";
+                    } catch (e) {
+                      this.error = e.message;
+                    }
+                  },
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

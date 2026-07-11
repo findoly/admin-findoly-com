@@ -1,17 +1,342 @@
-<%- include('../partials/pageStart') %>
-<div x-data="leadForm()" x-init="init()">
-  <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
-  <form class="card" @submit.prevent="save"><div class="card-body" :class="loading && 'crm-loading'">
-    <div class="row g-3"><div class="col-md-6"><label class="form-label">Customer name</label><input class="form-control" x-model="form.name" required></div><div class="col-md-3"><label class="form-label">Mobile</label><input class="form-control" x-model="form.mobile" required></div><div class="col-md-3"><label class="form-label">Email</label><input type="email" class="form-control" x-model="form.email"></div>
-    <div class="col-md-6"><label class="form-label">Address</label><input class="form-control" x-model="form.addressLine"></div><div class="col-md-2"><label class="form-label">City</label><input class="form-control" x-model="form.city"></div><div class="col-md-2"><label class="form-label">State</label><input class="form-control" x-model="form.state"></div><div class="col-md-2"><label class="form-label">Pincode</label><input class="form-control" x-model="form.pincode"></div>
-    <div class="col-md-4"><label class="form-label">Category</label><select class="form-select" x-model="form.categorySlug" @change="syncCategory()" required><option value="">Select</option><template x-for="c in categories" :key="c.slug"><option :value="c.slug" x-text="c.name"></option></template></select></div><div class="col-md-4"><label class="form-label">Service type</label><input class="form-control" x-model="form.serviceType"></div><div class="col-md-4"><label class="form-label">Requirement title</label><input class="form-control" x-model="form.requirementTitle" required></div>
-    <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" x-model="form.status"><template x-for="s in statuses"><option :value="s" x-text="humanize(s)"></option></template></select></div><div class="col-md-3"><label class="form-label">Priority</label><select class="form-select" x-model="form.priority"><option>low</option><option>normal</option><option>high</option><option>urgent</option></select></div><div class="col-md-3"><label class="form-label">Lead price (₹)</label><input type="number" min="0" step="1" class="form-control" x-model.number="priceRupees"></div><div class="col-md-3"><label class="form-label">Preferred date</label><input type="date" class="form-control" x-model="form.preferredDate"></div>
-    <div class="col-md-4"><label class="form-label">Preferred slot</label><input class="form-control" x-model="form.preferredSlot"></div><div class="col-md-4"><label class="form-label">Source website</label><input class="form-control" x-model="form.sourceWebsite"></div><div class="col-md-4"><label class="form-label">Source name</label><input class="form-control" x-model="form.sourceName"></div>
-    <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" rows="3" x-model="form.notes"></textarea></div></div>
-    <hr><div class="d-flex align-items-center mb-2"><h6 class="mb-0">Additional details</h6><button type="button" class="btn btn-light btn-sm ms-auto" @click="details.push({key:'',value:''})">Add field</button></div><template x-for="(item,index) in details" :key="index"><div class="row g-2 mb-2"><div class="col-md-5"><input class="form-control" placeholder="Field name" x-model="item.key"></div><div class="col-md-6"><input class="form-control" placeholder="Value" x-model="item.value"></div><div class="col-md-1"><button type="button" class="btn btn-light w-100" @click="details.splice(index,1)">×</button></div></div></template>
-  </div><div class="card-footer d-flex"><a href="/enquiries" class="btn btn-light">Cancel</a><button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : 'Save requirement'"></button></div></form>
-</div>
-<script>
-  function leadForm(){return{mode:<%- JSON.stringify(mode) %>,recordId:<%- JSON.stringify(recordId) %>,categories:[],statuses:['new','verification_pending','verified','approved','distributed','in_progress','completed','rejected','closed'],form:{name:'',mobile:'',email:'',addressLine:'',city:'',state:'',pincode:'',category:'',categorySlug:'',serviceType:'',requirementTitle:'',status:'new',priority:'normal',preferredDate:'',preferredSlot:'',sourceWebsite:'manual-admin',sourceName:'',notes:'',leadPricePaise:10000},priceRupees:100,details:[],loading:true,saving:false,error:'',success:'',async init(){try{this.categories=(await apiFetch('/api/catalog/categories')).data;if(this.mode==='edit'){const d=(await apiFetch('/api/enquiry/'+this.recordId)).data;this.form={...this.form,...d};this.priceRupees=Number(d.leadPricePaise||0)/100;this.details=Object.entries(d.additionalDetails||{}).map(([key,value])=>({key,value:typeof value==='object'?JSON.stringify(value):value}));}}catch(e){this.error=e.message;}finally{this.loading=false;}},syncCategory(){const c=this.categories.find(x=>x.slug===this.form.categorySlug);this.form.category=c?.name||this.form.categorySlug;},payload(){const additionalDetails={};this.details.forEach(x=>{if(x.key.trim())additionalDetails[x.key.trim()]=x.value});return{...this.form,leadPricePaise:Math.round(Number(this.priceRupees||0)*100),additionalDetails}},async save(){this.saving=true;this.error='';try{const url=this.mode==='edit'?'/api/enquiry/'+this.recordId:'/api/enquiry';const b=await apiFetch(url,{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.payload())});this.success='Saved';location.href='/enquiries/'+b.data.enquiryId;}catch(e){this.error=e.message;}finally{this.saving=false;}}}}
-</script>
-<%- include('../partials/pageEnd') %>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Lead editor</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Capture customer, requirement, source and pricing details.</p>
+              </div>
+              <a href="/enquiries" class="btn btn-light crm-primary-action"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirements</a>
+            </div>
+          </div>
+          <div class="content">
+            <div
+              x-show="shellError"
+              x-cloak
+              class="alert alert-danger"
+              x-text="shellError"
+            ></div>
+
+            <div x-data="leadForm()" x-init="init()">
+              <div
+                x-show="error"
+                x-cloak
+                class="alert alert-danger"
+                x-text="error"
+              ></div>
+              <div
+                x-show="success"
+                x-cloak
+                class="alert alert-success"
+                x-text="success"
+              ></div>
+              <form class="card" @submit.prevent="save">
+                <div class="card-body" :class="loading && 'crm-loading'">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label">Customer name</label
+                      ><input
+                        class="form-control"
+                        x-model="form.name"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Mobile</label
+                      ><input
+                        class="form-control"
+                        x-model="form.mobile"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Email</label
+                      ><input
+                        type="email"
+                        class="form-control"
+                        x-model="form.email"
+                      />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Address</label
+                      ><input class="form-control" x-model="form.addressLine" />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">City</label
+                      ><input class="form-control" x-model="form.city" />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">State</label
+                      ><input class="form-control" x-model="form.state" />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Pincode</label
+                      ><input class="form-control" x-model="form.pincode" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Category</label
+                      ><select
+                        class="form-select"
+                        x-model="form.categorySlug"
+                        @change="syncCategory()"
+                        required
+                      >
+                        <option value="">Select</option>
+                        <template x-for="c in categories" :key="c.slug"
+                          ><option :value="c.slug" x-text="c.name"></option
+                        ></template>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Service type</label
+                      ><input class="form-control" x-model="form.serviceType" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Requirement title</label
+                      ><input
+                        class="form-control"
+                        x-model="form.requirementTitle"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Status</label
+                      ><select class="form-select" x-model="form.status">
+                        <template x-for="s in statuses"
+                          ><option :value="s" x-text="humanize(s)"></option
+                        ></template>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Priority</label
+                      ><select class="form-select" x-model="form.priority">
+                        <option>low</option>
+                        <option>normal</option>
+                        <option>high</option>
+                        <option>urgent</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Lead price (₹)</label
+                      ><input
+                        type="number"
+                        min="0"
+                        step="1"
+                        class="form-control"
+                        x-model.number="priceRupees"
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Preferred date</label
+                      ><input
+                        type="date"
+                        class="form-control"
+                        x-model="form.preferredDate"
+                      />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Preferred slot</label
+                      ><input
+                        class="form-control"
+                        x-model="form.preferredSlot"
+                      />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Source website</label
+                      ><input
+                        class="form-control"
+                        x-model="form.sourceWebsite"
+                      />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Source name</label
+                      ><input class="form-control" x-model="form.sourceName" />
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Notes</label
+                      ><textarea
+                        class="form-control"
+                        rows="3"
+                        x-model="form.notes"
+                      ></textarea>
+                    </div>
+                  </div>
+                  <hr />
+                  <div class="d-flex align-items-center mb-2">
+                    <h6 class="mb-0">Additional details</h6>
+                    <button
+                      type="button"
+                      class="btn btn-light btn-sm ms-auto"
+                      @click="details.push({key:'',value:''})"
+                    >
+                      Add field
+                    </button>
+                  </div>
+                  <template x-for="(item,index) in details" :key="index"
+                    ><div class="row g-2 mb-2">
+                      <div class="col-md-5">
+                        <input
+                          class="form-control"
+                          placeholder="Field name"
+                          x-model="item.key"
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <input
+                          class="form-control"
+                          placeholder="Value"
+                          x-model="item.value"
+                        />
+                      </div>
+                      <div class="col-md-1">
+                        <button
+                          type="button"
+                          class="btn btn-light w-100"
+                          @click="details.splice(index,1)"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div></template
+                  >
+                </div>
+                <div class="card-footer d-flex">
+                  <a href="/enquiries" class="btn btn-light">Cancel</a
+                  ><button
+                    class="btn btn-primary ms-auto"
+                    :disabled="saving"
+                    x-text="saving ? 'Saving…' : 'Save requirement'"
+                  ></button>
+                </div>
+              </form>
+            </div>
+            <script>
+              function leadForm() {
+                return {
+                  mode: pageMode(),
+                  recordId: pageMode() === "edit" ? pathRecordId(true) : "",
+                  categories: [],
+                  statuses: [
+                    "new",
+                    "verification_pending",
+                    "verified",
+                    "approved",
+                    "distributed",
+                    "in_progress",
+                    "completed",
+                    "rejected",
+                    "closed",
+                  ],
+                  form: {
+                    name: "",
+                    mobile: "",
+                    email: "",
+                    addressLine: "",
+                    city: "",
+                    state: "",
+                    pincode: "",
+                    category: "",
+                    categorySlug: "",
+                    serviceType: "",
+                    requirementTitle: "",
+                    status: "new",
+                    priority: "normal",
+                    preferredDate: "",
+                    preferredSlot: "",
+                    sourceWebsite: "manual-admin",
+                    sourceName: "",
+                    notes: "",
+                    leadPricePaise: 10000,
+                  },
+                  priceRupees: 100,
+                  details: [],
+                  loading: true,
+                  saving: false,
+                  error: "",
+                  success: "",
+                  async init() {
+                    try {
+                      this.categories = (
+                        await apiFetch("/api/catalog/categories")
+                      ).data;
+                      if (this.mode === "edit") {
+                        const d = (
+                          await apiFetch("/api/enquiry/" + this.recordId)
+                        ).data;
+                        this.form = { ...this.form, ...d };
+                        this.priceRupees = Number(d.leadPricePaise || 0) / 100;
+                        this.details = Object.entries(
+                          d.additionalDetails || {},
+                        ).map(([key, value]) => ({
+                          key,
+                          value:
+                            typeof value === "object"
+                              ? JSON.stringify(value)
+                              : value,
+                        }));
+                      }
+                    } catch (e) {
+                      this.error = e.message;
+                    } finally {
+                      this.loading = false;
+                    }
+                  },
+                  syncCategory() {
+                    const c = this.categories.find(
+                      (x) => x.slug === this.form.categorySlug,
+                    );
+                    this.form.category = c?.name || this.form.categorySlug;
+                  },
+                  payload() {
+                    const additionalDetails = {};
+                    this.details.forEach((x) => {
+                      if (x.key.trim())
+                        additionalDetails[x.key.trim()] = x.value;
+                    });
+                    return {
+                      ...this.form,
+                      leadPricePaise: Math.round(
+                        Number(this.priceRupees || 0) * 100,
+                      ),
+                      additionalDetails,
+                    };
+                  },
+                  async save() {
+                    this.saving = true;
+                    this.error = "";
+                    try {
+                      const url =
+                        this.mode === "edit"
+                          ? "/api/enquiry/" + this.recordId
+                          : "/api/enquiry";
+                      const b = await apiFetch(url, {
+                        method: this.mode === "edit" ? "PUT" : "POST",
+                        body: JSON.stringify(this.payload()),
+                      });
+                      this.success = "Saved";
+                      location.href = "/enquiries/" + b.data.enquiryId;
+                    } catch (e) {
+                      this.error = e.message;
+                    } finally {
+                      this.saving = false;
+                    }
+                  },
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

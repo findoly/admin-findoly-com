@@ -1,1 +1,8 @@
-const router=require('express').Router();const c=require('../controllers/invoiceController');router.get('/',c.list);router.post('/',c.create);router.get('/:invoiceId',c.get);router.put('/:invoiceId',c.update);router.patch('/:invoiceId',c.update);module.exports=router;
+const router = require("express").Router();
+const c = require("../controllers/invoiceController");
+router.get("/", c.list);
+router.post("/", c.create);
+router.get("/:invoiceId", c.get);
+router.put("/:invoiceId", c.update);
+router.patch("/:invoiceId", c.update);
+module.exports = router;
