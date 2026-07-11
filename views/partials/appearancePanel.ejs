@@ -1,10 +1,9 @@
-<% if (admin) { %>
 <div class="crm-appearance-backdrop" data-crm-appearance-backdrop hidden></div>
 <aside class="crm-appearance-panel" data-crm-appearance-panel aria-hidden="true" aria-label="Appearance settings">
   <div class="crm-appearance-panel-header">
     <div>
       <h5 class="mb-1">Appearance settings</h5>
-      <div class="text-muted fs-sm">Saved in this browser for <strong><%= admin.email %></strong>.</div>
+      <div class="text-muted fs-sm">Saved in this browser for this admin device.</div>
     </div>
     <button type="button" class="btn btn-light btn-icon rounded-pill" data-crm-appearance-close aria-label="Close appearance settings">
       <svg class="crm-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -137,4 +136,3 @@
     <button type="button" class="btn btn-primary" data-crm-appearance-close>Done</button>
   </div>
 </aside>
-<% } %>

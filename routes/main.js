@@ -1,0 +1,15 @@
+const router=require('express').Router();
+const {apiAuth}=require('../middleware/auth');
+const enquiryController=require('../controllers/enquiryController');
+router.use('/auth',require('./auth'));
+// Public intake aliases retained for website/agent integrations.
+router.post('/enquiries',enquiryController.createPublic);router.post('/requirements',enquiryController.createPublic);router.post('/leads',enquiryController.createPublic);
+router.use(apiAuth);
+router.use('/dashboard',require('./dashboard'));router.use('/catalog',require('./catalog'));
+router.use('/enquiry',require('./enquiry'));router.use('/enquiries',require('./enquiry'));router.use('/requirements',require('./enquiry'));router.use('/leads',require('./enquiry'));
+router.use('/provider',require('./provider'));router.use('/providers',require('./provider'));
+router.use('/follow-up',require('./follow-up'));router.use('/follow-ups',require('./follow-up'));
+router.use('/communication',require('./communication'));router.use('/communications',require('./communication'));
+router.use('/invoice',require('./invoice'));router.use('/invoices',require('./invoice'));
+router.use('/distribution',require('./distribution'));router.use('/distributions',require('./distribution'));
+module.exports=router;

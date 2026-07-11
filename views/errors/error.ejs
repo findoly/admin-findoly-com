@@ -1,3 +1,0 @@
-<%- include('../partials/pageStart', { subtitle: 'Error' }) %>
-<div class="card"><div class="card-body"><h5>Something went wrong</h5><p class="text-muted">Please check the server logs or try again.</p><% if (error) { %><pre class="schema-preview"><%= error.stack || error.message %></pre><% } %></div></div>
-<%- include('../partials/pageEnd') %>

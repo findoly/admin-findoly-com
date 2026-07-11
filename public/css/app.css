@@ -3341,3 +3341,6 @@ html[data-crm-background-style="grid"] .content-inner {
     grid-template-columns: 1fr;
   }
 }
+
+/* Alpine API architecture refinements */
+[x-cloak]{display:none!important}.crm-brand-mark,.portal-brand-mark{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:var(--crm-accent,#2563eb);color:#fff;font-weight:700}.table td,.table th{vertical-align:middle}.page-header-content{padding:1rem 1.25rem}.content{padding-top:1rem}.card{box-shadow:none}.crm-sidebar .nav-link:hover,.portal-sidebar .nav-link:hover{color:inherit}.crm-sidebar .nav-link.active,.portal-sidebar .nav-link.active{font-weight:600}

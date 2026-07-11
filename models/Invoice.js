@@ -1,31 +1,32 @@
 const mongoose = require('mongoose');
-const { toClientObject, uuidPrimaryKey, attachUuidPrimaryKey } = require('./common');
+    const { syncNamedId } = require('../utils/id');
 
-const invoiceItemSchema = new mongoose.Schema({
-  description: { type: String, required: true },
-  qty: { type: Number, default: 1 },
-  rate: { type: Number, default: 0 }
-}, { _id: false });
+    const data = {
+      _id: { type: String },
+      id: { type: String, index: true },
+      invoiceId: { type: String, unique: true, sparse: true, index: true },
 
-const invoiceSchema = new mongoose.Schema({
-  ...uuidPrimaryKey('inv'),
-  invoiceNo: { type: String, required: true, unique: true, index: true },
-  enquiryId: { type: String, default: '', index: true },
-  customerName: { type: String, default: '' },
-  providerName: { type: String, default: '' },
-  status: { type: String, default: 'draft', index: true },
-  issueDate: { type: String, default: '' },
-  dueDate: { type: String, default: '' },
-  items: { type: [invoiceItemSchema], default: [] },
-  subtotal: { type: Number, default: 0 },
-  discount: { type: Number, default: 0 },
-  tax: { type: Number, default: 0 },
-  total: { type: Number, default: 0 },
-  notes: { type: String, default: '' },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-}, { toJSON: { transform: toClientObject }, toObject: { transform: toClientObject } });
+invoiceNo: { type: String, required: true, unique: true, index: true },
+enquiryId: { type: String, default: '', index: true },
+customerName: { type: String, default: '' },
+providerName: { type: String, default: '' },
+status: { type: String, default: 'draft', index: true },
+issueDate: { type: String, default: '' },
+dueDate: { type: String, default: '' },
+items: { type: [mongoose.Schema.Types.Mixed], default: [] },
+subtotal: { type: Number, default: 0 },
+discount: { type: Number, default: 0 },
+tax: { type: Number, default: 0 },
+total: { type: Number, default: 0 },
+notes: { type: String, default: '' }
 
-attachUuidPrimaryKey(invoiceSchema, 'inv');
+    };
 
-module.exports = mongoose.model('Invoice', invoiceSchema);
+    const schema = new mongoose.Schema(data, { timestamps: true, strict: false, collection: 'invoices' });
+    schema.pre('validate', function syncId(next) {
+      syncNamedId(this, 'invoiceId', 'inv');
+      next();
+    });
+
+
+    module.exports = mongoose.model('Invoice', schema, 'invoices');

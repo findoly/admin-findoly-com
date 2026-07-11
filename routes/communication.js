@@ -1,0 +1,1 @@
+const router=require('express').Router();const c=require('../controllers/communicationController');router.get('/',c.list);router.post('/',c.create);router.get('/:communicationId',c.get);router.put('/:communicationId',c.update);router.patch('/:communicationId',c.update);module.exports=router;

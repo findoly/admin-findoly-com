@@ -1,25 +1,27 @@
 const mongoose = require('mongoose');
-const { sourceInfoSchema, templateFieldSchema, toClientObject, uuidPrimaryKey, attachUuidPrimaryKey } = require('./common');
+    const { syncNamedId } = require('../utils/id');
 
-const formTemplateSchema = new mongoose.Schema({
-  ...uuidPrimaryKey('form'),
-  name: { type: String, required: true },
-  slug: { type: String, default: '', index: true },
-  categorySlug: { type: String, required: true, index: true },
-  formType: { type: String, default: 'default', index: true },
-  sourceWebsite: { type: String, default: 'any', index: true },
-  source: { type: sourceInfoSchema, default: () => ({}) },
-  description: { type: String, default: '' },
-  fields: { type: [templateFieldSchema], default: [] },
-  active: { type: Boolean, default: true },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-}, { toJSON: { transform: toClientObject }, toObject: { transform: toClientObject } });
+    const data = {
+      _id: { type: String },
+      id: { type: String, index: true },
+      formTemplateId: { type: String, unique: true, sparse: true, index: true },
 
-formTemplateSchema.index({ sourceWebsite: 1, categorySlug: 1, formType: 1, active: 1 });
-formTemplateSchema.index({ sourceWebsite: 1, categorySlug: 1, formType: 1 }, { unique: false });
-formTemplateSchema.index({ sourceWebsite: 1, slug: 1 });
+name: { type: String, required: true },
+slug: { type: String, default: '' },
+categorySlug: { type: String, required: true, index: true },
+formType: { type: String, default: 'default' },
+sourceWebsite: { type: String, default: 'any' },
+description: { type: String, default: '' },
+fields: { type: [mongoose.Schema.Types.Mixed], default: [] },
+active: { type: Boolean, default: true }
 
-attachUuidPrimaryKey(formTemplateSchema, 'form');
+    };
 
-module.exports = mongoose.model('FormTemplate', formTemplateSchema);
+    const schema = new mongoose.Schema(data, { timestamps: true, strict: false, collection: 'formtemplates' });
+    schema.pre('validate', function syncId(next) {
+      syncNamedId(this, 'formTemplateId', 'form');
+      next();
+    });
+
+
+    module.exports = mongoose.model('FormTemplate', schema, 'formtemplates');

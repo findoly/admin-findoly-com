@@ -1,35 +1,14 @@
 <%- include('../partials/head') %>
-<div class="page-content">
-  <div class="content-wrapper">
-    <div class="content-inner">
-      <div class="content d-flex justify-content-center align-items-center">
-        <form method="post" action="/login" class="login-form wmin-sm-400">
-          <div class="card mb-0">
-            <div class="card-body">
-              <div class="text-center mb-3">
-                <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-pill p-3 mb-3">
-                  <span class="fw-bold fs-lg">S</span>
-                </div>
-                <h5 class="mb-0"><%= branding.appName %></h5>
-                <span class="d-block text-muted">Admin-only requirement CRM</span>
-              </div>
-              <% if (flash) { %><div class="alert alert-warning"><%= flash %></div><% } %>
-              <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-control" name="email" required value="admin@example.com">
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input type="password" class="form-control" name="password" required value="change-me">
-              </div>
-              <button type="submit" class="btn btn-primary w-100">Sign in <i class="ph-sign-in ms-2"></i></button>
-              <div class="form-text text-muted mt-3">Change default credentials in <code>.env</code> before production use.</div>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-</body>
-</html>
+<body class="login-cover" x-data="loginPage()">
+  <div class="page-content"><div class="content-wrapper"><div class="content-inner"><div class="content d-flex justify-content-center align-items-center">
+    <form class="login-form" @submit.prevent="submit"><div class="card mb-0"><div class="card-body"><div class="text-center mb-3"><div class="crm-brand-mark mx-auto mb-3">C</div><h5 class="mb-0">CRM sign in</h5><span class="d-block text-muted">Use your admin credentials</span></div>
+      <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+      <div class="mb-3"><label class="form-label">Email</label><input class="form-control" type="email" x-model="form.email" required></div>
+      <div class="mb-3"><label class="form-label">Password</label><input class="form-control" type="password" x-model="form.password" required></div>
+      <button class="btn btn-primary w-100" :disabled="loading"><span x-text="loading ? 'Signing in…' : 'Sign in'"></span></button>
+    </div></div></form>
+  </div></div></div></div>
+  <script>
+    function loginPage(){return{form:{email:'admin@example.com',password:'change-me'},loading:false,error:'',async submit(){this.loading=true;this.error='';try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.form)});const b=await r.json();if(!r.ok)throw new Error(b.message||'Login failed');location.href=<%- JSON.stringify(returnTo) %>;}catch(e){this.error=e.message;}finally{this.loading=false;}}}}
+  </script>
+</body></html>

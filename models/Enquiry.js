@@ -1,72 +1,55 @@
 const mongoose = require('mongoose');
-const {
-  addressSchema,
-  communicationLogSchema,
-  customerSchema,
-  sourceInfoSchema,
-  templateFieldSchema,
-  timelineSchema,
-  toClientObject,
-  uuidPrimaryKey,
-  attachUuidPrimaryKey
-} = require('./common');
+    const { syncNamedId } = require('../utils/id');
 
-const categoryMappingSchema = new mongoose.Schema({
-  slug: { type: String, default: '', index: true },
-  name: { type: String, default: '' },
-  formType: { type: String, default: 'default' },
-  sourceWebsite: { type: String, default: 'manual-admin' }
-}, { _id: false });
+    const data = {
+      _id: { type: String },
+      id: { type: String, index: true },
+      enquiryId: { type: String, unique: true, sparse: true, index: true },
 
+recordType: { type: String, default: 'requirement', index: true },
+name: { type: String, default: '', trim: true },
+mobile: { type: String, default: '', trim: true, index: true },
+email: { type: String, default: '', trim: true, lowercase: true },
+addressLine: { type: String, default: '', trim: true },
+city: { type: String, default: '', trim: true, index: true },
+state: { type: String, default: '', trim: true },
+pincode: { type: String, default: '', trim: true },
+category: { type: String, default: '', trim: true },
+categorySlug: { type: String, required: true, trim: true, index: true },
+serviceType: { type: String, default: '', trim: true },
+requirementTitle: { type: String, default: '', trim: true },
+priority: { type: String, default: 'normal', index: true },
+status: { type: String, default: 'new', index: true },
+preferredDate: { type: String, default: '' },
+preferredSlot: { type: String, default: '' },
+leadPricePaise: { type: Number, default: 10000, min: 0, index: true },
+currency: { type: String, default: 'INR' },
+sourceWebsite: { type: String, default: 'manual-admin', index: true },
+sourceChannel: { type: String, default: 'admin' },
+sourceType: { type: String, default: 'manual' },
+sourceName: { type: String, default: '' },
+campaign: { type: String, default: '' },
+externalEnquiryId: { type: String, default: '', index: true },
+notes: { type: String, default: '' },
+additionalDetails: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+timeline: { type: [mongoose.Schema.Types.Mixed], default: [] },
+communicationLog: { type: [mongoose.Schema.Types.Mixed], default: [] },
+distributionCount: { type: Number, default: 0 },
+unlockedCount: { type: Number, default: 0 },
+distributedAt: { type: Date, default: null },
+customer: { type: mongoose.Schema.Types.Mixed, default: undefined },
+address: { type: mongoose.Schema.Types.Mixed, default: undefined },
+source: { type: mongoose.Schema.Types.Mixed, default: undefined },
+fields: { type: mongoose.Schema.Types.Mixed, default: undefined }
 
-const enquirySchema = new mongoose.Schema({
-  ...uuidPrimaryKey('req'),
+    };
 
-  // Fixed requirement fields: these stay the same for every category, like core product fields in WordPress/WooCommerce.
-  recordType: { type: String, default: 'requirement', index: true },
-  sourceWebsite: { type: String, default: 'manual-admin', index: true },
-  source: { type: sourceInfoSchema, default: () => ({}) },
-  categorySlug: { type: String, required: true, index: true },
-  category: { type: categoryMappingSchema, default: () => ({}) },
-  formType: { type: String, default: 'default', index: true },
-  templateId: { type: String, default: '', index: true },
-  serviceType: { type: String, default: 'General service requirement' },
-  requirementTitle: { type: String, default: '' },
-  priority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal', index: true },
-  status: {
-    type: String,
-    enum: ['new', 'verification_pending', 'verified', 'approved', 'distributed', 'in_progress', 'completed', 'rejected', 'closed', 'contacted', 'assigned', 'scheduled', 'cancelled', 'lost'],
-    default: 'new',
-    index: true
-  },
-  customer: { type: customerSchema, default: () => ({}) },
-  address: { type: addressSchema, default: () => ({}) },
-  preferredDate: { type: String, default: '' },
-  preferredSlot: { type: String, default: '' },
-  quotedAmount: { type: Number, default: 0 },
-  finalAmount: { type: Number, default: 0 },
-  notes: { type: String, default: '' },
+    const schema = new mongoose.Schema(data, { timestamps: true, strict: false, collection: 'enquiries' });
+    schema.pre('validate', function syncId(next) {
+      syncNamedId(this, 'enquiryId', 'req');
+      next();
+    });
+    schema.index({ status: 1, categorySlug: 1, createdAt: -1 });
 
-  // Flexible category-specific requirement data, like WordPress post meta/product attributes.
-  // Use additionalDetails going forward. `fields` stays as a backward-compatible mirror for old integrations.
-  additionalDetails: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
-  metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
-  fieldDefinitions: { type: [templateFieldSchema], default: [] },
-  fields: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
-
-  timeline: { type: [timelineSchema], default: [] },
-  communicationLog: { type: [communicationLogSchema], default: [] },
-  createdAt: { type: Date, default: Date.now, index: true },
-  updatedAt: { type: Date, default: Date.now }
-}, { toJSON: { transform: toClientObject }, toObject: { transform: toClientObject } });
-
-enquirySchema.index({ categorySlug: 1, formType: 1, status: 1, createdAt: -1 });
-enquirySchema.index({ sourceWebsite: 1, categorySlug: 1, createdAt: -1 });
-enquirySchema.index({ 'customer.mobile': 1 });
-enquirySchema.index({ 'source.externalEnquiryId': 1 }, { sparse: true });
-enquirySchema.index({ recordType: 1, status: 1, createdAt: -1 });
-enquirySchema.index({ 'category.slug': 1, status: 1, createdAt: -1 });
-
-attachUuidPrimaryKey(enquirySchema, 'req');
-
-module.exports = mongoose.model('Enquiry', enquirySchema);
+    module.exports = mongoose.model('Enquiry', schema, 'enquiries');

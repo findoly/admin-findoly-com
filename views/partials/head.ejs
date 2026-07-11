@@ -1,28 +1,16 @@
-<html lang="en" dir="ltr" data-crm-user="<%= admin && admin.email ? admin.email : 'guest' %>">
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <title><%= title ? title + ' · ' : '' %><%= branding.appName %></title>
-
-  <!-- Global stylesheets -->
+  <title><%= title ? title + ' · ' : '' %><%= appName %></title>
   <link href="/css/inter.css" rel="stylesheet" type="text/css">
   <link href="/css/styles.min.css" rel="stylesheet" type="text/css">
-  <link href="/css/all.min.css" id="stylesheet" rel="stylesheet" type="text/css">
+  <link href="/css/all.min.css" rel="stylesheet" type="text/css">
   <link href="/css/app.css" rel="stylesheet" type="text/css">
   <script src="/js/appearance.js"></script>
-  <!-- /global stylesheets -->
-
-  <!-- Core JS files -->
-  <script src="/js/bootstrap.bundle.min.js"></script>
-  <!-- /core JS files -->
-
-  <!-- Theme JS files -->
-  <script src="/js/jquery.min.js"></script>
-  <script src="/js/demo_configurator.js"></script>
-  <script src="/js/select2.min.js"></script>
-  <script src="/js/app.js" defer></script>
-  <script src="/js/form_layouts.js" defer></script>
-  <!-- /theme JS files -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/js/bootstrap.bundle.min.js" defer></script>
+  <style>[x-cloak]{display:none!important}.api-error{white-space:pre-wrap}.crm-loading{opacity:.55;pointer-events:none}.crm-table-actions{white-space:nowrap}.crm-filter-toolbar .form-control,.crm-filter-toolbar .form-select{min-height:38px}.crm-stat-value{font-size:1.65rem;font-weight:700}.crm-json{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;white-space:pre-wrap}</style>
 </head>
-<body class="">

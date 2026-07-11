@@ -1,20 +1,27 @@
 const mongoose = require('mongoose');
-const { toClientObject, uuidPrimaryKey, attachUuidPrimaryKey } = require('./common');
+    const { syncNamedId } = require('../utils/id');
 
-const followUpSchema = new mongoose.Schema({
-  ...uuidPrimaryKey('follow'),
-  enquiryId: { type: String, default: '', index: true },
-  customerName: { type: String, default: '' },
-  title: { type: String, required: true },
-  dueAt: { type: String, default: '', index: true },
-  owner: { type: String, default: 'admin' },
-  channel: { type: String, default: 'call' },
-  status: { type: String, default: 'open', index: true },
-  notes: { type: String, default: '' },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-}, { toJSON: { transform: toClientObject }, toObject: { transform: toClientObject } });
+    const data = {
+      _id: { type: String },
+      id: { type: String, index: true },
+      followUpId: { type: String, unique: true, sparse: true, index: true },
 
-attachUuidPrimaryKey(followUpSchema, 'follow');
+enquiryId: { type: String, default: '', index: true },
+customerName: { type: String, default: '' },
+title: { type: String, required: true },
+dueAt: { type: String, default: '', index: true },
+owner: { type: String, default: 'admin' },
+channel: { type: String, default: 'call' },
+status: { type: String, default: 'open', index: true },
+notes: { type: String, default: '' }
 
-module.exports = mongoose.model('FollowUp', followUpSchema);
+    };
+
+    const schema = new mongoose.Schema(data, { timestamps: true, strict: false, collection: 'followups' });
+    schema.pre('validate', function syncId(next) {
+      syncNamedId(this, 'followUpId', 'follow');
+      next();
+    });
+
+
+    module.exports = mongoose.model('FollowUp', schema, 'followups');

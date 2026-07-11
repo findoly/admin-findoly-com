@@ -1,0 +1,18 @@
+const router=require('express').Router();
+const page=require('../controllers/frontendController');
+const {pageAuth}=require('../middleware/auth');
+router.get('/login',page.login);
+router.get('/',(req,res)=>res.redirect(req.admin?'/dashboard':'/login'));
+router.get('/dashboard',pageAuth,page.dashboard);
+router.get('/enquiries',pageAuth,page.enquiries); router.get('/requirements',pageAuth,page.enquiries);
+router.get('/enquiries/new',pageAuth,page.enquiryCreate); router.get('/requirements/new',pageAuth,page.enquiryCreate);
+router.get('/enquiries/:enquiryId/edit',pageAuth,page.enquiryEdit); router.get('/requirements/:enquiryId/edit',pageAuth,page.enquiryEdit);
+router.get('/enquiries/:enquiryId',pageAuth,page.enquiryShow); router.get('/requirements/:enquiryId',pageAuth,page.enquiryShow);
+router.get('/providers',pageAuth,page.providers); router.get('/providers/new',pageAuth,page.providerCreate);
+router.get('/providers/:providerId/edit',pageAuth,page.providerEdit); router.get('/providers/:providerId',pageAuth,page.providerShow);
+router.get('/follow-ups',pageAuth,page.followUps); router.get('/follow-ups/new',pageAuth,page.followUpCreate); router.get('/follow-ups/:followUpId/edit',pageAuth,page.followUpEdit);
+router.get('/communications',pageAuth,page.communications); router.get('/communications/new',pageAuth,page.communicationCreate); router.get('/communications/:communicationId/edit',pageAuth,page.communicationEdit);
+router.get('/billing',pageAuth,page.invoices); router.get('/billing/new',pageAuth,page.invoiceCreate); router.get('/billing/:invoiceId/edit',pageAuth,page.invoiceEdit);
+router.get('/distributions',pageAuth,page.distributions); router.get('/reports',pageAuth,page.reports);
+router.get('/search/enquiries',pageAuth,page.enquiries); router.get('/search/providers',pageAuth,page.providers); router.get('/search/follow-ups',pageAuth,page.followUps); router.get('/search/communications',pageAuth,page.communications); router.get('/search/invoices',pageAuth,page.invoices);
+module.exports=router;
