@@ -25,22 +25,20 @@
               <div class="row g-3">
                 <div class="col-xl-4">
                   <form class="card" @submit.prevent="save()">
-                    <div class="card-header">
-                      <h5 class="mb-0" x-text="editingId ? 'Edit category' : 'Create category'"></h5>
-                    </div>
+                    <div class="card-header"><h5 class="mb-0" x-text="editingId ? 'Edit category' : 'Create category'"></h5></div>
                     <div class="card-body">
                       <div class="mb-3">
                         <label class="form-label">Category name</label>
-                        <input class="form-control" x-model="form.name" @input="syncSlug()" required />
+                        <input class="form-control" x-model="form.name" @input="syncSlug()" maxlength="120" required />
                       </div>
                       <div class="mb-3">
                         <label class="form-label">Slug</label>
-                        <input class="form-control" x-model="form.slug" @input="slugTouched = true" :disabled="Boolean(editingId)" required />
+                        <input class="form-control" x-model="form.slug" @input="slugTouched = true" :disabled="Boolean(editingId)" maxlength="80" pattern="[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*" required />
                         <div class="form-text" x-show="editingId">The slug stays unchanged so existing provider and requirement links are preserved.</div>
                       </div>
                       <div class="mb-3">
                         <label class="form-label">Description</label>
-                        <textarea class="form-control" rows="4" x-model="form.description"></textarea>
+                        <textarea class="form-control" rows="4" x-model="form.description" maxlength="2000"></textarea>
                       </div>
                       <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="category-active" x-model="form.active" />
@@ -56,43 +54,38 @@
 
                 <div class="col-xl-8">
                   <div class="card" :class="loading && 'crm-loading'">
-                    <div class="card-header d-flex align-items-center">
-                      <h5 class="mb-0">Category list</h5>
-                      <span class="badge bg-light text-dark ms-auto" x-text="categories.length + ' categories'"></span>
+                    <div class="card-header">
+                      <div class="d-flex flex-wrap align-items-center gap-2">
+                        <div><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
+                        <form class="d-flex gap-2 ms-auto" @submit.prevent="search()">
+                          <input class="form-control" style="min-width: 220px" type="search" x-model="q" maxlength="100" placeholder="Search categories" />
+                          <button class="btn btn-primary" type="submit">Search</button>
+                          <button class="btn btn-light" type="button" x-show="q" @click="q=''; search()">Clear</button>
+                          <label class="crm-page-size"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                        </form>
+                      </div>
                     </div>
                     <div class="table-responsive">
                       <table class="table mb-0">
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                            <th>Slug</th>
-                            <th>Status</th>
-                            <th>Updated</th>
-                            <th class="text-end">Action</th>
-                          </tr>
-                        </thead>
+                        <thead><tr><th>Name</th><th>Slug</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
                         <tbody>
+                          <template x-if="loading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="category in categories" :key="category.categoryId || category.slug">
                             <tr>
-                              <td>
-                                <div class="fw-semibold" x-text="category.name"></div>
-                                <small class="text-muted" x-text="category.description || 'No description'"></small>
-                              </td>
+                              <td><div class="fw-semibold" x-text="category.name"></div><small class="text-muted" x-text="category.description || 'No description'"></small></td>
                               <td><code x-text="category.slug"></code></td>
-                              <td>
-                                <span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span>
-                              </td>
+                              <td><span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span></td>
                               <td x-text="formatDate(category.updatedAt || category.createdAt)"></td>
-                              <td class="text-end">
-                                <button class="btn btn-light btn-sm" @click="edit(category)">Edit</button>
-                              </td>
+                              <td class="text-end"><button class="btn btn-light btn-sm" @click="edit(category)">Edit</button></td>
                             </tr>
                           </template>
-                          <tr x-show="!categories.length && !loading">
-                            <td colspan="5" class="text-center text-muted py-4">No categories created yet</td>
-                          </tr>
+                          <tr x-show="!categories.length && !loading"><td colspan="5" class="text-center text-muted py-4">No categories found</td></tr>
                         </tbody>
                       </table>
+                    </div>
+                    <div class="crm-table-footer">
+                      <div class="text-muted">Page <strong x-text="pagination.page"></strong></div>
+                      <div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div>
                     </div>
                   </div>
                 </div>
@@ -103,71 +96,85 @@
               function categoryManager() {
                 return {
                   categories: [],
-                  editingId: "",
+                  editingId: '',
                   loading: true,
                   saving: false,
-                  error: "",
-                  success: "",
-                  form: { name: "", slug: "", description: "", active: true },
+                  error: '',
+                  success: '',
+                  q: '',
+                  pagination: createCursorPagination(20),
+                  form: { name: '', slug: '', description: '', active: true },
                   slugTouched: false,
                   slugify(value) {
-                    return String(value || "")
-                      .trim()
-                      .toLowerCase()
-                      .replace(/[^a-z0-9]+/g, "-")
-                      .replace(/^-+|-+$/g, "");
+                    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
                   },
                   syncSlug() {
                     if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name);
                   },
+                  query() {
+                    const query = new URLSearchParams({
+                      paginate: 'true',
+                      includeInactive: 'true',
+                      q: this.q,
+                      limit: this.pagination.limit,
+                      cursor: this.pagination.cursor
+                    });
+                    [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
+                    return query.toString();
+                  },
                   async load() {
                     this.loading = true;
+                    this.error = '';
                     try {
-                      this.categories = (await apiFetch("/api/catalog/categories?includeInactive=true")).data || [];
-                    } catch (e) {
-                      this.error = e.message;
+                      const body = await apiFetch('/api/catalog/categories?' + this.query());
+                      this.categories = body.data || [];
+                      applyCursorPagination(this.pagination, body.pagination || {});
+                    } catch (error) {
+                      this.error = error.message;
                     } finally {
                       this.loading = false;
                     }
                   },
+                  search() { resetCursorPagination(this.pagination); this.load(); },
+                  next() { if (cursorNext(this.pagination)) this.load(); },
+                  previous() { if (cursorPrevious(this.pagination)) this.load(); },
                   edit(category) {
                     this.editingId = category.categoryId;
                     this.form = {
-                      name: category.name || "",
-                      slug: category.slug || "",
-                      description: category.description || "",
-                      active: category.active !== false,
+                      name: category.name || '',
+                      slug: category.slug || '',
+                      description: category.description || '',
+                      active: category.active !== false
                     };
-                    this.error = "";
-                    this.success = "";
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    this.error = '';
+                    this.success = '';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   },
                   resetForm() {
-                    this.editingId = "";
-                    this.form = { name: "", slug: "", description: "", active: true };
+                    this.editingId = '';
+                    this.form = { name: '', slug: '', description: '', active: true };
                     this.slugTouched = false;
                   },
                   async save() {
                     this.saving = true;
-                    this.error = "";
-                    this.success = "";
+                    this.error = '';
+                    this.success = '';
                     try {
-                      const url = this.editingId
-                        ? "/api/catalog/categories/" + this.editingId
-                        : "/api/catalog/categories";
+                      const url = this.editingId ? '/api/catalog/categories/' + this.editingId : '/api/catalog/categories';
                       await apiFetch(url, {
-                        method: this.editingId ? "PUT" : "POST",
-                        body: JSON.stringify(this.form),
+                        method: this.editingId ? 'PUT' : 'POST',
+                        body: JSON.stringify(this.form)
                       });
-                      this.success = this.editingId ? "Category updated" : "Category created";
+                      this.success = this.editingId ? 'Category updated' : 'Category created';
                       this.resetForm();
+                      resetCursorPagination(this.pagination);
                       await this.load();
-                    } catch (e) {
-                      this.error = e.message;
+                    } catch (error) {
+                      this.error = error.message;
                     } finally {
                       this.saving = false;
                     }
-                  },
+                  }
                 };
               }
             </script>

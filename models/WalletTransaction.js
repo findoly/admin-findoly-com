@@ -29,7 +29,7 @@ const walletTransactionSchema = new mongoose.Schema(
   },
 );
 
-walletTransactionSchema.index({ providerId: 1, createdAt: -1 });
+walletTransactionSchema.index({ providerId: 1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model(
   "WalletTransaction",

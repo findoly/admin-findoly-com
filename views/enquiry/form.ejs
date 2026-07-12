@@ -28,7 +28,7 @@
                   <div class="row g-3">
                     <div class="col-md-6">
                       <label class="form-label">Customer name</label>
-                      <input class="form-control" x-model="form.name" required />
+                      <input class="form-control" x-model="form.name" maxlength="120" required />
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Mobile</label>
@@ -50,23 +50,23 @@
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Email</label>
-                      <input type="email" class="form-control" x-model="form.email" />
+                      <input type="email" class="form-control" x-model="form.email" maxlength="254" />
                     </div>
                     <div class="col-md-6">
                       <label class="form-label">Address</label>
-                      <input class="form-control" x-model="form.addressLine" />
+                      <input class="form-control" x-model="form.addressLine" maxlength="500" />
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">City</label>
-                      <input class="form-control" x-model="form.city" />
+                      <input class="form-control" x-model="form.city" maxlength="100" />
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">State</label>
-                      <input class="form-control" x-model="form.state" />
+                      <input class="form-control" x-model="form.state" maxlength="100" />
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Pincode</label>
-                      <input class="form-control" x-model="form.pincode" />
+                      <input class="form-control" x-model="form.pincode" @input="form.pincode = String(form.pincode || '').replace(/\D/g, '').slice(0, 6)" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6" />
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Category</label>
@@ -80,11 +80,11 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Service type</label>
-                      <input class="form-control" x-model="form.serviceType" />
+                      <input class="form-control" x-model="form.serviceType" maxlength="120" />
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Requirement title</label>
-                      <input class="form-control" x-model="form.requirementTitle" required />
+                      <input class="form-control" x-model="form.requirementTitle" maxlength="200" required />
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Journey status</label>
@@ -102,7 +102,7 @@
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Lead price (₹)</label>
-                      <input type="number" min="0" step="1" class="form-control" x-model.number="priceRupees" />
+                      <input type="number" min="0" max="10000000" step="0.01" class="form-control" x-model.number="priceRupees" required />
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Preferred date</label>
@@ -110,19 +110,19 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Preferred slot</label>
-                      <input class="form-control" x-model="form.preferredSlot" />
+                      <input class="form-control" x-model="form.preferredSlot" maxlength="100" />
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Source website</label>
-                      <input class="form-control" x-model="form.sourceWebsite" />
+                      <input class="form-control" x-model="form.sourceWebsite" maxlength="120" />
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Source name</label>
-                      <input class="form-control" x-model="form.sourceName" />
+                      <input class="form-control" x-model="form.sourceName" maxlength="120" />
                     </div>
                     <div class="col-12">
                       <label class="form-label">Notes</label>
-                      <textarea class="form-control" rows="3" x-model="form.notes"></textarea>
+                      <textarea class="form-control" rows="3" x-model="form.notes" maxlength="5000"></textarea>
                     </div>
                   </div>
                   <hr />
@@ -133,10 +133,10 @@
                   <template x-for="(item,index) in details" :key="index">
                     <div class="row g-2 mb-2">
                       <div class="col-md-5">
-                        <input class="form-control" placeholder="Field name" x-model="item.key" />
+                        <input class="form-control" placeholder="Field name" x-model="item.key" maxlength="100" />
                       </div>
                       <div class="col-md-6">
-                        <input class="form-control" placeholder="Value" x-model="item.value" />
+                        <input class="form-control" placeholder="Value" x-model="item.value" maxlength="2000" />
                       </div>
                       <div class="col-md-1">
                         <button type="button" class="btn btn-light w-100" @click="details.splice(index,1)">×</button>
@@ -247,6 +247,15 @@
                     try {
                       if (!/^\d{10}$/.test(this.form.mobile)) {
                         throw new Error("Customer mobile number must contain exactly 10 digits");
+                      }
+                      if (this.form.pincode && !/^[1-9]\d{5}$/.test(this.form.pincode)) {
+                        throw new Error("Pincode must contain exactly 6 digits");
+                      }
+                      if (!Number.isFinite(Number(this.priceRupees)) || Number(this.priceRupees) < 0) {
+                        throw new Error("Lead price must be a valid non-negative amount");
+                      }
+                      if (this.details.length > 100) {
+                        throw new Error("Additional details cannot contain more than 100 fields");
                       }
                       const url = this.mode === "edit"
                         ? "/api/enquiry/" + this.recordId

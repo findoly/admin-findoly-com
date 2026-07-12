@@ -13,6 +13,18 @@ const STATUS_ALIASES = Object.freeze({
   closed: "distributed",
 });
 
+const VALID_STATUS_INPUTS = Object.freeze([
+  ...LEAD_JOURNEY,
+  "rejected",
+  ...Object.keys(STATUS_ALIASES),
+]);
+const VALID_ACTIONS = Object.freeze([
+  "next",
+  "previous",
+  "reject",
+  "restore",
+]);
+
 function canonicalLeadStatus(value) {
   const status = String(value || "new").trim().toLowerCase();
   if (status === "rejected") return "rejected";
@@ -24,13 +36,28 @@ function statusError(message) {
   return Object.assign(new Error(message), { status: 400 });
 }
 
+function restoreTarget(metadata = {}) {
+  const candidate = canonicalLeadStatus(metadata.rejectedFromStatus || "new");
+  return LEAD_JOURNEY.includes(candidate) ? candidate : "new";
+}
+
 function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
   const currentStatus = canonicalLeadStatus(currentValue);
   const action = String(input.action || "").trim().toLowerCase();
-  const requestedStatus = input.status
-    ? canonicalLeadStatus(input.status)
+  const rawRequestedStatus = String(input.status || "").trim().toLowerCase();
+  if (action && !VALID_ACTIONS.includes(action)) {
+    throw statusError("Select next, previous, reject or restore");
+  }
+  if (rawRequestedStatus && !VALID_STATUS_INPUTS.includes(rawRequestedStatus)) {
+    throw statusError("Select a valid lead status");
+  }
+  const requestedStatus = rawRequestedStatus
+    ? canonicalLeadStatus(rawRequestedStatus)
     : "";
   const note = String(input.note || input.reason || "").trim();
+  if (note.length > 1000) {
+    throw statusError("Status note must be 1000 characters or less");
+  }
 
   let targetStatus = currentStatus;
   let resolvedAction = action;
@@ -46,7 +73,7 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
     if (currentStatus !== "rejected") {
       throw statusError("Only a rejected lead can be restored");
     }
-    targetStatus = canonicalLeadStatus(metadata.rejectedFromStatus || "new");
+    targetStatus = restoreTarget(metadata);
     resolvedAction = "restore";
   } else if (action === "next") {
     if (currentStatus === "rejected") {
@@ -59,18 +86,22 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
     targetStatus = LEAD_JOURNEY[index + 1];
   } else if (action === "previous") {
     if (currentStatus === "rejected") {
-      targetStatus = canonicalLeadStatus(metadata.rejectedFromStatus || "new");
+      targetStatus = restoreTarget(metadata);
       resolvedAction = "restore";
     } else {
       const index = LEAD_JOURNEY.indexOf(currentStatus);
-      if (index <= 0) throw statusError("Lead is already at the first journey stage");
+      if (index <= 0) {
+        throw statusError("Lead is already at the first journey stage");
+      }
       targetStatus = LEAD_JOURNEY[index - 1];
     }
   } else if (requestedStatus) {
     if (currentStatus === "rejected") {
-      const restoreStatus = canonicalLeadStatus(metadata.rejectedFromStatus || "new");
+      const restoreStatus = restoreTarget(metadata);
       if (requestedStatus !== restoreStatus) {
-        throw statusError("Restore the rejected lead before selecting another stage");
+        throw statusError(
+          "Restore the rejected lead before selecting another stage",
+        );
       }
       targetStatus = restoreStatus;
       resolvedAction = "restore";
@@ -78,7 +109,9 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
       const currentIndex = LEAD_JOURNEY.indexOf(currentStatus);
       const targetIndex = LEAD_JOURNEY.indexOf(requestedStatus);
       if (targetIndex < 0 || Math.abs(targetIndex - currentIndex) !== 1) {
-        throw statusError("Lead status can only move to the next or previous journey stage");
+        throw statusError(
+          "Lead status can only move to the next or previous journey stage",
+        );
       }
       targetStatus = requestedStatus;
       resolvedAction = targetIndex > currentIndex ? "next" : "previous";
@@ -97,6 +130,9 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
 
 module.exports = {
   LEAD_JOURNEY,
+  STATUS_ALIASES,
+  VALID_STATUS_INPUTS,
+  VALID_ACTIONS,
   canonicalLeadStatus,
   resolveLeadStatusTransition,
 };

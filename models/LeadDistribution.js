@@ -8,9 +8,10 @@ const leadDistributionSchema = new mongoose.Schema(
       default: uuid,
       unique: true,
       index: true,
+      immutable: true,
     },
-    enquiryId: { type: String, required: true, index: true },
-    providerId: { type: String, required: true, index: true },
+    enquiryId: { type: String, required: true, index: true, immutable: true },
+    providerId: { type: String, required: true, index: true, immutable: true },
     categorySlug: { type: String, default: "", index: true },
     status: { type: String, default: "offered", index: true },
     leadPricePaise: { type: Number, required: true, min: 0 },
@@ -60,6 +61,8 @@ const leadDistributionSchema = new mongoose.Schema(
 );
 
 leadDistributionSchema.index({ enquiryId: 1, providerId: 1 }, { unique: true });
+leadDistributionSchema.index({ enquiryId: 1, distributedAt: -1, _id: -1 });
+leadDistributionSchema.index({ providerId: 1, distributedAt: -1, _id: -1 });
 
 module.exports = mongoose.model(
   "LeadDistribution",

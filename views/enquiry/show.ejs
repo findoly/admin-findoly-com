@@ -12,29 +12,37 @@
               <div>
                 <div class="crm-page-eyebrow">Lead management</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Review the CRM journey and each provider's progress after distribution.</p>
+                <p class="crm-page-subtitle mb-0">Review the CRM journey and provider progress after distribution.</p>
               </div>
               <a href="/enquiries" class="btn btn-light crm-primary-action"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirements</a>
             </div>
           </div>
+
           <div class="content">
             <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
             <div x-data="leadShow()" x-init="load()" :class="loading && 'crm-loading'">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
+              <div x-show="lead.isActive === false" x-cloak class="alert alert-warning">
+                This lead is deactivated. Its Reference ID and history are preserved, unlocked providers remain accessible, and no new distribution will occur.
+                <span x-show="lead.deactivationReason"> Reason: <strong x-text="lead.deactivationReason"></strong></span>
+              </div>
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
-                <button class="btn btn-primary" @click="syncDistribution()" :disabled="!['approved', 'distributed'].includes(currentStatus)" title="Approve the lead before synchronizing providers">Sync providers</button>
+                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['approved', 'distributed'].includes(currentStatus)" title="Approve and activate the lead before synchronizing providers">Sync providers</button>
+                <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
+                <button x-show="lead.isActive !== false" class="btn btn-outline-danger ms-auto" @click="deactivateLead()" :disabled="stateSaving">Deactivate</button>
+                <button x-show="lead.isActive === false" class="btn btn-primary ms-auto" @click="reactivateLead()" :disabled="stateSaving">Reactivate</button>
               </div>
 
               <div class="card mb-3">
                 <div class="card-header d-flex align-items-center flex-wrap gap-2">
                   <h5 class="mb-0" x-text="lead.requirementTitle || 'Requirement'"></h5>
-                  <span class="badge ms-auto" :class="isRejected ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary'" x-text="humanize(currentStatus)"></span>
+                  <span class="badge ms-auto" :class="lead.isActive === false ? 'bg-warning bg-opacity-10 text-warning' : (isRejected ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary')" x-text="lead.isActive === false ? 'Deactivated' : humanize(currentStatus)"></span>
                 </div>
                 <div class="card-body">
                   <div class="row g-3">
@@ -52,9 +60,7 @@
               </div>
 
               <div class="card mb-3">
-                <div class="card-header">
-                  <h5 class="mb-0">CRM lead journey</h5>
-                </div>
+                <div class="card-header"><h5 class="mb-0">CRM lead journey</h5></div>
                 <div class="card-body">
                   <div class="crm-journey" :class="isRejected && 'crm-journey-rejected'">
                     <template x-for="(step,index) in journeySteps" :key="step">
@@ -101,70 +107,23 @@
 
                   <div class="card">
                     <div class="card-header d-flex align-items-center">
-                      <h5 class="mb-0">Provider offers and journeys</h5>
-                      <span class="badge bg-light text-dark ms-auto" x-text="(lead.distributions || []).length + ' providers'"></span>
+                      <div>
+                        <h5 class="mb-1">Provider status</h5>
+                        <p class="text-muted mb-0">Provider journeys are shown in a separate paginated table for scalable viewing.</p>
+                      </div>
+                      <span class="badge bg-light text-dark ms-auto" x-text="(lead.distributionCount || 0) + ' providers'"></span>
                     </div>
-                    <div class="card-body p-0">
-                      <template x-for="distribution in lead.distributions || []" :key="distribution.leadDistributionId">
-                        <div class="crm-provider-journey-card">
-                          <div class="crm-provider-journey-head">
-                            <div>
-                              <a class="fw-semibold" :href="'/providers/'+distribution.providerId" x-text="distribution.providerName || distribution.providerBusinessName || distribution.providerId"></a>
-                              <div class="text-muted fs-sm" x-text="distribution.providerBusinessName || distribution.providerMobile || ''"></div>
-                            </div>
-                            <div class="text-end">
-                              <span class="badge bg-light text-dark" x-text="humanize(distribution.status)"></span>
-                              <div class="fs-sm text-muted mt-1" x-text="money(distribution.leadPricePaise)"></div>
-                            </div>
-                          </div>
-
-                          <div class="row g-3 mt-1 mb-3">
-                            <div class="col-md-3">
-                              <div class="text-muted fs-sm">Contact</div>
-                              <div class="fw-semibold" x-text="distribution.contactUnlocked ? 'Unlocked' : 'Locked'"></div>
-                            </div>
-                            <div class="col-md-3">
-                              <div class="text-muted fs-sm">Provider status</div>
-                              <div class="fw-semibold" x-text="distribution.providerLeadStatus ? humanize(distribution.providerLeadStatus) : 'Not updated'"></div>
-                            </div>
-                            <div class="col-md-3">
-                              <div class="text-muted fs-sm">Reason</div>
-                              <div class="fw-semibold" x-text="distribution.providerLeadReason ? humanize(distribution.providerLeadReason) : '—'"></div>
-                            </div>
-                            <div class="col-md-3">
-                              <div class="text-muted fs-sm">Last provider update</div>
-                              <div class="fw-semibold" x-text="formatDate(distribution.providerLeadStatusUpdatedAt)"></div>
-                            </div>
-                            <div class="col-12" x-show="distribution.providerLeadNote">
-                              <div class="crm-provider-note"><strong>Provider note:</strong> <span x-text="distribution.providerLeadNote"></span></div>
-                            </div>
-                          </div>
-
-                          <div class="crm-provider-timeline">
-                            <template x-for="event in distribution.providerJourney || []" :key="(event.type || '') + (event.createdAt || '') + (event.status || '')">
-                              <div class="crm-provider-timeline-item">
-                                <span class="crm-provider-timeline-dot"></span>
-                                <div>
-                                  <div class="fw-semibold" x-text="providerEventTitle(event)"></div>
-                                  <div class="text-muted fs-sm" x-show="providerEventDetail(event)" x-text="providerEventDetail(event)"></div>
-                                  <small class="text-muted" x-text="formatDate(event.createdAt) + ' · ' + (event.actor || 'system')"></small>
-                                </div>
-                              </div>
-                            </template>
-                            <div class="text-muted fs-sm" x-show="!(distribution.providerJourney || []).length">No provider journey events</div>
-                          </div>
-                        </div>
-                      </template>
-                      <div class="text-center text-muted py-4" x-show="!(lead.distributions || []).length">No matching provider offers</div>
+                    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                      <div><div class="text-muted fs-sm">Offers</div><div class="fw-semibold fs-5" x-text="lead.distributionCount || 0"></div></div>
+                      <div><div class="text-muted fs-sm">Unlocked</div><div class="fw-semibold fs-5" x-text="lead.unlockedCount || 0"></div></div>
+                      <a class="btn btn-primary ms-auto" :href="providerJourneyUrl">View provider status table</a>
                     </div>
                   </div>
                 </div>
 
                 <div class="col-xl-4">
                   <div class="card mb-3">
-                    <div class="card-header">
-                      <h5 class="mb-0">Update journey status</h5>
-                    </div>
+                    <div class="card-header"><h5 class="mb-0">Update journey status</h5></div>
                     <div class="card-body">
                       <div class="mb-3">
                         <div class="text-muted fs-sm">Current status</div>
@@ -172,23 +131,21 @@
                         <small class="text-muted" x-show="lead.statusUpdatedBy">Last updated by <span x-text="lead.statusUpdatedBy"></span> <span x-show="lead.statusUpdatedAt">on <span x-text="formatDate(lead.statusUpdatedAt)"></span></span></small>
                       </div>
                       <label class="form-label">Reason / note</label>
-                      <textarea class="form-control mb-3" rows="3" x-model="statusNote" placeholder="Required when rejecting; optional for Next or Previous"></textarea>
+                      <textarea class="form-control mb-3" rows="3" x-model="statusNote" maxlength="1000" :disabled="lead.isActive === false" placeholder="Required when rejecting; optional for Next or Previous"></textarea>
                       <div class="d-grid gap-2">
                         <div class="d-flex gap-2">
-                          <button class="btn btn-light flex-fill" @click="changeStatus('previous')" :disabled="statusSaving || !canPrevious" x-text="isRejected ? 'Restore previous' : 'Previous'"></button>
-                          <button class="btn btn-primary flex-fill" @click="changeStatus('next')" :disabled="statusSaving || !canNext">Next</button>
+                          <button class="btn btn-light flex-fill" @click="changeStatus('previous')" :disabled="lead.isActive === false || statusSaving || !canPrevious" x-text="isRejected ? 'Restore previous' : 'Previous'"></button>
+                          <button class="btn btn-primary flex-fill" @click="changeStatus('next')" :disabled="lead.isActive === false || statusSaving || !canNext">Next</button>
                         </div>
-                        <button class="btn btn-outline-danger" @click="changeStatus('reject')" :disabled="statusSaving || isRejected">Reject lead</button>
+                        <button class="btn btn-outline-danger" @click="changeStatus('reject')" :disabled="lead.isActive === false || statusSaving || isRejected">Reject lead</button>
                       </div>
                     </div>
                   </div>
 
                   <div class="card">
-                    <div class="card-header">
-                      <h5 class="mb-0">Add note</h5>
-                    </div>
+                    <div class="card-header"><h5 class="mb-0">Add note</h5></div>
                     <div class="card-body">
-                      <textarea class="form-control mb-2" rows="4" x-model="note"></textarea>
+                      <textarea class="form-control mb-2" rows="4" x-model="note" maxlength="5000"></textarea>
                       <button class="btn btn-light w-100" @click="addNote()">Add note</button>
                     </div>
                   </div>
@@ -201,23 +158,25 @@
                 return {
                   recordId: pathRecordId(),
                   lead: {},
-                  note: "",
-                  statusNote: "",
+                  note: '',
+                  statusNote: '',
                   loading: true,
                   statusSaving: false,
-                  error: "",
-                  success: "",
-                  journeySteps: ["new", "verification", "approved", "distributed"],
+                  stateSaving: false,
+                  error: '',
+                  success: '',
+                  journeySteps: ['new', 'verification', 'approved', 'distributed'],
+                  get providerJourneyUrl() {
+                    return '/enquiries/' + this.recordId + '/providers';
+                  },
                   get currentStatus() {
-                    return this.lead.journeyStatus || this.lead.status || "new";
+                    return this.lead.journeyStatus || this.lead.status || 'new';
                   },
                   get isRejected() {
-                    return this.currentStatus === "rejected";
+                    return this.currentStatus === 'rejected';
                   },
                   get journeyBaseStatus() {
-                    return this.isRejected
-                      ? (this.lead.metadata?.rejectedFromStatus || "new")
-                      : this.currentStatus;
+                    return this.isRejected ? (this.lead.metadata?.rejectedFromStatus || 'new') : this.currentStatus;
                   },
                   get canPrevious() {
                     return this.isRejected || this.journeySteps.indexOf(this.journeyBaseStatus) > 0;
@@ -228,108 +187,119 @@
                   },
                   get summary() {
                     return [
-                      { label: "Lead ID", value: this.lead.enquiryId },
-                      { label: "Customer", value: this.lead.name },
-                      { label: "Mobile", value: this.lead.mobile ? "+91 " + this.lead.mobile : "" },
-                      { label: "Category", value: this.lead.category || humanize(this.lead.categorySlug) },
-                      { label: "City", value: this.lead.city },
-                      { label: "Price", value: money(this.lead.leadPricePaise) },
-                      { label: "Status", value: humanize(this.currentStatus) },
-                      { label: "Status updated by", value: this.lead.statusUpdatedBy || "—" },
-                      { label: "Distribution", value: (this.lead.distributionCount || 0) + " offers" },
-                      { label: "Unlocked", value: (this.lead.unlockedCount || 0) + " providers" },
+                      { label: 'Reference ID', value: this.lead.enquiryId },
+                      { label: 'Record state', value: this.lead.isActive === false ? 'Deactivated' : 'Active' },
+                      { label: 'Customer', value: this.lead.name },
+                      { label: 'Mobile', value: this.lead.mobile ? '+91 ' + this.lead.mobile : '' },
+                      { label: 'Category', value: this.lead.category || humanize(this.lead.categorySlug) },
+                      { label: 'City', value: this.lead.city },
+                      { label: 'Price', value: money(this.lead.leadPricePaise) },
+                      { label: 'Status', value: humanize(this.currentStatus) },
+                      { label: 'Status updated by', value: this.lead.statusUpdatedBy || '—' },
+                      { label: 'Distribution', value: (this.lead.distributionCount || 0) + ' offers' },
+                      { label: 'Unlocked', value: (this.lead.unlockedCount || 0) + ' providers' }
                     ];
                   },
                   get leadTimeline() {
-                    return [...(this.lead.timeline || [])].sort((left, right) => {
-                      return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
-                    });
+                    return [...(this.lead.timeline || [])].sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
                   },
                   stepClass(step) {
                     const stepIndex = this.journeySteps.indexOf(step);
                     const currentIndex = this.journeySteps.indexOf(this.journeyBaseStatus);
                     return {
-                      "is-complete": stepIndex < currentIndex,
-                      "is-current": stepIndex === currentIndex && !this.isRejected,
-                      "is-rejected-stage": stepIndex === currentIndex && this.isRejected,
+                      'is-complete': stepIndex < currentIndex,
+                      'is-current': stepIndex === currentIndex && !this.isRejected,
+                      'is-rejected-stage': stepIndex === currentIndex && this.isRejected
                     };
                   },
                   timelineTitle(event) {
-                    if (event.type === "status_changed") return humanize(event.toStatus || "Status changed");
-                    if (event.type === "created") return "Lead created";
-                    if (event.type === "note") return "Note added";
-                    return humanize(event.type || "Activity");
-                  },
-                  providerEventTitle(event) {
-                    if (event.type === "distributed") return "Lead offered";
-                    if (event.type === "unlocked") return "Contact unlocked";
-                    if (event.status) return "Provider marked " + humanize(event.status);
-                    return event.message || "Provider update";
-                  },
-                  providerEventDetail(event) {
-                    const details = [];
-                    if (event.reason) details.push(humanize(event.reason));
-                    if (event.note) details.push(event.note);
-                    if (!details.length && event.message) details.push(event.message);
-                    return details.join(" — ");
+                    if (event.type === 'status_changed') return humanize(event.toStatus || 'Status changed');
+                    if (event.type === 'created') return 'Lead created';
+                    if (event.type === 'note') return 'Note added';
+                    if (event.type === 'deactivated') return 'Lead deactivated';
+                    if (event.type === 'reactivated') return 'Lead reactivated';
+                    return humanize(event.type || 'Activity');
                   },
                   async load() {
                     this.loading = true;
                     try {
-                      this.lead = (await apiFetch("/api/enquiry/" + this.recordId)).data;
-                    } catch (e) {
-                      this.error = e.message;
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data;
+                    } catch (error) {
+                      this.error = error.message;
                     } finally {
                       this.loading = false;
                     }
                   },
                   async changeStatus(action) {
-                    this.error = "";
-                    this.success = "";
-                    if (action === "reject" && !this.statusNote.trim()) {
-                      this.error = "Enter a rejection reason before rejecting the lead";
+                    this.error = '';
+                    this.success = '';
+                    if (action === 'reject' && !this.statusNote.trim()) {
+                      this.error = 'Enter a rejection reason before rejecting the lead';
                       return;
                     }
                     this.statusSaving = true;
                     try {
-                      this.lead = (
-                        await apiFetch("/api/enquiry/" + this.recordId + "/status", {
-                          method: "POST",
-                          body: JSON.stringify({ action, note: this.statusNote }),
-                        })
-                      ).data;
-                      this.statusNote = "";
-                      this.success = "Lead status updated";
-                    } catch (e) {
-                      this.error = e.message;
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/status', {
+                        method: 'POST',
+                        body: JSON.stringify({ action, note: this.statusNote })
+                      })).data;
+                      this.statusNote = '';
+                      this.success = 'Lead status updated';
+                    } catch (error) {
+                      this.error = error.message;
                     } finally {
                       this.statusSaving = false;
                     }
                   },
                   async addNote() {
                     try {
-                      this.lead = (
-                        await apiFetch("/api/enquiry/" + this.recordId + "/note", {
-                          method: "POST",
-                          body: JSON.stringify({ note: this.note }),
-                        })
-                      ).data;
-                      this.note = "";
-                    } catch (e) {
-                      this.error = e.message;
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/note', {
+                        method: 'POST',
+                        body: JSON.stringify({ note: this.note })
+                      })).data;
+                      this.note = '';
+                    } catch (error) {
+                      this.error = error.message;
                     }
                   },
                   async syncDistribution() {
                     try {
-                      await apiFetch("/api/enquiry/" + this.recordId + "/distribute", {
-                        method: "POST",
-                        body: "{}",
-                      });
+                      await apiFetch('/api/enquiry/' + this.recordId + '/distribute', { method: 'POST', body: '{}' });
                       await this.load();
-                    } catch (e) {
-                      this.error = e.message;
+                      this.success = 'Providers synchronized';
+                    } catch (error) {
+                      this.error = error.message;
                     }
                   },
+                  async deactivateLead() {
+                    const reason = window.prompt('Optional reason for deactivation:', this.lead.deactivationReason || '');
+                    if (reason === null) return;
+                    if (!window.confirm('Deactivate this lead? The lead will be preserved and cannot be deleted.')) return;
+                    this.stateSaving = true;
+                    try {
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/deactivate', {
+                        method: 'POST',
+                        body: JSON.stringify({ reason })
+                      })).data;
+                      this.success = 'Lead deactivated';
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.stateSaving = false;
+                    }
+                  },
+                  async reactivateLead() {
+                    if (!window.confirm('Reactivate this lead? Eligible provider offers may be synchronized again.')) return;
+                    this.stateSaving = true;
+                    try {
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/reactivate', { method: 'POST', body: '{}' })).data;
+                      this.success = 'Lead reactivated';
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.stateSaving = false;
+                    }
+                  }
                 };
               }
             </script>

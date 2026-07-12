@@ -3,12 +3,12 @@ const uuid = require("../utils/uuid");
 
 const providerSchema = new mongoose.Schema(
   {
-    providerId: { type: String, default: uuid, unique: true, index: true },
-    name: { type: String, required: true, trim: true },
-    businessName: { type: String, default: "", trim: true },
-    mobile: { type: String, default: "", trim: true },
-    normalizedMobile: { type: String, default: "", trim: true, index: true },
-    email: { type: String, default: "", trim: true, lowercase: true },
+    providerId: { type: String, default: uuid, unique: true, index: true, immutable: true },
+    name: { type: String, required: true, trim: true, maxlength: 120 },
+    businessName: { type: String, default: "", trim: true, maxlength: 160 },
+    mobile: { type: String, default: "", trim: true, match: /^\d{10}$/ },
+    normalizedMobile: { type: String, default: "", trim: true, index: true, match: /^\d{10}$/ },
+    email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, validate: { validator: (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value), message: "Provider email is invalid" } },
     status: { type: String, default: "active", index: true },
     onboardingStage: { type: String, default: "new" },
     categorySlugs: { type: [String], default: [], index: true },
@@ -17,8 +17,8 @@ const providerSchema = new mongoose.Schema(
     state: { type: String, default: "" },
     serviceAreas: { type: [String], default: [] },
     availability: { type: String, default: "available_today" },
-    rating: { type: Number, default: 0 },
-    notes: { type: String, default: "" },
+    rating: { type: Number, default: 0, min: 0, max: 5 },
+    notes: { type: String, default: "", maxlength: 5000 },
     documentsVerified: { type: Boolean, default: false },
     portalAccessEnabled: { type: Boolean, default: true, index: true },
     walletBalancePaise: { type: Number, default: 0, min: 0 },
@@ -34,5 +34,7 @@ const providerSchema = new mongoose.Schema(
 );
 
 providerSchema.index({ status: 1, portalAccessEnabled: 1, categorySlugs: 1 });
+providerSchema.index({ createdAt: -1, _id: -1 });
+providerSchema.index({ status: 1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model("Provider", providerSchema, "providers");

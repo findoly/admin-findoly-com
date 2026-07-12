@@ -2,14 +2,18 @@ const service = require("../services/catalog/catalog-service");
 
 async function categories(req, res, next) {
   try {
-    res.json({
+    if (String(req.query.paginate) === "true") {
+      const result = await service.listCategoryPage(req.query);
+      return res.json({ success: true, ...result });
+    }
+    return res.json({
       success: true,
       data: await service.listCategories({
         includeInactive: req.query.includeInactive,
       }),
     });
   } catch (e) {
-    next(e);
+    return next(e);
   }
 }
 

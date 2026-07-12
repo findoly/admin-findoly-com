@@ -9,6 +9,14 @@ const frontendController = {
   enquiryCreate: render("enquiry/form", "Create requirement"),
   enquiryEdit: render("enquiry/form", "Edit requirement"),
   enquiryShow: render("enquiry/show", "Requirement details"),
+  enquiryProviderStatuses: render(
+    "enquiry/provider-statuses",
+    "Lead provider statuses",
+  ),
+  enquiryProviderStatusShow: render(
+    "enquiry/provider-status-show",
+    "Provider lead journey",
+  ),
   providers: render("provider/index", "Providers"),
   categories: render("category/index", "Categories"),
   providerCreate: render("provider/form", "Create provider"),

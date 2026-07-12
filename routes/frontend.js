@@ -12,6 +12,26 @@ router.get("/enquiries/new", pageAuth, page.enquiryCreate);
 router.get("/requirements/new", pageAuth, page.enquiryCreate);
 router.get("/enquiries/:enquiryId/edit", pageAuth, page.enquiryEdit);
 router.get("/requirements/:enquiryId/edit", pageAuth, page.enquiryEdit);
+router.get(
+  "/enquiries/:enquiryId/providers/:leadDistributionId",
+  pageAuth,
+  page.enquiryProviderStatusShow,
+);
+router.get(
+  "/requirements/:enquiryId/providers/:leadDistributionId",
+  pageAuth,
+  page.enquiryProviderStatusShow,
+);
+router.get(
+  "/enquiries/:enquiryId/providers",
+  pageAuth,
+  page.enquiryProviderStatuses,
+);
+router.get(
+  "/requirements/:enquiryId/providers",
+  pageAuth,
+  page.enquiryProviderStatuses,
+);
 router.get("/enquiries/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/requirements/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/providers", pageAuth, page.providers);

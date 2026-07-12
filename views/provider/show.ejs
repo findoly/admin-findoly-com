@@ -18,119 +18,87 @@
             </div>
           </div>
           <div class="content">
-            <div
-              x-show="shellError"
-              x-cloak
-              class="alert alert-danger"
-              x-text="shellError"
-            ></div>
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
             <div x-data="providerShow()" x-init="load()">
-              <div
-                x-show="error"
-                class="alert alert-danger"
-                x-text="error"
-              ></div>
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
               <div class="d-flex gap-2 mb-3">
-                <a class="btn btn-light" :href="'/providers/'+recordId+'/edit'"
-                  >Edit</a
-                ><button class="btn btn-primary" @click="sync()">
-                  Sync approved leads
-                </button>
+                <a class="btn btn-light" :href="'/providers/'+recordId+'/edit'">Edit</a>
+                <button class="btn btn-primary" @click="sync()" :disabled="syncing" x-text="syncing ? 'Synchronizing…' : 'Sync approved leads'"></button>
               </div>
               <div class="row g-3">
                 <div class="col-xl-4">
                   <div class="card">
                     <div class="card-body">
                       <h4 x-text="provider.name"></h4>
-                      <div
-                        class="text-muted mb-3"
-                        x-text="provider.businessName"
-                      ></div>
+                      <div class="text-muted mb-3" x-text="provider.businessName"></div>
                       <dl class="row mb-0">
-                        <dt class="col-5">Provider ID</dt>
-                        <dd class="col-7" x-text="provider.providerId"></dd>
-                        <dt class="col-5">Mobile</dt>
-                        <dd class="col-7" x-text="provider.mobile"></dd>
-                        <dt class="col-5">Status</dt>
-                        <dd
-                          class="col-7"
-                          x-text="humanize(provider.status)"
-                        ></dd>
-                        <dt class="col-5">Wallet</dt>
-                        <dd
-                          class="col-7 fw-semibold"
-                          x-text="money(provider.walletBalancePaise)"
-                        ></dd>
-                        <dt class="col-5">Categories</dt>
-                        <dd
-                          class="col-7"
-                          x-text="(provider.categorySlugs||[]).join(', ')"
-                        ></dd>
+                        <dt class="col-5">Provider ID</dt><dd class="col-7" x-text="provider.providerId"></dd>
+                        <dt class="col-5">Mobile</dt><dd class="col-7" x-text="provider.mobile ? '+91 ' + provider.mobile : '—'"></dd>
+                        <dt class="col-5">Status</dt><dd class="col-7" x-text="humanize(provider.status)"></dd>
+                        <dt class="col-5">Wallet</dt><dd class="col-7 fw-semibold" x-text="money(provider.walletBalancePaise)"></dd>
+                        <dt class="col-5">Categories</dt><dd class="col-7" x-text="(provider.categorySlugs||[]).join(', ') || '—'"></dd>
                       </dl>
                     </div>
                   </div>
                 </div>
                 <div class="col-xl-8">
                   <div class="card mb-3">
-                    <div class="card-header">
-                      <h5 class="mb-0">Lead offers</h5>
+                    <div class="card-header d-flex align-items-center">
+                      <div><h5 class="mb-1">Lead offers</h5><p class="text-muted mb-0"><span x-text="offers.length"></span> rows on this page</p></div>
+                      <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="offerPagination.limit" @change="resetOffers()"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
                     </div>
                     <div class="table-responsive">
-                      <table class="table">
-                        <thead>
-                          <tr>
-                            <th>Lead</th>
-                            <th>Status</th>
-                            <th>Price</th>
-                            <th>Date</th>
-                          </tr>
-                        </thead>
+                      <table class="table mb-0">
+                        <thead><tr><th>Lead</th><th>Offer status</th><th>Provider status</th><th>Price</th><th>Date</th></tr></thead>
                         <tbody>
-                          <template
-                            x-for="d in provider.distributions||[]"
-                            :key="d.leadDistributionId"
-                            ><tr>
-                              <td>
-                                <a
-                                  :href="'/enquiries/'+d.enquiryId"
-                                  x-text="d.leadTitle||d.enquiryId"
-                                ></a>
-                              </td>
+                          <template x-if="offerLoading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-for="d in offers" :key="d.leadDistributionId">
+                            <tr>
+                              <td><a :href="'/enquiries/'+d.enquiryId" x-text="d.leadTitle||d.enquiryId"></a></td>
                               <td x-text="humanize(d.status)"></td>
+                              <td x-text="d.providerLeadStatus ? humanize(d.providerLeadStatus) : 'Not updated'"></td>
                               <td x-text="money(d.leadPricePaise)"></td>
-                              <td x-text="formatDate(d.distributedAt)"></td></tr
-                          ></template>
+                              <td x-text="formatDate(d.distributedAt)"></td>
+                            </tr>
+                          </template>
+                          <tr x-show="!offerLoading && !offers.length"><td colspan="5" class="text-center text-muted py-4">No lead offers</td></tr>
                         </tbody>
                       </table>
                     </div>
+                    <div class="crm-table-footer">
+                      <div class="text-muted">Page <strong x-text="offerPagination.page"></strong></div>
+                      <div class="crm-pagination"><button :disabled="offerPagination.page <= 1 || offerLoading" @click="previousOffers()">Previous</button><span x-text="offerPagination.page"></span><button :disabled="!offerPagination.hasNext || offerLoading" @click="nextOffers()">Next</button></div>
+                    </div>
                   </div>
+
                   <div class="card">
-                    <div class="card-header">
-                      <h5 class="mb-0">Wallet transactions</h5>
+                    <div class="card-header d-flex align-items-center">
+                      <div><h5 class="mb-1">Wallet transactions</h5><p class="text-muted mb-0"><span x-text="transactions.length"></span> rows on this page</p></div>
+                      <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="transactionPagination.limit" @change="resetTransactions()"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
                     </div>
                     <div class="table-responsive">
-                      <table class="table">
-                        <thead>
-                          <tr>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Balance</th>
-                            <th>Date</th>
-                          </tr>
-                        </thead>
+                      <table class="table mb-0">
+                        <thead><tr><th>Type</th><th>Amount</th><th>Balance</th><th>Source</th><th>Date</th></tr></thead>
                         <tbody>
-                          <template
-                            x-for="t in provider.transactions||[]"
-                            :key="t.walletTransactionId"
-                            ><tr>
+                          <template x-if="transactionLoading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-for="t in transactions" :key="t.walletTransactionId">
+                            <tr>
                               <td x-text="humanize(t.type)"></td>
                               <td x-text="money(t.amountPaise)"></td>
                               <td x-text="money(t.balanceAfterPaise)"></td>
-                              <td x-text="formatDate(t.createdAt)"></td></tr
-                          ></template>
+                              <td x-text="humanize(t.source)"></td>
+                              <td x-text="formatDate(t.createdAt)"></td>
+                            </tr>
+                          </template>
+                          <tr x-show="!transactionLoading && !transactions.length"><td colspan="5" class="text-center text-muted py-4">No wallet transactions</td></tr>
                         </tbody>
                       </table>
+                    </div>
+                    <div class="crm-table-footer">
+                      <div class="text-muted">Page <strong x-text="transactionPagination.page"></strong></div>
+                      <div class="crm-pagination"><button :disabled="transactionPagination.page <= 1 || transactionLoading" @click="previousTransactions()">Previous</button><span x-text="transactionPagination.page"></span><button :disabled="!transactionPagination.hasNext || transactionLoading" @click="nextTransactions()">Next</button></div>
                     </div>
                   </div>
                 </div>
@@ -141,27 +109,72 @@
                 return {
                   recordId: pathRecordId(),
                   provider: {},
-                  error: "",
+                  offers: [],
+                  transactions: [],
+                  offerPagination: createCursorPagination(10),
+                  transactionPagination: createCursorPagination(10),
+                  offerLoading: false,
+                  transactionLoading: false,
+                  syncing: false,
+                  error: '',
+                  success: '',
                   async load() {
                     try {
-                      this.provider = (
-                        await apiFetch("/api/provider/" + this.recordId)
-                      ).data;
-                    } catch (e) {
-                      this.error = e.message;
+                      this.provider = (await apiFetch('/api/provider/' + this.recordId)).data;
+                      await Promise.all([this.loadOffers(), this.loadTransactions()]);
+                    } catch (error) {
+                      this.error = error.message;
                     }
                   },
-                  async sync() {
+                  async loadOffers() {
+                    this.offerLoading = true;
                     try {
-                      await apiFetch(
-                        "/api/provider/" + this.recordId + "/sync",
-                        { method: "POST", body: "{}" },
-                      );
-                      await this.load();
-                    } catch (e) {
-                      this.error = e.message;
+                      const query = new URLSearchParams({ limit: this.offerPagination.limit, cursor: this.offerPagination.cursor });
+                      if (!this.offerPagination.cursor) query.delete('cursor');
+                      const body = await apiFetch('/api/provider/' + this.recordId + '/distributions?' + query.toString());
+                      this.offers = body.data || [];
+                      applyCursorPagination(this.offerPagination, body.pagination || {});
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.offerLoading = false;
                     }
                   },
+                  async loadTransactions() {
+                    this.transactionLoading = true;
+                    try {
+                      const query = new URLSearchParams({ limit: this.transactionPagination.limit, cursor: this.transactionPagination.cursor });
+                      if (!this.transactionPagination.cursor) query.delete('cursor');
+                      const body = await apiFetch('/api/provider/' + this.recordId + '/transactions?' + query.toString());
+                      this.transactions = body.data || [];
+                      applyCursorPagination(this.transactionPagination, body.pagination || {});
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.transactionLoading = false;
+                    }
+                  },
+                  resetOffers() { resetCursorPagination(this.offerPagination); this.loadOffers(); },
+                  resetTransactions() { resetCursorPagination(this.transactionPagination); this.loadTransactions(); },
+                  nextOffers() { if (cursorNext(this.offerPagination)) this.loadOffers(); },
+                  previousOffers() { if (cursorPrevious(this.offerPagination)) this.loadOffers(); },
+                  nextTransactions() { if (cursorNext(this.transactionPagination)) this.loadTransactions(); },
+                  previousTransactions() { if (cursorPrevious(this.transactionPagination)) this.loadTransactions(); },
+                  async sync() {
+                    this.syncing = true;
+                    this.error = '';
+                    this.success = '';
+                    try {
+                      await apiFetch('/api/provider/' + this.recordId + '/sync', { method: 'POST', body: '{}' });
+                      resetCursorPagination(this.offerPagination);
+                      await this.loadOffers();
+                      this.success = 'Approved leads synchronized';
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.syncing = false;
+                    }
+                  }
                 };
               }
             </script>

@@ -38,18 +38,20 @@
                       ><input
                         class="form-control"
                         x-model="form.title"
+                        maxlength="200"
                         required
                       />
                     </div>
                     <div class="col-md-6">
                       <label class="form-label">Requirement ID</label
-                      ><input class="form-control" x-model="form.enquiryId" />
+                      ><input class="form-control" x-model="form.enquiryId" maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9_:-]*" />
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Customer</label
                       ><input
                         class="form-control"
                         x-model="form.customerName"
+                        maxlength="120"
                       />
                     </div>
                     <div class="col-md-4">
@@ -83,6 +85,7 @@
                       ><textarea
                         class="form-control"
                         x-model="form.notes"
+                        maxlength="5000"
                       ></textarea>
                     </div>
                   </div>

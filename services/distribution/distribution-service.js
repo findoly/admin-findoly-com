@@ -1,24 +1,49 @@
 const LeadDistribution = require("../../models/LeadDistribution");
-const { getPagination, pageResult } = require("../../utils/pagination");
+const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const {
+  identifierValue,
+  enumValue,
+  tokenValue,
+} = require("../../utils/validation");
+
+const DISTRIBUTION_STATUSES = Object.freeze([
+  "offered",
+  "unlocked",
+  "withdrawn",
+  "expired",
+]);
 
 async function list(filters = {}) {
-  const { page, limit, skip } = getPagination(filters);
+  const { limit, cursor } = getPagination(filters);
   const query = {};
-  if (filters.providerId) query.providerId = filters.providerId;
-  if (filters.enquiryId) query.enquiryId = filters.enquiryId;
-  if (filters.status) query.status = filters.status;
-  if (filters.categorySlug) query.categorySlug = filters.categorySlug;
+  if (filters.providerId) {
+    query.providerId = identifierValue(filters.providerId, {
+      label: "Provider ID filter",
+    });
+  }
+  if (filters.enquiryId) {
+    query.enquiryId = identifierValue(filters.enquiryId, {
+      label: "Requirement ID filter",
+    });
+  }
+  if (filters.status) {
+    query.status = enumValue(filters.status, DISTRIBUTION_STATUSES, {
+      label: "Distribution status filter",
+    });
+  }
+  if (filters.categorySlug) {
+    query.categorySlug = tokenValue(filters.categorySlug, {
+      label: "Category filter",
+      maxLength: 80,
+    });
+  }
 
-  const [rows, total] = await Promise.all([
-    LeadDistribution.find(query)
-      .sort({ distributedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    LeadDistribution.countDocuments(query),
-  ]);
-
-  return pageResult(rows, total, page, limit);
+  return cursorPaginate(LeadDistribution, {
+    query,
+    sort: { distributedAt: -1, _id: -1 },
+    limit,
+    cursor,
+  });
 }
 
-module.exports = { list };
+module.exports = { list, DISTRIBUTION_STATUSES };

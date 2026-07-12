@@ -28,6 +28,7 @@
                       class="form-control"
                       type="email"
                       x-model="form.email"
+                      maxlength="254"
                       required
                     />
                   </div>
@@ -37,6 +38,7 @@
                       class="form-control"
                       type="password"
                       x-model="form.password"
+                      maxlength="500"
                       required
                     />
                   </div>
@@ -51,14 +53,19 @@
       </div>
     </div>
     <script>
+      function safeReturnTo(value) {
+        const target = String(value || "/dashboard");
+        return target.startsWith("/") && !target.startsWith("//")
+          ? target
+          : "/dashboard";
+      }
+
       function loginPage() {
         return {
           form: { email: "admin@example.com", password: "change-me" },
           loading: false,
           error: "",
-          returnTo:
-            new URLSearchParams(location.search).get("returnTo") ||
-            "/dashboard",
+          returnTo: safeReturnTo(new URLSearchParams(location.search).get("returnTo")),
           async submit() {
             this.loading = true;
             this.error = "";

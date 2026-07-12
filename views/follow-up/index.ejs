@@ -9,103 +9,46 @@
         <div class="content-inner">
           <div class="page-header page-header-light crm-page-header">
             <div class="page-header-content crm-page-heading">
-              <div>
-                <div class="crm-page-eyebrow">Operations</div>
-                <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Manage scheduled customer and provider follow-ups.</p>
-              </div>
+              <div><div class="crm-page-eyebrow">Operations</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Manage scheduled customer and provider follow-ups.</p></div>
               <a href="/follow-ups/new" class="btn btn-primary crm-primary-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New follow-up</a>
             </div>
           </div>
           <div class="content">
-            <div
-              x-show="shellError"
-              x-cloak
-              class="alert alert-danger"
-              x-text="shellError"
-            ></div>
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
             <div x-data="listPage()" x-init="load()">
-              <div class="d-flex gap-2 mb-3">
-                <input
-                  class="form-control"
-                  style="max-width: 360px"
-                  x-model="q"
-                  @keyup.enter="load"
-                  placeholder="Search follow-ups"
-                /><select
-                  class="form-select"
-                  style="max-width: 180px"
-                  x-model="status"
-                  @change="load"
-                >
-                  <option value="">All statuses</option>
-                  <option>open</option>
-                  <option>pending</option>
-                  <option>completed</option>
-                  <option>cancelled</option></select
-                ><a href="/follow-ups/new" class="btn btn-primary ms-auto"
-                  >New follow-up</a
-                >
-              </div>
-              <div class="card">
-                <div class="table-responsive">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Lead</th>
-                        <th>Due</th>
-                        <th>Channel</th>
-                        <th>Status</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template x-for="r in rows" :key="r.followUpId"
-                        ><tr>
-                          <td>
-                            <div class="fw-semibold" x-text="r.title"></div>
-                            <div
-                              class="text-muted fs-sm"
-                              x-text="r.customerName"
-                            ></div>
-                          </td>
-                          <td>
-                            <a
-                              :href="'/enquiries/'+r.enquiryId"
-                              x-text="r.enquiryId||'—'"
-                            ></a>
-                          </td>
-                          <td x-text="r.dueAt||'—'"></td>
-                          <td x-text="humanize(r.channel)"></td>
-                          <td x-text="humanize(r.status)"></td>
-                          <td>
-                            <a
-                              class="btn btn-light btn-sm"
-                              :href="'/follow-ups/'+r.followUpId+'/edit'"
-                              >Edit</a
-                            >
-                          </td>
-                        </tr></template
-                      >
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <section class="card crm-filter-card mb-3">
+                <form class="crm-filter-bar" @submit.prevent="search()">
+                  <label class="crm-search-control"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" placeholder="Search follow-ups"></label>
+                  <select class="form-select" style="max-width:180px" x-model="status"><option value="">All statuses</option><option>open</option><option>pending</option><option>completed</option><option>cancelled</option></select>
+                  <button class="btn btn-primary" type="submit">Search</button>
+                  <button class="btn btn-light" type="button" x-show="q || status" @click="reset()">Clear</button>
+                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                </form>
+              </section>
+              <section class="card crm-data-card">
+                <div class="card-header crm-card-heading"><div><h5 class="mb-1">Follow-up list</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> rows on this page</p></div></div>
+                <div class="table-responsive"><table class="table mb-0">
+                  <thead><tr><th>Title</th><th>Lead</th><th>Due</th><th>Channel</th><th>Status</th><th></th></tr></thead>
+                  <tbody>
+                    <template x-if="loading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                    <template x-for="r in rows" :key="r.followUpId"><tr><td><div class="fw-semibold" x-text="r.title"></div><div class="text-muted fs-sm" x-text="r.customerName"></div></td><td><a :href="'/enquiries/'+r.enquiryId" x-text="r.enquiryId||'—'"></a></td><td x-text="r.dueAt||'—'"></td><td x-text="humanize(r.channel)"></td><td x-text="humanize(r.status)"></td><td><a class="btn btn-light btn-sm" :href="'/follow-ups/'+r.followUpId+'/edit'">Edit</a></td></tr></template>
+                    <tr x-show="!loading && !rows.length"><td colspan="6" class="text-center text-muted py-4">No follow-ups found</td></tr>
+                  </tbody>
+                </table></div>
+                <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+              </section>
             </div>
             <script>
               function listPage() {
                 return {
-                  rows: [],
-                  q: "",
-                  status: "",
-                  async load() {
-                    const b = await apiFetch(
-                      "/api/follow-up?" +
-                        new URLSearchParams({ q: this.q, status: this.status }),
-                    );
-                    this.rows = b.data;
-                  },
+                  rows: [], q: '', status: '', pagination: createCursorPagination(20), loading: false, error: '',
+                  query() { const q = new URLSearchParams({ q: this.q, status: this.status, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...q].forEach(([k,v]) => { if (!v) q.delete(k); }); return q.toString(); },
+                  async load() { this.loading = true; this.error = ''; try { const b = await apiFetch('/api/follow-up?' + this.query()); this.rows = b.data || []; applyCursorPagination(this.pagination, b.pagination || {}); } catch (e) { this.error = e.message; } finally { this.loading = false; } },
+                  search() { resetCursorPagination(this.pagination); this.load(); },
+                  reset() { this.q = ''; this.status = ''; this.search(); },
+                  next() { if (cursorNext(this.pagination)) this.load(); },
+                  previous() { if (cursorPrevious(this.pagination)) this.load(); }
                 };
               }
             </script>

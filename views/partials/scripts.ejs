@@ -62,22 +62,31 @@
   }
 
   function money(paise) {
+    const amount = Number(paise);
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 2
-    }).format(Number(paise || 0) / 100);
+    }).format(Number.isFinite(amount) ? amount / 100 : 0);
+  }
+
+  function safeDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
   }
 
   function formatDate(value) {
-    return value
-      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+    const date = safeDate(value);
+    return date
+      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
       : '—';
   }
 
   function formatDateOnly(value) {
-    return value
-      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value))
+    const date = safeDate(value);
+    return date
+      ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(date)
       : '—';
   }
 
@@ -87,6 +96,53 @@
 
   function statusClass(value) {
     return 'status-' + String(value || 'unknown').toLowerCase().replace(/_/g, '-');
+  }
+
+  function createCursorPagination(limit = 20) {
+    return {
+      limit,
+      page: 1,
+      cursor: '',
+      nextCursor: '',
+      hasNext: false,
+      returned: 0,
+      history: []
+    };
+  }
+
+  function resetCursorPagination(pagination) {
+    pagination.page = 1;
+    pagination.cursor = '';
+    pagination.nextCursor = '';
+    pagination.hasNext = false;
+    pagination.returned = 0;
+    pagination.history = [];
+  }
+
+  function applyCursorPagination(pagination, response = {}) {
+    const requestedLimit = Number(response.limit || pagination.limit || 20);
+    pagination.limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+      ? Math.min(100, requestedLimit)
+      : 20;
+    pagination.nextCursor = typeof response.nextCursor === 'string' ? response.nextCursor : '';
+    pagination.hasNext = Boolean(response.hasNext && pagination.nextCursor);
+    const returned = Number(response.returned || 0);
+    pagination.returned = Number.isFinite(returned) && returned >= 0 ? returned : 0;
+  }
+
+  function cursorNext(pagination) {
+    if (!pagination.hasNext || !pagination.nextCursor) return false;
+    pagination.history.push(pagination.cursor || '');
+    pagination.cursor = pagination.nextCursor;
+    pagination.page += 1;
+    return true;
+  }
+
+  function cursorPrevious(pagination) {
+    if (pagination.page <= 1 || !pagination.history.length) return false;
+    pagination.cursor = pagination.history.pop() || '';
+    pagination.page -= 1;
+    return true;
   }
 
   function crmShell() {

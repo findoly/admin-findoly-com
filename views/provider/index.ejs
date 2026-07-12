@@ -33,13 +33,13 @@
                   <label class="crm-inline-select"><span>Status</span><select x-model="filters.status"><option value="">All providers</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></label>
                   <button type="submit" class="btn btn-primary">Search</button>
                   <button type="button" class="btn btn-light" x-show="filters.q || filters.status" @click="reset()">Clear</button>
-                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label>
+                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
                 </form>
               </section>
 
               <section class="card crm-data-card">
                 <div class="card-header crm-card-heading crm-list-heading">
-                  <div><h2 class="card-title mb-1">Provider directory</h2><p class="text-muted mb-0"><span x-text="pagination.total"></span> provider records</p></div>
+                  <div><h2 class="card-title mb-1">Provider directory</h2><p class="text-muted mb-0"><span x-text="rows.length"></span> provider records on this page</p></div>
                   <span class="crm-list-refresh" x-show="loading"><span></span>Refreshing</span>
                 </div>
 
@@ -53,7 +53,7 @@
                           <td>
                             <div class="crm-provider-cell"><span class="crm-provider-avatar" x-text="(provider.name || 'P').charAt(0).toUpperCase()"></span><div><a class="crm-record-title" :href="'/providers/' + recordId(provider, 'providerId')" x-text="provider.name || 'Unnamed provider'"></a><div class="text-muted fs-sm" x-text="provider.businessName || recordId(provider, 'providerId')"></div></div></div>
                           </td>
-                          <td><div class="fw-semibold" x-text="provider.mobile || '—'"></div><div class="text-muted fs-sm" x-text="provider.email || 'No email'"></div></td>
+                          <td><div class="fw-semibold" x-text="provider.mobile ? '+91 ' + provider.mobile : '—'"></div><div class="text-muted fs-sm" x-text="provider.email || 'No email'"></div></td>
                           <td><div class="crm-category-tags"><template x-for="category in (provider.categorySlugs || []).slice(0, 3)" :key="category"><span x-text="humanize(category)"></span></template><span x-show="!(provider.categorySlugs || []).length">No category</span></div><div class="text-muted fs-sm mt-1" x-text="[provider.city, provider.state].filter(Boolean).join(', ') || 'No service city'"></div></td>
                           <td><span class="crm-status" :class="statusClass(provider.status)" x-text="humanize(provider.status)"></span><div class="crm-access-line" :class="provider.portalAccessEnabled === false ? 'is-off' : 'is-on'"><span></span><b x-text="provider.portalAccessEnabled === false ? 'Portal disabled' : 'Portal enabled'"></b></div></td>
                           <td class="text-end"><div class="fw-semibold" x-text="money(provider.walletBalancePaise)"></div><div class="text-muted fs-sm">INR balance</div></td>
@@ -66,8 +66,8 @@
                 </div>
 
                 <div class="crm-table-footer">
-                  <div class="text-muted">Page <strong x-text="pagination.page"></strong> of <strong x-text="pagination.pages"></strong></div>
-                  <div class="crm-pagination"><button type="button" :disabled="pagination.page <= 1 || loading" @click="go(pagination.page - 1)">Previous</button><span x-text="pagination.page"></span><button type="button" :disabled="pagination.page >= pagination.pages || loading" @click="go(pagination.page + 1)">Next</button></div>
+                  <div class="text-muted">Page <strong x-text="pagination.page"></strong> · <span x-text="rows.length"></span> rows</div>
+                  <div class="crm-pagination"><button type="button" :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button type="button" :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div>
                 </div>
               </section>
             </main>
@@ -82,27 +82,31 @@
         return {
           rows: [],
           filters: { q: '', status: '' },
-          pagination: { page: 1, pages: 1, total: 0, limit: 20 },
+          pagination: createCursorPagination(20),
           loading: false,
           error: '',
+          query() {
+            const query = new URLSearchParams({ ...this.filters, limit: this.pagination.limit, cursor: this.pagination.cursor });
+            [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
+            return query.toString();
+          },
           async load() {
             this.loading = true;
             this.error = '';
             try {
-              const query = new URLSearchParams({ ...this.filters, page: this.pagination.page, limit: this.pagination.limit });
-              [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
-              const body = await apiFetch('/api/provider?' + query.toString());
+              const body = await apiFetch('/api/provider?' + this.query());
               this.rows = body.data || [];
-              this.pagination = { ...this.pagination, ...(body.pagination || {}) };
+              applyCursorPagination(this.pagination, body.pagination || {});
             } catch (error) {
               this.error = error.message;
             } finally {
               this.loading = false;
             }
           },
-          search() { this.pagination.page = 1; this.load(); },
+          search() { resetCursorPagination(this.pagination); this.load(); },
           reset() { this.filters = { q: '', status: '' }; this.search(); },
-          go(page) { this.pagination.page = page; this.load(); }
+          next() { if (cursorNext(this.pagination)) this.load(); },
+          previous() { if (cursorPrevious(this.pagination)) this.load(); }
         };
       }
     </script>

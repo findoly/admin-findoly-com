@@ -1,6 +1,15 @@
 const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const {
+  textValue,
+  tokenValue,
+  booleanValue,
+  queryTextValue,
+  identifierValue,
+  validationError,
+} = require("../../utils/validation");
 
 function slugify(value) {
   return String(value || "")
@@ -11,7 +20,8 @@ function slugify(value) {
 }
 
 function categoryQuery(categoryId) {
-  return { $or: [{ categoryId }, { id: categoryId }] };
+  const value = identifierValue(categoryId, { label: "Category ID" });
+  return { $or: [{ categoryId: value }, { id: value }] };
 }
 
 function presentCategory(row = {}) {
@@ -21,9 +31,45 @@ function presentCategory(row = {}) {
   };
 }
 
+function normalizeCategoryInput(input = {}, current = null) {
+  const existing = current || {};
+  const name = textValue(input.name ?? existing.name, {
+    label: "Category name",
+    required: true,
+    maxLength: 120,
+  });
+  const requestedSlug = input.slug ?? existing.slug ?? slugify(name);
+  const slug = tokenValue(requestedSlug, {
+    label: "Category slug",
+    required: true,
+    maxLength: 80,
+    lowercase: true,
+  });
+  if (current && input.slug !== undefined && slug !== existing.slug) {
+    throw validationError(
+      "Category slug cannot be changed because leads and providers use it for matching",
+    );
+  }
+
+  return {
+    name,
+    slug,
+    description: textValue(input.description ?? existing.description, {
+      label: "Category description",
+      maxLength: 2000,
+    }),
+    active: booleanValue(input.active, {
+      label: "Category active state",
+      fallback: existing.active !== false,
+    }),
+  };
+}
+
 async function listCategories(options = {}) {
-  const includeInactive =
-    options.includeInactive === true || String(options.includeInactive) === "true";
+  const includeInactive = booleanValue(options.includeInactive, {
+    label: "Include inactive",
+    fallback: false,
+  });
   const allSaved = await Category.find({}).sort({ name: 1 }).lean();
   const managedSlugs = new Set(allSaved.map((category) => category.slug));
   const saved = includeInactive
@@ -59,17 +105,35 @@ async function listCategories(options = {}) {
   );
 }
 
-async function createCategory(input = {}) {
-  const name = String(input.name || "").trim();
-  const slug = slugify(input.slug || name);
-  if (!name) {
-    throw Object.assign(new Error("Category name is required"), { status: 400 });
+async function listCategoryPage(options = {}) {
+  const { limit, cursor } = getPagination(options);
+  const query = {};
+  const includeInactive = booleanValue(options.includeInactive, {
+    label: "Include inactive",
+    fallback: false,
+  });
+  if (!includeInactive) query.active = { $ne: false };
+  const q = queryTextValue(options.q, {
+    label: "Category search",
+    maxLength: 100,
+  });
+  if (q) {
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const search = new RegExp(escaped, "i");
+    query.$or = [{ name: search }, { slug: search }, { description: search }];
   }
-  if (!slug) {
-    throw Object.assign(new Error("Category slug is required"), { status: 400 });
-  }
+  const result = await cursorPaginate(Category, {
+    query,
+    sort: { name: 1, _id: 1 },
+    limit,
+    cursor,
+  });
+  return { ...result, data: result.data.map(presentCategory) };
+}
 
-  const existing = await Category.findOne({ slug }).lean();
+async function createCategory(input = {}) {
+  const data = normalizeCategoryInput(input);
+  const existing = await Category.findOne({ slug: data.slug }).lean();
   if (existing) {
     throw Object.assign(new Error("A category with this slug already exists"), {
       status: 409,
@@ -78,12 +142,9 @@ async function createCategory(input = {}) {
 
   try {
     const category = await Category.create({
-      name,
-      slug,
-      description: String(input.description || "").trim(),
+      ...data,
       sourceWebsite: "any",
       formType: "default",
-      active: input.active !== false,
     });
     return presentCategory(category.toObject());
   } catch (error) {
@@ -97,33 +158,31 @@ async function createCategory(input = {}) {
 }
 
 async function updateCategory(categoryId, input = {}) {
-  const existing = await Category.findOne(categoryQuery(categoryId)).lean();
+  const query = categoryQuery(categoryId);
+  const existing = await Category.findOne(query).lean();
   if (!existing) {
     throw Object.assign(new Error("Category not found"), { status: 404 });
   }
+  const data = normalizeCategoryInput(input, existing);
 
-  const name = String(input.name ?? existing.name).trim();
-  if (!name) {
-    throw Object.assign(new Error("Category name is required"), { status: 400 });
-  }
-
-  await Category.updateOne(categoryQuery(categoryId), {
+  await Category.updateOne(query, {
     $set: {
-      name,
-      description: String(input.description ?? existing.description ?? "").trim(),
-      active:
-        input.active === undefined ? existing.active !== false : Boolean(input.active),
+      name: data.name,
+      description: data.description,
+      active: data.active,
       updatedAt: new Date(),
     },
   });
 
-  const updated = await Category.findOne(categoryQuery(categoryId)).lean();
+  const updated = await Category.findOne(query).lean();
   return presentCategory(updated);
 }
 
 module.exports = {
   listCategories,
+  listCategoryPage,
   createCategory,
   updateCategory,
   slugify,
+  normalizeCategoryInput,
 };
