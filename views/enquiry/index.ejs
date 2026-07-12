@@ -45,6 +45,8 @@
                     <label><span>Status</span><select x-model="filters.status"><option value="">All statuses</option><template x-for="s in statuses" :key="s"><option :value="s" x-text="humanize(s)"></option></template></select></label>
                     <label><span>Record state</span><select x-model="filters.active"><option value="">Active and deactivated</option><option value="active">Active</option><option value="deactivated">Deactivated</option></select></label>
                     <label><span>Category</span><select x-model="filters.categorySlug"><option value="">All categories</option><template x-for="c in categories" :key="c.slug"><option :value="c.slug" x-text="c.name"></option></template></select></label>
+                    <label><span>Source</span><select x-model="filters.sourceChannel"><option value="">All sources</option><option value="admin">CRM admin</option><option value="agent">Agent Portal</option></select></label>
+                    <label><span>Referral ID</span><input type="text" maxlength="6" x-model="filters.referralId" @input="filters.referralId = String(filters.referralId || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)" placeholder="A7K2P9"></label>
                     <label><span>From date</span><input type="date" x-model="filters.startDate"></label>
                     <label><span>To date</span><input type="date" x-model="filters.endDate"></label>
                     <button type="submit" class="btn btn-primary align-self-end">Apply filters</button>
@@ -83,6 +85,7 @@
                           <td>
                             <a class="crm-record-title" :href="'/enquiries/' + recordId(lead, 'enquiryId')" x-text="lead.requirementTitle || lead.serviceType || 'Customer requirement'"></a>
                             <div class="crm-record-id" x-text="recordId(lead, 'enquiryId')"></div>
+                            <div class="text-muted fs-sm mt-1" x-show="lead.referralId"><span class="fw-semibold">Agent</span> · <span x-text="lead.referralId"></span> · <span x-text="lead.agentBusinessName || lead.agentName || 'Agent Portal'"></span></div>
                             <div class="crm-mobile-meta d-lg-none" x-text="leadName(lead) + ' · ' + leadMobile(lead)"></div>
                           </td>
                           <td class="crm-hide-mobile"><div class="fw-semibold" x-text="leadName(lead)"></div><div class="text-muted fs-sm" x-text="leadMobile(lead)"></div></td>
@@ -134,14 +137,16 @@
             active: params.get('active') || '',
             categorySlug: params.get('categorySlug') || '',
             startDate: params.get('startDate') || '',
-            endDate: params.get('endDate') || ''
+            endDate: params.get('endDate') || '',
+            sourceChannel: params.get('sourceChannel') || '',
+            referralId: params.get('referralId') || ''
           },
           pagination: createCursorPagination(20),
           loading: false,
           error: '',
           showFilters: false,
           get activeFilterCount() {
-            return ['status','active','categorySlug','startDate','endDate'].filter((key) => this.filters[key]).length;
+            return ['status','active','categorySlug','sourceChannel','referralId','startDate','endDate'].filter((key) => this.filters[key]).length;
           },
           async init() {
             this.showFilters = this.activeFilterCount > 0;
@@ -177,7 +182,7 @@
           },
           search() { resetCursorPagination(this.pagination); this.load(); },
           reset() {
-            this.filters = { q: '', status: '', active: '', categorySlug: '', startDate: '', endDate: '' };
+            this.filters = { q: '', status: '', active: '', categorySlug: '', startDate: '', endDate: '', sourceChannel: '', referralId: '' };
             this.showFilters = false;
             history.replaceState({}, '', location.pathname);
             this.search();

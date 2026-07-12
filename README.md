@@ -153,3 +153,13 @@ The CRM frontend keeps the Alpine.js + JSON API separation while restoring the p
 - provider directory with category, access and wallet summaries
 - loading, empty and pagination states
 - compatibility display IDs for legacy records that still use `id`
+
+## Agent Portal integration
+
+The CRM now includes minimal agent management at `/agents`:
+
+- CRM administrators create individual or shop agents.
+- Each agent receives one immutable 32-character `agentId` and one immutable 6-character uppercase alphanumeric `referralId`.
+- Each agent is assigned exactly one active category and an OTP login mobile number.
+- Agent-submitted requirements are written to the shared `enquiries` collection with a denormalized agent snapshot and customer-mobile OTP verification fields.
+- CRM lists and details render through Alpine.js JSON API calls. No Mongoose `populate()` or MongoDB `$lookup` is used.

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Agent account</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">OTP login uses the mobile number below. Each agent can submit for one assigned category.</p></div><a href="/agents" class="btn btn-light crm-primary-action">Back to agents</a></div></div>
+      <div class="content"><div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-data="agentForm()" x-init="init()"><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><form class="card" @submit.prevent="save()"><div class="card-body" :class="loading && 'crm-loading'"><div class="row g-3">
+        <div class="col-md-3"><label class="form-label">Agent type</label><select class="form-select" x-model="form.agentType"><option value="individual">Individual</option><option value="shop">Shop</option></select></div>
+        <div class="col-md-5"><label class="form-label">Agent / contact name</label><input class="form-control" x-model="form.name" maxlength="120" required></div>
+        <div class="col-md-4"><label class="form-label">Business or shop name</label><input class="form-control" x-model="form.businessName" maxlength="160" :required="form.agentType==='shop'"></div>
+        <div class="col-md-4"><label class="form-label">Mobile for OTP login</label><div class="input-group"><span class="input-group-text">+91</span><input class="form-control" x-model="form.mobile" @input="form.mobile=digits(form.mobile)" inputmode="numeric" maxlength="10" required></div></div>
+        <div class="col-md-4"><label class="form-label">Email</label><input type="email" class="form-control" x-model="form.email" maxlength="254"></div>
+        <div class="col-md-4"><label class="form-label">Assigned category</label><select class="form-select" x-model="form.categorySlug" required><option value="">Select category</option><template x-for="category in categories" :key="category.slug"><option :value="category.slug" x-text="category.name"></option></template></select></div>
+        <div class="col-md-6"><label class="form-label">Address</label><input class="form-control" x-model="form.addressLine" maxlength="500"></div>
+        <div class="col-md-2"><label class="form-label">City</label><input class="form-control" x-model="form.city" maxlength="100"></div>
+        <div class="col-md-2"><label class="form-label">State</label><input class="form-control" x-model="form.state" maxlength="100"></div>
+        <div class="col-md-2"><label class="form-label">Pincode</label><input class="form-control" x-model="form.pincode" inputmode="numeric" maxlength="6"></div>
+        <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" x-model="form.status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></div>
+        <div class="col-md-3 d-flex align-items-end"><label class="form-check"><input class="form-check-input" type="checkbox" x-model="form.portalAccessEnabled"><span class="form-check-label">Enable Agent Portal access</span></label></div>
+        <div class="col-12"><label class="form-label">Internal notes</label><textarea class="form-control" rows="4" x-model="form.notes" maxlength="5000"></textarea></div>
+        <template x-if="mode==='edit'"><div class="col-12"><div class="alert alert-light border mb-0"><strong>Immutable identifiers</strong><div class="mt-2"><span class="me-3">Agent ID: <code x-text="form.agentId"></code></span><span>Referral ID: <code x-text="form.referralId"></code></span></div></div></div></template>
+      </div></div><div class="card-footer d-flex"><a href="/agents" class="btn btn-light">Cancel</a><button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : 'Save agent'"></button></div></form></div></div>
+      <%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function agentForm(){return{mode:pageMode(),recordId:pageMode()==='edit'?pathRecordId(true):'',categories:[],form:{agentType:'individual',name:'',businessName:'',mobile:'',email:'',addressLine:'',city:'',state:'',pincode:'',categorySlug:'',status:'active',portalAccessEnabled:true,notes:''},loading:true,saving:false,error:'',digits(v){return String(v||'').replace(/\D/g,'').slice(-10);},async init(){try{this.categories=(await apiFetch('/api/catalog/categories')).data||[];if(this.mode==='edit'){this.form={...this.form,...(await apiFetch('/api/agent/'+this.recordId)).data};}}catch(error){this.error=error.message;}finally{this.loading=false;}},async save(){this.error='';this.saving=true;try{if(!/^[6-9]\d{9}$/.test(this.form.mobile))throw new Error('Enter a valid 10-digit mobile number');if(this.form.agentType==='shop'&&!this.form.businessName.trim())throw new Error('Business or shop name is required for shop agents');if(this.form.pincode&&!/^[1-9]\d{5}$/.test(this.form.pincode))throw new Error('Pincode must contain exactly 6 digits');const url=this.mode==='edit'?'/api/agent/'+this.recordId:'/api/agent';const body=await apiFetch(url,{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.form)});location.href='/agents/'+body.data.agentId;}catch(error){this.error=error.message;}finally{this.saving=false;}}};}
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

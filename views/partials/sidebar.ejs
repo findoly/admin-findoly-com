@@ -44,6 +44,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a href="/agents" title="Agents" class="nav-link" :class="{active:pathIs('/agents')}" @click="sidebarOpen=false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M3 20a5 5 0 0 1 10 0M16 7h5M18.5 4.5v5"/><path d="M15 20a4 4 0 0 1 6 0"/></svg>
+            <span>Agents</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="/categories" title="Categories" class="nav-link" :class="{active:pathIs('/categories')}" @click="sidebarOpen=false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg>
             <span>Categories</span>

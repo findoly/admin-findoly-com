@@ -432,6 +432,12 @@ async function list(filters = {}) {
       maxLength: 120,
     });
   }
+  if (filters.sourceChannel) {
+    query.sourceChannel = textValue(filters.sourceChannel, { label: "Source channel filter", maxLength: 80 });
+  }
+  if (filters.referralId) {
+    query.referralId = textValue(filters.referralId, { label: "Referral ID filter", maxLength: 6 }).toUpperCase();
+  }
 
   const startDate = dateOnlyValue(filters.startDate, {
     label: "Start date",
@@ -469,6 +475,10 @@ async function list(filters = {}) {
       { categorySlug: search },
       { city: search },
       { externalEnquiryId: search },
+      { agentId: search },
+      { referralId: search },
+      { agentName: search },
+      { agentBusinessName: search },
     ];
   }
 

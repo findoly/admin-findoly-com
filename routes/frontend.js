@@ -35,6 +35,10 @@ router.get(
 router.get("/enquiries/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/requirements/:enquiryId", pageAuth, page.enquiryShow);
 router.get("/providers", pageAuth, page.providers);
+router.get("/agents", pageAuth, page.agents);
+router.get("/agents/new", pageAuth, page.agentCreate);
+router.get("/agents/:agentId/edit", pageAuth, page.agentEdit);
+router.get("/agents/:agentId", pageAuth, page.agentShow);
 router.get("/categories", pageAuth, page.categories);
 router.get("/providers/new", pageAuth, page.providerCreate);
 router.get("/providers/:providerId/edit", pageAuth, page.providerEdit);
@@ -56,6 +60,7 @@ router.get("/distributions", pageAuth, page.distributions);
 router.get("/reports", pageAuth, page.reports);
 router.get("/search/enquiries", pageAuth, page.enquiries);
 router.get("/search/providers", pageAuth, page.providers);
+router.get("/search/agents", pageAuth, page.agents);
 router.get("/search/follow-ups", pageAuth, page.followUps);
 router.get("/search/communications", pageAuth, page.communications);
 router.get("/search/invoices", pageAuth, page.invoices);

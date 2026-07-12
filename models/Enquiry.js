@@ -46,6 +46,15 @@ const enquirySchema = new mongoose.Schema(
     distributionCount: { type: Number, default: 0 },
     unlockedCount: { type: Number, default: 0 },
     distributedAt: { type: Date, default: null },
+    agentId: { type: String, default: "", index: true },
+    referralId: { type: String, default: "", index: true, uppercase: true },
+    agentName: { type: String, default: "" },
+    agentBusinessName: { type: String, default: "" },
+    agentType: { type: String, default: "" },
+    agentMobile: { type: String, default: "" },
+    agentCategoryId: { type: String, default: "" },
+    customerMobileVerified: { type: Boolean, default: false },
+    customerMobileVerifiedAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true, index: true },
     deactivatedAt: { type: Date, default: null },
     deactivatedBy: { type: String, default: "" },
@@ -59,6 +68,8 @@ const enquirySchema = new mongoose.Schema(
 );
 
 enquirySchema.index({ status: 1, categorySlug: 1, createdAt: -1 });
+enquirySchema.index({ agentId: 1, createdAt: -1, _id: -1 });
+enquirySchema.index({ referralId: 1, createdAt: -1 });
 enquirySchema.index({ createdAt: -1, _id: -1 });
 enquirySchema.index({ isActive: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ status: 1, isActive: 1, createdAt: -1, _id: -1 });
