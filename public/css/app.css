@@ -3875,4 +3875,177 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   }
 }
 
-.status-verification { background: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; }
+/* Desktop sidebar collapse */
+.crm-sidebar-desktop-actions {
+  padding: .75rem .5rem .15rem;
+}
+
+.crm-sidebar-collapse {
+  width: 100%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .7rem;
+  padding: .55rem .72rem;
+  border: 1px solid var(--crm-user-card-border, var(--crm-shell-border));
+  border-radius: var(--crm-user-nav-radius, 10px);
+  background: color-mix(in srgb, var(--crm-user-sidebar-bg, #fff) 94%, var(--crm-user-accent, #2563eb));
+  color: var(--crm-user-sidebar-text, #475569);
+  font-size: .78rem;
+  font-weight: 750;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.crm-sidebar-collapse:hover {
+  border-color: color-mix(in srgb, var(--crm-user-accent, #2563eb) 34%, var(--crm-user-card-border, var(--crm-shell-border)));
+  background: var(--crm-user-sidebar-hover-bg, var(--crm-user-accent-soft, #eff6ff));
+  color: var(--crm-user-sidebar-hover-text, var(--crm-user-accent, #2563eb));
+}
+
+.crm-sidebar-collapse svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  transition: transform .2s ease;
+}
+
+.crm-sidebar-collapse svg.is-collapsed {
+  transform: rotate(180deg);
+}
+
+.crm-sidebar,
+.crm-sidebar .sidebar-content {
+  transition: width .22s ease, flex-basis .22s ease;
+}
+
+html.crm-sidebar-no-transition .crm-sidebar,
+html.crm-sidebar-no-transition .crm-sidebar *,
+html.crm-sidebar-no-transition .content-wrapper {
+  transition: none !important;
+  animation: none !important;
+}
+
+@media (min-width: 992px) {
+  .crm-sidebar.crm-sidebar-collapsed,
+  html.crm-sidebar-saved-collapsed .crm-sidebar {
+    --sidebar-width: 76px;
+    width: 76px !important;
+    flex: 0 0 76px !important;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-desktop-actions,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-desktop-actions {
+    padding-inline: .55rem;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-collapse,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-collapse {
+    justify-content: center;
+    padding-inline: .55rem;
+  }
+
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-collapse svg {
+    transform: rotate(180deg);
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-collapse-label,
+  .crm-sidebar.crm-sidebar-collapsed .nav-item-header,
+  .crm-sidebar.crm-sidebar-collapsed .nav-link > span,
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-support > div,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-collapse-label,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .nav-item-header,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .nav-link > span,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-support > div {
+    display: none !important;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .sidebar-section,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .sidebar-section {
+    padding-inline: .55rem;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .nav-link,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .nav-link {
+    width: 44px;
+    min-width: 44px;
+    justify-content: center;
+    gap: 0;
+    margin-inline: auto !important;
+    padding-inline: .65rem !important;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-foot,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-foot {
+    padding-inline: .55rem;
+  }
+
+  .crm-sidebar.crm-sidebar-collapsed .crm-sidebar-support,
+  html.crm-sidebar-saved-collapsed .crm-sidebar .crm-sidebar-support {
+    justify-content: center;
+    padding: .55rem;
+  }
+}
+
+/* Solid lead and provider-lead status badges */
+.crm-status.status-new,
+.crm-status.status-offered {
+  background: #2563eb !important;
+  border: 1px solid #1d4ed8 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-verification,
+.crm-status.status-verification-pending,
+.crm-status.status-contacted {
+  background: #0f766e !important;
+  border: 1px solid #115e59 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-approved,
+.crm-status.status-confirmed,
+.crm-status.status-unlocked {
+  background: #15803d !important;
+  border: 1px solid #166534 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-distributed,
+.crm-status.status-in-progress,
+.crm-status.status-completed,
+.crm-status.status-closed {
+  background: #7c3aed !important;
+  border: 1px solid #6d28d9 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-on-hold {
+  background: #c2410c !important;
+  border: 1px solid #9a3412 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-rejected,
+.crm-status.status-withdrawn {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.crm-status.status-invalid,
+.crm-status.status-not-interested,
+.crm-status.status-expired,
+.crm-status.status-unknown {
+  background: #475569 !important;
+  border: 1px solid #334155 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+

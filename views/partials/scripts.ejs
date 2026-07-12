@@ -145,16 +145,50 @@
     return true;
   }
 
+  const CRM_SIDEBAR_COLLAPSED_KEY = 'leadops.crm.sidebar.collapsed.v1';
+
+  function readSidebarCollapsed() {
+    try {
+      return window.localStorage.getItem(CRM_SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function syncSidebarDocumentState(collapsed) {
+    document.documentElement.classList.toggle('crm-sidebar-saved-collapsed', Boolean(collapsed));
+  }
+
+  function enableSidebarTransitionsAfterInitialLayout() {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.documentElement.classList.remove('crm-sidebar-no-transition');
+      });
+    });
+  }
+
   function crmShell() {
     return {
       admin: {},
       shellError: '',
       sidebarOpen: false,
+      sidebarCollapsed: readSidebarCollapsed(),
       async initShell() {
+        syncSidebarDocumentState(this.sidebarCollapsed);
+        enableSidebarTransitionsAfterInitialLayout();
         try {
           this.admin = (await apiFetch('/api/auth/me')).data || {};
         } catch (error) {
           this.shellError = error.message;
+        }
+      },
+      toggleSidebar() {
+        this.sidebarCollapsed = !this.sidebarCollapsed;
+        syncSidebarDocumentState(this.sidebarCollapsed);
+        try {
+          window.localStorage.setItem(CRM_SIDEBAR_COLLAPSED_KEY, this.sidebarCollapsed ? '1' : '0');
+        } catch (error) {
+          // The sidebar still works when browser storage is unavailable.
         }
       },
       pathIs(path) {

@@ -3,6 +3,26 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <title><%= title ? title + ' · ' : '' %><%= appName %></title>
+  <script>
+    (function restoreSidebarBeforePaint() {
+      const storageKey = 'leadops.crm.sidebar.collapsed.v1';
+      const root = document.documentElement;
+
+      root.classList.add('crm-sidebar-no-transition');
+
+      try {
+        const isDesktop = window.matchMedia('(min-width: 992px)').matches;
+        const isCollapsed = window.localStorage.getItem(storageKey) === '1';
+        root.classList.toggle('crm-sidebar-saved-collapsed', isDesktop && isCollapsed);
+      } catch (error) {
+        root.classList.remove('crm-sidebar-saved-collapsed');
+      }
+
+      window.addEventListener('load', () => {
+        root.classList.remove('crm-sidebar-no-transition');
+      }, { once: true });
+    })();
+  </script>
   <link href="/css/inter.css" rel="stylesheet" type="text/css">
   <link href="/css/styles.min.css" rel="stylesheet" type="text/css">
   <link href="/css/all.min.css" rel="stylesheet" type="text/css">
