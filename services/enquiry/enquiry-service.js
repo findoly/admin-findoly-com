@@ -209,6 +209,10 @@ function presentEnquiry(row = {}) {
     externalEnquiryId:
       row.externalEnquiryId || source.externalEnquiryId || "",
     journeyStatus: canonicalLeadStatus(row.status),
+    agentReferralValidation: row.agentReferralValidation || (row.agentId ? "pending" : ""),
+    agentSaleConversion: row.agentSaleConversion || "pending",
+    partnerEligibilityDate: row.partnerEligibilityDate || (row.agentId && row.createdAt ? new Date(new Date(row.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000) : null),
+    partnerPayoutStatus: row.partnerPayoutStatus || (row.agentId ? "waiting_period" : ""),
     isActive: row.isActive !== false,
   };
 }
@@ -438,6 +442,12 @@ async function list(filters = {}) {
   if (filters.referralId) {
     query.referralId = textValue(filters.referralId, { label: "Referral ID filter", maxLength: 6 }).toUpperCase();
   }
+  if (filters.agentReferralValidation) {
+    query.agentReferralValidation = enumValue(filters.agentReferralValidation, ["pending", "valid", "invalid"], { label: "Agent referral validation filter" });
+  }
+  if (filters.partnerPayoutStatus) {
+    query.partnerPayoutStatus = enumValue(filters.partnerPayoutStatus, ["waiting_period", "unpaid", "reserved", "paid", "not_eligible"], { label: "Partner payout status filter" });
+  }
 
   const startDate = dateOnlyValue(filters.startDate, {
     label: "Start date",
@@ -593,6 +603,14 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     );
   }
 
+  const isAgentRequirement = Boolean(existing.agentId && (existing.sourceChannel === "agent" || existing.sourceWebsite === "agent-portal" || existing.metadata?.agentSubmission));
+  if (isAgentRequirement) {
+    await require("../partner-payout/partner-payout-service").assertRequirementNotPayoutProcessing(existing);
+  }
+  if (isAgentRequirement && !String(input.note || input.reason || "").trim()) {
+    throw validationError("A status-change note is required for Agent Portal requirements");
+  }
+
   const metadata = { ...(existing.metadata || {}) };
   const transition = resolveLeadStatusTransition(
     existing.status,
@@ -600,6 +618,10 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     metadata,
   );
   const now = new Date();
+
+  if (isAgentRequirement && ["approved", "distributed"].includes(transition.toStatus) && existing.agentReferralValidation !== "valid") {
+    throw validationError("Mark the agent referral Valid before approving or distributing it");
+  }
 
   if (transition.action === "reject") {
     metadata.rejectedFromStatus = transition.fromStatus;
@@ -632,6 +654,18 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     },
     $push: { timeline: timelineEntry },
   });
+
+  if (isAgentRequirement && transition.toStatus === "rejected") {
+    if (existing.partnerWithdrawalId && existing.partnerPayoutStatus === "reserved") {
+      await require("../partner-payout/partner-payout-service").markEligibilityChangedForRequirement(existing.enquiryId || enquiryId, `Requirement rejected: ${transition.note}`, actor);
+    }
+    await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: { partnerPayoutStatus: existing.partnerPayoutStatus === "paid" ? "paid" : "not_eligible", updatedAt: now } });
+  }
+
+  if (isAgentRequirement && transition.toStatus !== "rejected" && existing.agentReferralValidation === "valid" && !["paid", "reserved"].includes(existing.partnerPayoutStatus)) {
+    const eligibilityAt = existing.partnerEligibilityDate || new Date(new Date(existing.createdAt || now).getTime() + 14 * 24 * 60 * 60 * 1000);
+    await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: { partnerEligibilityDate: eligibilityAt, partnerPayoutStatus: eligibilityAt <= now ? "unpaid" : "waiting_period", updatedAt: now } });
+  }
 
   const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
   const distributionEnquiryId = existing.enquiryId || existing.id || enquiryId;
@@ -828,6 +862,9 @@ async function distribute(enquiryDocument, actor = "system") {
       { status: 409 },
     );
   }
+  if (enquiry.agentId && enquiry.agentReferralValidation !== "valid") {
+    throw validationError("Only Valid agent referrals can be distributed to providers");
+  }
 
   const reference = identifierValue(enquiry.enquiryId || enquiry.id, {
     label: "Lead Reference ID",
@@ -974,12 +1011,24 @@ async function getProviderStatus(enquiryId, leadDistributionId) {
   return { lead, distribution: presentDistribution(distribution) };
 }
 
+async function updateAgentReferralValidation(enquiryId, input = {}, actor = "admin") {
+  await require("../partner-payout/partner-payout-service").updateReferralValidation(enquiryId, input, actor);
+  return get(enquiryId);
+}
+
+async function updateAgentSaleConversion(enquiryId, input = {}, actor = "admin") {
+  await require("../partner-payout/partner-payout-service").updateSaleConversion(enquiryId, input, actor);
+  return get(enquiryId);
+}
+
 module.exports = {
   create,
   list,
   get,
   update,
   updateStatus,
+  updateAgentReferralValidation,
+  updateAgentSaleConversion,
   addNote,
   setActiveState,
   distribute,

@@ -39,6 +39,8 @@ router.get("/agents", pageAuth, page.agents);
 router.get("/agents/new", pageAuth, page.agentCreate);
 router.get("/agents/:agentId/edit", pageAuth, page.agentEdit);
 router.get("/agents/:agentId", pageAuth, page.agentShow);
+router.get("/partner-withdrawals", pageAuth, page.partnerWithdrawals);
+router.get("/partner-withdrawals/:withdrawalId", pageAuth, page.partnerWithdrawalShow);
 router.get("/categories", pageAuth, page.categories);
 router.get("/providers/new", pageAuth, page.providerCreate);
 router.get("/providers/:providerId/edit", pageAuth, page.providerEdit);

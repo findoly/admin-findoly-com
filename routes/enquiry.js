@@ -11,6 +11,8 @@ router.get(
 router.post("/:enquiryId/deactivate", c.deactivate);
 router.post("/:enquiryId/reactivate", c.reactivate);
 router.post("/:enquiryId/status", c.status);
+router.post("/:enquiryId/referral-validation", c.referralValidation);
+router.post("/:enquiryId/sale-conversion", c.saleConversion);
 router.post("/:enquiryId/note", c.note);
 router.post("/:enquiryId/distribute", c.distribute);
 router.get("/:enquiryId", c.get);

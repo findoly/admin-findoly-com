@@ -11,7 +11,8 @@
     "test": "node --test",
     "seed": "node scripts/seed.js",
     "migrate:structure": "node scripts/migrate-structure.js",
-    "migrate:lead-distribution": "node scripts/migrate-structure.js"
+    "migrate:lead-distribution": "node scripts/migrate-structure.js",
+    "migrate:agent-payouts": "node scripts/migrate-agent-payouts.js"
   },
   "engines": {
     "node": ">=18"

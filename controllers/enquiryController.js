@@ -69,6 +69,18 @@ async function status(req, res, next) {
   }
 }
 
+async function referralValidation(req, res, next) {
+  try {
+    res.json({ success: true, data: await service.updateAgentReferralValidation(req.params.enquiryId, req.body, req.admin?.email || "admin") });
+  } catch (error) { next(error); }
+}
+
+async function saleConversion(req, res, next) {
+  try {
+    res.json({ success: true, data: await service.updateAgentSaleConversion(req.params.enquiryId, req.body, req.admin?.email || "admin") });
+  } catch (error) { next(error); }
+}
+
 async function note(req, res, next) {
   try {
     res.json({
@@ -173,6 +185,8 @@ module.exports = {
   createPublic,
   update,
   status,
+  referralValidation,
+  saleConversion,
   note,
   distribute,
   deactivate,

@@ -55,6 +55,22 @@ const enquirySchema = new mongoose.Schema(
     agentCategoryId: { type: String, default: "" },
     customerMobileVerified: { type: Boolean, default: false },
     customerMobileVerifiedAt: { type: Date, default: null },
+    agentReferralValidation: { type: String, enum: ["", "pending", "valid", "invalid"], default: "", index: true },
+    agentReferralInvalidReason: { type: String, default: "", trim: true, maxlength: 120 },
+    agentReferralValidationNote: { type: String, default: "", maxlength: 2000 },
+    agentReferralValidatedAt: { type: Date, default: null },
+    agentReferralValidatedBy: { type: String, default: "" },
+    agentSaleConversion: { type: String, enum: ["pending", "converted", "not_converted"], default: "pending", index: true },
+    agentSaleConversionNote: { type: String, default: "", maxlength: 2000 },
+    agentSaleConvertedAt: { type: Date, default: null },
+    agentSaleConvertedBy: { type: String, default: "" },
+    partnerEligibilityDate: { type: Date, default: null, index: true },
+    partnerPayoutStatus: { type: String, enum: ["", "waiting_period", "unpaid", "reserved", "paid", "not_eligible"], default: "", index: true },
+    partnerWithdrawalId: { type: String, default: "", index: true },
+    partnerPayoutRatePaise: { type: Number, default: 0, min: 0 },
+    partnerPayoutAmountPaise: { type: Number, default: 0, min: 0 },
+    partnerPaidAt: { type: Date, default: null },
+    partnerPayoutReference: { type: String, default: "" },
     isActive: { type: Boolean, default: true, index: true },
     deactivatedAt: { type: Date, default: null },
     deactivatedBy: { type: String, default: "" },
@@ -70,6 +86,8 @@ const enquirySchema = new mongoose.Schema(
 enquirySchema.index({ status: 1, categorySlug: 1, createdAt: -1 });
 enquirySchema.index({ agentId: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ referralId: 1, createdAt: -1 });
+enquirySchema.index({ agentId: 1, agentReferralValidation: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, createdAt: 1 });
+enquirySchema.index({ partnerWithdrawalId: 1, partnerPayoutStatus: 1 });
 enquirySchema.index({ createdAt: -1, _id: -1 });
 enquirySchema.index({ isActive: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ status: 1, isActive: 1, createdAt: -1, _id: -1 });

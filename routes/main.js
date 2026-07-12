@@ -15,6 +15,8 @@ router.use("/requirements", require("./enquiry"));
 router.use("/leads", require("./enquiry"));
 router.use("/provider", require("./provider"));
 router.use("/agent", require("./agent"));
+router.use("/partner-payouts", require("./partner-payout"));
+router.use("/withdrawals", require("./partner-payout"));
 router.use("/agents", require("./agent"));
 router.use("/providers", require("./provider"));
 router.use("/follow-up", require("./follow-up"));

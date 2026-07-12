@@ -22,6 +22,8 @@ const frontendController = {
   agentCreate: render("agent/form", "Create agent"),
   agentEdit: render("agent/form", "Edit agent"),
   agentShow: render("agent/show", "Agent details"),
+  partnerWithdrawals: render("partner-payout/index", "Partner withdrawals"),
+  partnerWithdrawalShow: render("partner-payout/show", "Partner withdrawal"),
   categories: render("category/index", "Categories"),
   providerCreate: render("provider/form", "Create provider"),
   providerEdit: render("provider/form", "Edit provider"),

@@ -4,7 +4,7 @@ const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
-const { textValue, emailValue, enumValue, booleanValue, tokenValue, queryTextValue, identifierValue, validationError } = require("../../utils/validation");
+const { textValue, emailValue, enumValue, booleanValue, numberValue, tokenValue, queryTextValue, identifierValue, validationError } = require("../../utils/validation");
 
 const AGENT_TYPES = Object.freeze(["individual", "shop"]);
 const AGENT_STATUSES = Object.freeze(["active", "inactive", "pending", "blocked"]);
@@ -50,6 +50,12 @@ async function normalizeInput(input = {}, current = {}) {
     status: enumValue(input.status, AGENT_STATUSES, { label: "Agent status", fallback: current.status || "active" }),
     portalAccessEnabled: booleanValue(input.portalAccessEnabled, { label: "Portal access", fallback: current.portalAccessEnabled !== false }),
     notes: textValue(input.notes ?? current.notes, { label: "Agent notes", maxLength: 5000 }),
+    payoutPerReferralPaise: numberValue(input.payoutPerReferralPaise, { label: "Payout per referral", fallback: current.payoutPerReferralPaise ?? 5000, min: 5000, max: 20000, integer: true }),
+    payoutEnabled: booleanValue(input.payoutEnabled, { label: "Payout enabled", fallback: current.payoutEnabled === true }),
+    payoutMode: enumValue(input.payoutMode, ["UPI", "IMPS", "NEFT", "RTGS"], { label: "Payout mode", fallback: current.payoutMode || "IMPS" }),
+    razorpayContactId: textValue(input.razorpayContactId ?? current.razorpayContactId, { label: "Razorpay contact ID", maxLength: 80 }),
+    razorpayFundAccountId: textValue(input.razorpayFundAccountId ?? current.razorpayFundAccountId, { label: "Razorpay fund account ID", maxLength: 80 }),
+    payoutAccountLabel: textValue(input.payoutAccountLabel ?? current.payoutAccountLabel, { label: "Payout account label", maxLength: 160 }),
     updatedBy: "crm-admin",
     updatedAt: new Date(),
   };
@@ -77,6 +83,7 @@ async function get(agentId) {
 
 async function create(input = {}) {
   const data = await normalizeInput(input);
+  if (data.payoutEnabled && !data.razorpayFundAccountId) throw validationError("Razorpay fund account ID is required when payouts are enabled");
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       const row = await Agent.create({ ...data, referralId: generateReferralId(), createdBy: "crm-admin" });
@@ -97,6 +104,7 @@ async function update(agentId, input = {}) {
     if (input[field] !== undefined && String(input[field]).toUpperCase() !== String(existing[field]).toUpperCase()) throw validationError(`${field} cannot be changed`);
   }
   const data = await normalizeInput(input, existing);
+  if (data.payoutEnabled && !data.razorpayFundAccountId) throw validationError("Razorpay fund account ID is required when payouts are enabled");
   try { await Agent.updateOne({ agentId: existing.agentId }, { $set: data }); }
   catch (error) { if (error?.code === 11000) throw Object.assign(new Error("An agent already uses this mobile number"), { status: 409 }); throw error; }
   return get(existing.agentId);
@@ -107,7 +115,7 @@ async function requirements(agentId, filters = {}) {
   const { limit, cursor } = getPagination(filters);
   const query = { agentId: agent.agentId };
   if (filters.status) query.status = textValue(filters.status, { label: "Requirement status filter", maxLength: 40 });
-  return cursorPaginate(Enquiry, { query, sort: { createdAt: -1, _id: -1 }, limit, cursor, select: { enquiryId: 1, requirementTitle: 1, name: 1, mobile: 1, city: 1, category: 1, status: 1, customerMobileVerified: 1, createdAt: 1, updatedAt: 1 } });
+  return cursorPaginate(Enquiry, { query, sort: { createdAt: -1, _id: -1 }, limit, cursor, select: { enquiryId: 1, requirementTitle: 1, name: 1, mobile: 1, city: 1, category: 1, status: 1, customerMobileVerified: 1, agentReferralValidation: 1, agentSaleConversion: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, partnerPaidAt: 1, createdAt: 1, updatedAt: 1 } });
 }
 
 module.exports = { list, get, create, update, requirements, generateReferralId, normalizeInput, AGENT_TYPES, AGENT_STATUSES };

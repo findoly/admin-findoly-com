@@ -31,7 +31,7 @@
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
-                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['approved', 'distributed'].includes(currentStatus)" title="Approve and activate the lead before synchronizing providers">Sync providers</button>
+                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['approved', 'distributed'].includes(currentStatus) || (lead.agentId && lead.agentReferralValidation !== 'valid')" title="Approve and activate the lead before synchronizing providers">Sync providers</button>
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
@@ -122,6 +122,17 @@
                 </div>
 
                 <div class="col-xl-4">
+                  <div class="card mb-3" x-show="lead.agentId">
+                    <div class="card-header"><h5 class="mb-0">Agent referral review</h5></div>
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-center mb-3"><span>Referral validation</span><span class="crm-status" :class="statusClass(lead.agentReferralValidation||'pending')" x-text="humanize(lead.agentReferralValidation||'pending')"></span></div>
+                      <label class="form-label">Validation decision</label><select class="form-select mb-2" x-model="referralForm.status"><option value="pending">Pending</option><option value="valid">Valid</option><option value="invalid">Invalid</option></select>
+                      <label class="form-label" x-show="referralForm.status==='invalid'">Invalid reason</label><select class="form-select mb-2" x-show="referralForm.status==='invalid'" x-model="referralForm.reason"><option value="duplicate">Duplicate</option><option value="incorrect_details">Incorrect details</option><option value="customer_not_interested">Customer not interested</option><option value="fake_referral">Fake referral</option><option value="unreachable">Unreachable</option><option value="outside_assigned_category">Outside assigned category</option><option value="other">Other</option></select>
+                      <textarea class="form-control mb-2" rows="3" maxlength="2000" x-model="referralForm.note" placeholder="Mandatory validation note"></textarea><button class="btn btn-primary w-100 mb-3" @click="saveReferralValidation()">Save validation</button>
+                      <hr><div class="d-flex justify-content-between align-items-center mb-2"><span>Sale conversion</span><span class="crm-status" :class="statusClass(lead.agentSaleConversion||'pending')" x-text="humanize(lead.agentSaleConversion||'pending')"></span></div>
+                      <select class="form-select mb-2" x-model="conversionForm.status"><option value="pending">Pending</option><option value="converted">Converted to sale</option><option value="not_converted">Not converted</option></select><textarea class="form-control mb-2" rows="3" maxlength="2000" x-model="conversionForm.note" placeholder="Mandatory conversion note"></textarea><button class="btn btn-light w-100" @click="saveSaleConversion()">Save conversion</button>
+                    </div>
+                  </div>
                   <div class="card mb-3">
                     <div class="card-header"><h5 class="mb-0">Update journey status</h5></div>
                     <div class="card-body">
@@ -131,7 +142,7 @@
                         <small class="text-muted" x-show="lead.statusUpdatedBy">Last updated by <span x-text="lead.statusUpdatedBy"></span> <span x-show="lead.statusUpdatedAt">on <span x-text="formatDate(lead.statusUpdatedAt)"></span></span></small>
                       </div>
                       <label class="form-label">Reason / note</label>
-                      <textarea class="form-control mb-3" rows="3" x-model="statusNote" maxlength="1000" :disabled="lead.isActive === false" placeholder="Required when rejecting; optional for Next or Previous"></textarea>
+                      <textarea class="form-control mb-3" rows="3" x-model="statusNote" maxlength="1000" :disabled="lead.isActive === false"  :placeholder="lead.agentId ? 'Mandatory for every status change' : 'Required when rejecting; optional for Next or Previous'"></textarea>
                       <div class="d-grid gap-2">
                         <div class="d-flex gap-2">
                           <button class="btn btn-light flex-fill" @click="changeStatus('previous')" :disabled="lead.isActive === false || statusSaving || !canPrevious" x-text="isRejected ? 'Restore previous' : 'Previous'"></button>
@@ -160,6 +171,8 @@
                   lead: {},
                   note: '',
                   statusNote: '',
+                  referralForm: { status: 'pending', reason: 'other', note: '' },
+                  conversionForm: { status: 'pending', note: '' },
                   loading: true,
                   statusSaving: false,
                   stateSaving: false,
@@ -183,7 +196,10 @@
                   },
                   get canNext() {
                     const index = this.journeySteps.indexOf(this.journeyBaseStatus);
-                    return !this.isRejected && index >= 0 && index < this.journeySteps.length - 1;
+                    if (this.isRejected || index < 0 || index >= this.journeySteps.length - 1) return false;
+                    const target = this.journeySteps[index + 1];
+                    if (this.lead.agentId && ['approved','distributed'].includes(target) && this.lead.agentReferralValidation !== 'valid') return false;
+                    return true;
                   },
                   get summary() {
                     return [
@@ -227,7 +243,7 @@
                   async load() {
                     this.loading = true;
                     try {
-                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data;
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data; this.referralForm.status=this.lead.agentReferralValidation||'pending'; this.conversionForm.status=this.lead.agentSaleConversion||'pending';
                     } catch (error) {
                       this.error = error.message;
                     } finally {
@@ -237,10 +253,7 @@
                   async changeStatus(action) {
                     this.error = '';
                     this.success = '';
-                    if (action === 'reject' && !this.statusNote.trim()) {
-                      this.error = 'Enter a rejection reason before rejecting the lead';
-                      return;
-                    }
+                    if ((this.lead.agentId || action === 'reject') && !this.statusNote.trim()) { this.error = this.lead.agentId ? 'Enter a mandatory note before changing an agent requirement status' : 'Enter a rejection reason before rejecting the lead'; return; }
                     this.statusSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/status', {
@@ -255,6 +268,8 @@
                       this.statusSaving = false;
                     }
                   },
+                  async saveReferralValidation() { this.error=''; this.success=''; try { if(!this.referralForm.note.trim()) throw new Error('Enter a mandatory validation note'); this.lead=(await apiFetch('/api/enquiry/'+this.recordId+'/referral-validation',{method:'POST',body:JSON.stringify(this.referralForm)})).data; this.referralForm.note=''; this.success='Referral validation updated'; } catch(error){this.error=error.message;} },
+                  async saveSaleConversion() { this.error=''; this.success=''; try { if(!this.conversionForm.note.trim()) throw new Error('Enter a mandatory conversion note'); this.lead=(await apiFetch('/api/enquiry/'+this.recordId+'/sale-conversion',{method:'POST',body:JSON.stringify(this.conversionForm)})).data; this.conversionForm.note=''; this.success='Sale conversion updated'; } catch(error){this.error=error.message;} },
                   async addNote() {
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/note', {

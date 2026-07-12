@@ -163,3 +163,9 @@ The CRM now includes minimal agent management at `/agents`:
 - Each agent is assigned exactly one active category and an OTP login mobile number.
 - Agent-submitted requirements are written to the shared `enquiries` collection with a denormalized agent snapshot and customer-mobile OTP verification fields.
 - CRM lists and details render through Alpine.js JSON API calls. No Mongoose `populate()` or MongoDB `$lookup` is used.
+
+## Partner referral payouts
+
+Agent Portal requirements now require CRM referral validation (`pending`, `valid`, or `invalid`). Only valid requirements can move to provider distribution. Partner withdrawals use matured referrals at least 14 days old, complete blocks of 10, and a minimum 20% sale conversion. Configure each agent's ₹50–₹200 rate and verified RazorpayX fund account in the CRM agent profile.
+
+Set the RazorpayX values from `.env.example`, allowlist the CRM server IP in RazorpayX, and configure the payout webhook URL as `/api/webhooks/razorpay/payouts`. Run `npm run migrate:agent-payouts` once for existing Agent Portal requirements.
