@@ -35,6 +35,7 @@
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
+                <a class="btn btn-light" :href="'/communications/send?enquiryId='+recordId">Send message</a>
                 <button x-show="lead.isActive !== false" class="btn btn-outline-danger ms-auto" @click="deactivateLead()" :disabled="stateSaving">Deactivate</button>
                 <button x-show="lead.isActive === false" class="btn btn-primary ms-auto" @click="reactivateLead()" :disabled="stateSaving">Reactivate</button>
               </div>
@@ -105,6 +106,27 @@
                     </div>
                   </div>
 
+                  <div class="card mb-3">
+                    <div class="card-header d-flex align-items-center">
+                      <div>
+                        <h5 class="mb-1">Communication history</h5>
+                        <p class="text-muted mb-0">WhatsApp, email and manually logged contact for this lead.</p>
+                      </div>
+                      <a class="btn btn-light btn-sm ms-auto" :href="'/communications/send?enquiryId='+recordId">Send message</a>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table mb-0">
+                        <thead><tr><th>Channel</th><th>Purpose</th><th>Status</th><th>Message</th><th>Date</th></tr></thead>
+                        <tbody>
+                          <template x-for="row in communications" :key="row.communicationId">
+                            <tr><td x-text="humanize(row.channel)"></td><td x-text="humanize(row.purpose)"></td><td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span></td><td><div class="text-truncate" style="max-width:280px" x-text="row.subject || row.message || '—'"></div><div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div></td><td x-text="formatDate(row.createdAt)"></td></tr>
+                          </template>
+                          <tr x-show="!communications.length"><td colspan="5" class="text-center text-muted py-4">No communication history</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                   <div class="card">
                     <div class="card-header d-flex align-items-center">
                       <div>
@@ -169,6 +191,7 @@
                 return {
                   recordId: pathRecordId(),
                   lead: {},
+                  communications: [],
                   note: '',
                   statusNote: '',
                   referralForm: { status: 'pending', reason: 'other', note: '' },
@@ -244,10 +267,19 @@
                     this.loading = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data; this.referralForm.status=this.lead.agentReferralValidation||'pending'; this.conversionForm.status=this.lead.agentSaleConversion||'pending';
+                      await this.loadCommunications();
                     } catch (error) {
                       this.error = error.message;
                     } finally {
                       this.loading = false;
+                    }
+                  },
+                  async loadCommunications() {
+                    try {
+                      const body = await apiFetch('/api/communication?enquiryId=' + encodeURIComponent(this.recordId) + '&limit=20');
+                      this.communications = body.data || [];
+                    } catch (error) {
+                      this.error = error.message;
                     }
                   },
                   async changeStatus(action) {
@@ -262,6 +294,7 @@
                       })).data;
                       this.statusNote = '';
                       this.success = 'Lead status updated';
+                      await this.loadCommunications();
                     } catch (error) {
                       this.error = error.message;
                     } finally {

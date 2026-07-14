@@ -18,6 +18,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1086.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

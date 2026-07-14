@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Manage approved WhatsApp templates and reusable SES email content.</p></div><a href="/communications/templates/new" class="btn btn-primary crm-primary-action">Create template</a></div></div>
+      <div class="content" x-data="templateList()" x-init="load()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
+  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
+  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
+  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
+  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
+  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
+</div>
+        <section class="card crm-filter-card mb-3"><div class="crm-filter-bar"><label class="crm-search-control"><input type="search" x-model="q" @keyup.enter="load()" placeholder="Search templates"></label><select class="form-select" style="max-width:180px" x-model="channel" @change="load()"><option value="">All channels</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><select class="form-select" style="max-width:180px" x-model="status" @change="load()"><option value="">All statuses</option><option>draft</option><option>pending</option><option>approved</option><option>rejected</option><option>active</option><option>inactive</option></select><button class="btn btn-light" @click="load()">Search</button><button class="btn btn-light ms-auto" @click="sync()" :disabled="syncing"><span x-text="syncing ? 'Syncing…' : 'Sync Meta templates'"></span></button></div></section>
+        <section class="card crm-data-card"><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Name</th><th>Channel</th><th>Category</th><th>Language</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody><template x-for="row in rows" :key="row.templateId"><tr><td><div class="fw-semibold" x-text="row.displayName || row.name"></div><div class="text-muted fs-sm" x-text="row.name"></div></td><td x-text="humanize(row.channel)"></td><td x-text="humanize(row.category)"></td><td x-text="row.language"></td><td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span><div class="text-danger fs-sm" x-show="row.rejectionReason" x-text="row.rejectionReason"></div></td><td x-text="formatDate(row.updatedAt)"></td><td class="text-end"><div class="d-flex gap-2 justify-content-end"><button x-show="row.channel === 'whatsapp' && ['draft','rejected'].includes(row.status)" class="btn btn-primary btn-sm" @click="submit(row)" :disabled="row.busy">Submit to Meta</button><a class="btn btn-light btn-sm" :href="'/communications/templates/'+row.templateId+'/edit'">Edit</a></div></td></tr></template><tr x-show="!rows.length"><td colspan="7" class="text-center text-muted py-4">No templates found</td></tr></tbody></table></div></section>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function templateList() {
+        return { rows: [], q: '', channel: '', status: '', error: '', message: '', syncing: false,
+          async load() { this.error=''; const query = new URLSearchParams({q:this.q,channel:this.channel,status:this.status}); [...query].forEach(([key,value]) => { if(!value) query.delete(key); }); try { this.rows=(await apiFetch('/api/communication/templates?'+query.toString())).data||[]; } catch(error){ this.error=error.message; } },
+          async sync() { this.syncing=true; this.error=''; this.message=''; try { const body=await apiFetch('/api/communication/templates/sync',{method:'POST',body:'{}'}); this.message=`Synced ${body.data.remoteCount} Meta templates: imported ${body.data.imported || 0}, updated ${body.data.updated || 0}.`; await this.load(); } catch(error){ this.error=error.message; } finally { this.syncing=false; } },
+          async submit(row) { row.busy=true; this.error=''; this.message=''; try { await apiFetch('/api/communication/templates/'+row.templateId+'/submit',{method:'POST',body:'{}'}); this.message='Template submitted to Meta.'; await this.load(); } catch(error){ this.error=error.message; } finally { row.busy=false; } }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

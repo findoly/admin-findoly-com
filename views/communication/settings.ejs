@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Secrets remain in environment variables; this page only reports readiness.</p></div></div></div>
+      <div class="content" x-data="settingsPage()" x-init="load()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
+          <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
+          <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
+          <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
+          <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
+          <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
+        </div>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">WhatsApp Cloud API</h5></div>
+              <div class="card-body">
+                <template x-for="item in whatsappItems" :key="item.label"><div class="d-flex justify-content-between border-bottom py-2"><span x-text="item.label"></span><span class="crm-status" :class="item.value ? 'status-approved':'status-rejected'" x-text="item.value ? 'Configured':'Missing'"></span></div></template>
+                <div class="d-flex justify-content-between py-2"><span>API version</span><strong x-text="config.whatsapp?.apiVersion||'—'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Default country code</span><strong x-text="config.whatsapp?.defaultCountryCode||'—'"></strong></div>
+              </div>
+            </section>
+          </div>
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">Amazon SES</h5></div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Sender email</span><span class="crm-status" :class="config.email?.fromEmail?'status-approved':'status-rejected'" x-text="config.email?.fromEmail?'Configured':'Missing'"></span></div>
+                <div class="d-flex justify-content-between border-bottom py-2"><span>AWS credentials/role</span><span class="crm-status" :class="config.email?.credentials?'status-approved':'status-inactive'" x-text="config.email?.credentials?'Detected':'Use instance role or credentials'"></span></div>
+                <div class="d-flex justify-content-between py-2"><span>Region</span><strong x-text="config.email?.region||'—'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Configuration set</span><strong x-text="config.email?.configurationSet||'Not set'"></strong></div>
+              </div>
+            </section>
+          </div>
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">Internal Slack notifications</h5></div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Incoming webhook</span><span class="crm-status" :class="config.slack?.webhookUrl?'status-approved':'status-rejected'" x-text="config.slack?.webhookUrl?'Configured':'Missing'"></span></div>
+                <div class="d-flex justify-content-between py-2"><span>Channel name</span><strong x-text="'#' + (config.slack?.channelName||'internal-team')"></strong></div>
+                <p class="text-muted mt-3 mb-0">The Slack webhook controls the actual destination channel. Team membership is managed directly in Slack.</p>
+              </div>
+            </section>
+          </div>
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">Delivery gateway</h5></div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Current mode</span><strong x-text="humanize(config.deliveryMode)"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Lambda URL</span><span class="crm-status" :class="config.lambda?.url?'status-approved':'status-inactive'" x-text="config.lambda?.url?'Configured':'Not required in local mode'"></span></div>
+                <p class="text-muted mt-3 mb-0">Switch MESSAGE_DELIVERY_MODE from local to lambda later; the CRM workflow and database records stay unchanged.</p>
+              </div>
+            </section>
+          </div>
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">OTP security</h5></div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom py-2"><span>OTP secret</span><span class="crm-status" :class="config.otp?.secret?'status-approved':'status-rejected'" x-text="config.otp?.secret?'Configured':'Missing'"></span></div>
+                <div class="d-flex justify-content-between py-2"><span>Expiry</span><strong x-text="(config.otp?.expiryMinutes||0)+' minutes'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Resend delay</span><strong x-text="(config.otp?.resendSeconds||0)+' seconds'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Maximum attempts</span><strong x-text="config.otp?.maxAttempts||0"></strong></div>
+              </div>
+            </section>
+          </div>
+          <div class="col-lg-6">
+            <section class="card h-100">
+              <div class="card-header"><h5 class="mb-0">MongoDB log retention</h5></div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Communication logs</span><strong x-text="(config.retention?.communicationDays||7)+' days'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>OTP activity</span><strong x-text="(config.retention?.otpDays||7)+' days'"></strong></div>
+                <p class="text-muted mt-3 mb-0">MongoDB TTL indexes delete expired logs automatically. Templates, rules, settings, leads and CRM notes are not deleted.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+        <section class="card mt-3"><div class="card-header"><h5 class="mb-0">Required webhook URLs</h5></div><div class="card-body"><code class="d-block mb-2" x-text="origin+'/api/webhooks/whatsapp'"></code><code class="d-block mb-2" x-text="origin+'/api/webhooks/ses'"></code><code class="d-block" x-text="origin+'/api/webhooks/message-delivery'"></code></div></section>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function settingsPage() {
+        return {
+          config: {},
+          error: '',
+          origin: location.origin,
+          get whatsappItems() {
+            return [
+              { label: 'Access token', value: this.config.whatsapp?.accessToken },
+              { label: 'Phone number ID', value: this.config.whatsapp?.phoneNumberId },
+              { label: 'Business account ID', value: this.config.whatsapp?.businessAccountId },
+              { label: 'Webhook verify token', value: this.config.whatsapp?.webhookVerifyToken },
+              { label: 'App secret', value: this.config.whatsapp?.appSecret },
+            ];
+          },
+          async load() {
+            try {
+              this.config = (await apiFetch('/api/communication/config')).data || {};
+            } catch (error) {
+              this.error = error.message;
+            }
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

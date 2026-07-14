@@ -1,6 +1,7 @@
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const LeadDistribution = require("../../models/LeadDistribution");
+const notificationService = require("../communication/notification-service");
 const uuid = require("../../utils/uuid");
 const { validateMobile } = require("../../utils/mobile");
 const {
@@ -389,7 +390,18 @@ async function create(input = {}, actor = "admin") {
     await distribute(enquiry, actor);
   }
 
-  return get(enquiry.enquiryId);
+  const createdLead = await get(enquiry.enquiryId);
+  await notificationService.trigger(
+    "lead_created",
+    {
+      lead: createdLead,
+      status: createdLead.journeyStatus || createdLead.status,
+      trigger: "lead_created",
+      idempotencySuffix: createdLead.createdAt || now.toISOString(),
+    },
+    actor,
+  );
+  return createdLead;
 }
 
 async function list(filters = {}) {
@@ -679,7 +691,25 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     await refreshDistributionSummary(distributionEnquiryId);
   }
 
-  return get(enquiryId);
+  const changedLead = await get(enquiryId);
+  const eventByStatus = {
+    approved: "lead_approved",
+    rejected: "lead_rejected",
+    on_hold: "lead_on_hold",
+    distributed: "lead_distributed",
+  };
+  await notificationService.trigger(
+    eventByStatus[transition.toStatus] || "lead_status_changed",
+    {
+      lead: changedLead,
+      status: transition.toStatus,
+      note: transition.note,
+      trigger: "lead_status_changed",
+      idempotencySuffix: now.toISOString(),
+    },
+    actor,
+  );
+  return changedLead;
 }
 
 async function addNote(enquiryId, note, actor = "admin") {
@@ -1018,7 +1048,19 @@ async function updateAgentReferralValidation(enquiryId, input = {}, actor = "adm
 
 async function updateAgentSaleConversion(enquiryId, input = {}, actor = "admin") {
   await require("../partner-payout/partner-payout-service").updateSaleConversion(enquiryId, input, actor);
-  return get(enquiryId);
+  const lead = await get(enquiryId);
+  await notificationService.trigger(
+    "sale_conversion_updated",
+    {
+      lead,
+      status: lead.agentSaleConversion || "",
+      note: input.note || input.reason || "",
+      trigger: "sale_conversion_updated",
+      idempotencySuffix: new Date().toISOString(),
+    },
+    actor,
+  );
+  return lead;
 }
 
 module.exports = {

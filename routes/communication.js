@@ -1,8 +1,32 @@
 const router = require("express").Router();
 const c = require("../controllers/communicationController");
+
+router.get("/dashboard", c.dashboard);
+router.get("/config", c.config);
+router.post("/send", c.send);
+router.post("/slack/send", c.sendSlack);
+router.post("/:communicationId/retry", c.retry);
+router.get("/templates", c.listTemplates);
+router.post("/templates", c.createTemplate);
+router.post("/templates/sync", c.syncTemplates);
+router.get("/templates/:templateId", c.getTemplate);
+router.put("/templates/:templateId", c.updateTemplate);
+router.patch("/templates/:templateId", c.updateTemplate);
+router.post("/templates/:templateId/submit", c.submitTemplate);
+router.post("/templates/:templateId/test", c.testTemplate);
+router.get("/rules", c.listRules);
+router.post("/rules", c.createRule);
+router.get("/rules/:ruleId", c.getRule);
+router.put("/rules/:ruleId", c.updateRule);
+router.patch("/rules/:ruleId", c.updateRule);
+router.post("/events/:event", c.triggerEvent);
+router.get("/otp", c.listOtp);
+router.post("/otp/send", c.sendOtp);
+router.post("/otp/verify", c.verifyOtp);
 router.get("/", c.list);
 router.post("/", c.create);
 router.get("/:communicationId", c.get);
 router.put("/:communicationId", c.update);
 router.patch("/:communicationId", c.update);
+
 module.exports = router;

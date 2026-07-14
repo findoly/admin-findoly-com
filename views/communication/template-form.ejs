@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Use lowercase Meta template names and numbered WhatsApp variables such as {{1}}.</p></div><a href="/communications/templates" class="btn btn-light crm-primary-action">Back to templates</a></div></div>
+      <div class="content" x-data="templateForm()" x-init="init()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
+  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
+  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
+  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
+  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
+  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
+</div>
+        <form class="card" @submit.prevent="save()">
+          <div class="card-body"><div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel" :disabled="mode==='edit'"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
+            <div class="col-md-4"><label class="form-label">Template name</label><input class="form-control" x-model="form.name" placeholder="lead_status_update" required pattern="[a-z0-9_]+" :readonly="mode==='edit' && form.status==='approved'"></div>
+            <div class="col-md-4"><label class="form-label">Display name</label><input class="form-control" x-model="form.displayName" maxlength="160"></div>
+            <div class="col-md-4"><label class="form-label">Category</label><select class="form-select" x-model="form.category" :disabled="mode==='edit' && form.status==='approved'"><template x-if="form.channel==='whatsapp'"><optgroup label="WhatsApp"><option value="authentication">Authentication</option><option value="utility">Utility</option><option value="marketing">Marketing</option></optgroup></template><template x-if="form.channel==='email'"><optgroup label="Email"><option value="transactional">Transactional</option><option value="marketing">Marketing</option></optgroup></template></select></div>
+            <div class="col-md-4"><label class="form-label">Language</label><input class="form-control" x-model="form.language" placeholder="en_US" required :readonly="mode==='edit' && form.status==='approved'"></div>
+            <div class="col-md-4"><label class="form-label">Active</label><select class="form-select" x-model="form.isActive"><option :value="true">Yes</option><option :value="false">No</option></select></div>
+            <div class="col-12" x-show="form.channel==='email'"><label class="form-label">Email subject</label><input class="form-control" x-model="form.subject" maxlength="300" :required="form.channel==='email'"></div>
+            <div class="col-md-4" x-show="form.channel==='whatsapp' && form.category!=='authentication'"><label class="form-label">Header type</label><select class="form-select" x-model="form.headerType"><option value="none">None</option><option value="text">Text</option></select></div>
+            <div class="col-md-8" x-show="form.channel==='whatsapp' && form.headerType==='text' && form.category!=='authentication'"><label class="form-label">Header text</label><input class="form-control" x-model="form.headerText" maxlength="500"></div>
+            <div class="col-12"><label class="form-label">Body</label><textarea class="form-control" rows="7" x-model="form.body" required :readonly="mode==='edit' && form.status==='approved'"></textarea><div class="form-text" x-show="form.channel==='whatsapp'">For Utility and Marketing templates use {{1}}, {{2}}, etc. Authentication body text is controlled by Meta.</div></div>
+            <div class="col-12" x-show="form.channel==='email'"><label class="form-label">HTML body</label><textarea class="form-control" rows="8" x-model="form.bodyHtml" placeholder="HTML is optional; plain text body is used when blank."></textarea><div class="form-text">Named variables are supported, for example {{customer_name}} and {{lead_id}}.</div></div>
+            <div class="col-md-8" x-show="form.channel==='whatsapp' && form.category!=='authentication'"><label class="form-label">Footer</label><input class="form-control" x-model="form.footer" maxlength="1000"></div>
+            <div class="col-md-4" x-show="form.channel==='whatsapp' && form.category==='authentication'"><label class="form-label">OTP expiry minutes</label><input type="number" min="1" max="90" class="form-control" x-model.number="form.otpExpiryMinutes"></div>
+            <div class="col-12" x-show="form.channel==='whatsapp' && form.category!=='authentication'"><label class="form-label">Buttons JSON</label><textarea class="form-control crm-json" rows="4" x-model="buttonsJson" placeholder='[{"type":"QUICK_REPLY","text":"Confirm"}]'></textarea></div>
+            <div class="col-12"><label class="form-label">Sample variables (comma-separated)</label><input class="form-control" x-model="samples" placeholder="Amit, LEAD-123, Grooming"></div>
+          </div></div>
+          <div class="card-footer d-flex gap-2"><button class="btn btn-primary" :disabled="saving"><span x-text="saving ? 'Saving…' : 'Save template'"></span></button><button type="button" class="btn btn-light" x-show="mode==='edit'" @click="test()" :disabled="testing"><span x-text="testing ? 'Sending…' : 'Send test'"></span></button></div>
+        </form>
+        <div class="card mt-3" x-show="mode==='edit'"><div class="card-header"><h5 class="mb-0">Send test</h5></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><label class="form-label">Recipient contact</label><input class="form-control" x-model="testForm.recipientContact" placeholder="Mobile or email"></div><div class="col-md-8"><label class="form-label">Variables JSON</label><textarea class="form-control crm-json" rows="3" x-model="testVariables" placeholder='{"1":"Amit","lead_id":"LEAD-123"}'></textarea></div></div></div></div>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function templateForm() {
+        return {
+          mode: location.pathname.endsWith('/new') ? 'create' : 'edit',
+          templateId: location.pathname.endsWith('/new') ? '' : pathParts()[2],
+          form: { channel:'whatsapp', name:'', displayName:'', category:'utility', language:'en_US', subject:'', headerType:'none', headerText:'', body:'', bodyHtml:'', footer:'', buttons:[], sampleVariables:[], otpExpiryMinutes:5, isActive:true, status:'draft' },
+          buttonsJson:'', samples:'', testForm:{recipientContact:''}, testVariables:'{}', error:'', message:'', saving:false, testing:false,
+          async init() { if(this.mode==='edit'){ try { this.form=(await apiFetch('/api/communication/templates/'+this.templateId)).data; this.buttonsJson=JSON.stringify(this.form.buttons||[],null,2); this.samples=(this.form.sampleVariables||[]).join(', '); } catch(error){ this.error=error.message; } } },
+          payload() { let buttons=[]; if(this.buttonsJson.trim()) buttons=JSON.parse(this.buttonsJson); return {...this.form,buttons,sampleVariables:this.samples.split(',').map((value)=>value.trim()).filter(Boolean)}; },
+          async save() { this.saving=true; this.error=''; this.message=''; try { const url=this.mode==='edit'?'/api/communication/templates/'+this.templateId:'/api/communication/templates'; const body=await apiFetch(url,{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.payload())}); this.message='Template saved.'; if(this.mode==='create') location.href='/communications/templates/'+body.data.templateId+'/edit'; else this.form=body.data; } catch(error){ this.error=error.message; } finally { this.saving=false; } },
+          async test() { this.testing=true; this.error=''; this.message=''; try { const variables=JSON.parse(this.testVariables||'{}'); await apiFetch('/api/communication/templates/'+this.templateId+'/test',{method:'POST',body:JSON.stringify({recipientContact:this.testForm.recipientContact,variables})}); this.message='Test message sent.'; } catch(error){ this.error=error.message; } finally { this.testing=false; } }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Monitor OTP delivery and verification without exposing OTP values.</p></div></div></div>
+      <div class="content" x-data="otpPage()" x-init="load()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
+  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
+  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
+  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
+  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
+  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
+</div>
+        <section class="card mb-3"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Send test OTP</h5><p class="text-muted mb-0">Uses the latest approved Authentication template for WhatsApp.</p></div></div><form @submit.prevent="sendOtp()"><div class="card-body"><div class="row g-3"><div class="col-md-3"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div><div class="col-md-4"><label class="form-label">Recipient</label><input class="form-control" x-model="form.recipient" required></div><div class="col-md-3"><label class="form-label">Purpose</label><input class="form-control" x-model="form.purpose" required></div><div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100" :disabled="sending">Send OTP</button></div></div></div></form></section>
+        <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">OTP activity</h5><p class="text-muted mb-0">OTP hashes and codes are never returned to this page.</p></div><button class="btn btn-light btn-sm" @click="load()">Refresh</button></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Recipient</th><th>Channel</th><th>Purpose</th><th>Status</th><th>Attempts</th><th>Expires</th><th>Created</th></tr></thead><tbody><template x-for="row in rows" :key="row.otpId"><tr><td x-text="row.recipient"></td><td x-text="humanize(row.channel)"></td><td x-text="humanize(row.purpose)"></td><td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span><div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div></td><td x-text="row.attempts+' / '+row.maxAttempts"></td><td x-text="formatDate(row.expiresAt)"></td><td x-text="formatDate(row.createdAt)"></td></tr></template><tr x-show="!rows.length"><td colspan="7" class="text-center text-muted py-4">No OTP activity found</td></tr></tbody></table></div></section>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function otpPage(){return{rows:[],form:{channel:'whatsapp',recipient:'',purpose:'login'},sending:false,error:'',message:'',async load(){try{this.rows=(await apiFetch('/api/communication/otp?limit=200')).data||[];}catch(error){this.error=error.message;}},async sendOtp(){this.sending=true;this.error='';this.message='';try{const body=await apiFetch('/api/communication/otp/send',{method:'POST',body:JSON.stringify(this.form)});this.message='OTP sent. Request ID: '+body.data.otpId;await this.load();}catch(error){this.error=error.message;}finally{this.sending=false;}}};}
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

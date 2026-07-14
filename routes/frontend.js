@@ -49,6 +49,14 @@ router.get("/follow-ups", pageAuth, page.followUps);
 router.get("/follow-ups/new", pageAuth, page.followUpCreate);
 router.get("/follow-ups/:followUpId/edit", pageAuth, page.followUpEdit);
 router.get("/communications", pageAuth, page.communications);
+router.get("/communications/logs", pageAuth, page.communicationLogs);
+router.get("/communications/send", pageAuth, page.communicationSend);
+router.get("/communications/templates", pageAuth, page.communicationTemplates);
+router.get("/communications/templates/new", pageAuth, page.communicationTemplateCreate);
+router.get("/communications/templates/:templateId/edit", pageAuth, page.communicationTemplateEdit);
+router.get("/communications/rules", pageAuth, page.communicationRules);
+router.get("/communications/otp", pageAuth, page.communicationOtp);
+router.get("/communications/settings", pageAuth, page.communicationSettings);
 router.get("/communications/new", pageAuth, page.communicationCreate);
 router.get(
   "/communications/:communicationId/edit",
@@ -64,6 +72,6 @@ router.get("/search/enquiries", pageAuth, page.enquiries);
 router.get("/search/providers", pageAuth, page.providers);
 router.get("/search/agents", pageAuth, page.agents);
 router.get("/search/follow-ups", pageAuth, page.followUps);
-router.get("/search/communications", pageAuth, page.communications);
+router.get("/search/communications", pageAuth, page.communicationLogs);
 router.get("/search/invoices", pageAuth, page.invoices);
 module.exports = router;
