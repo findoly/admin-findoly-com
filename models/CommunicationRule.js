@@ -25,6 +25,7 @@ const communicationRuleSchema = new mongoose.Schema(
     emailEnabled: { type: Boolean, default: false },
     emailTemplateId: { type: String, default: "", index: true },
     slackEnabled: { type: Boolean, default: false },
+    slackChannelId: { type: String, default: "", trim: true, maxlength: 100, index: true },
     slackChannelName: { type: String, default: "", trim: true, maxlength: 100 },
     slackMessage: { type: String, default: "", maxlength: 10000 },
     recipientSource: {

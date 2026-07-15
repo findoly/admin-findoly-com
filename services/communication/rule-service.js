@@ -7,6 +7,7 @@ const {
   identifierValue,
   validationError,
 } = require("../../utils/validation");
+const { normalizeChannelId } = require("./slack-service");
 
 const RECIPIENT_SOURCES = Object.freeze(["customer", "provider", "agent", "manual"]);
 const EVENTS = Object.freeze([
@@ -71,8 +72,15 @@ const normalizeInput = async function (input, current) {
       emailEnabled,
     ),
     slackEnabled,
+    slackChannelId: normalizeChannelId(
+      input.slackChannelId ?? existing.slackChannelId ?? process.env.SLACK_DEFAULT_CHANNEL_ID ?? "",
+      {
+        label: "Slack channel ID",
+        required: slackEnabled,
+      },
+    ),
     slackChannelName: textValue(
-      input.slackChannelName ?? existing.slackChannelName ?? process.env.SLACK_CHANNEL_NAME ?? "internal-team",
+      input.slackChannelName ?? existing.slackChannelName ?? process.env.SLACK_DEFAULT_CHANNEL_NAME ?? "internal-team",
       {
         label: "Slack channel name",
         required: slackEnabled,

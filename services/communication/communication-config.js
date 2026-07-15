@@ -56,11 +56,13 @@ const configurationStatus = function () {
       configurationSet: process.env.SES_CONFIGURATION_SET || "",
     },
     slack: {
-      webhookUrl: Boolean(process.env.SLACK_WEBHOOK_URL),
-      channelName: process.env.SLACK_CHANNEL_NAME || "internal-team",
+      botToken: Boolean(process.env.SLACK_BOT_TOKEN),
+      defaultChannelId: process.env.SLACK_DEFAULT_CHANNEL_ID || "",
+      defaultChannelName: process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
+      channelCacheSeconds: Math.max(30, Number(process.env.SLACK_CHANNEL_CACHE_SECONDS || 300) || 300),
       available: mode === "lambda"
         ? Boolean(process.env.MESSAGE_LAMBDA_URL)
-        : Boolean(process.env.SLACK_WEBHOOK_URL),
+        : Boolean(process.env.SLACK_BOT_TOKEN),
     },
     lambda: {
       url: Boolean(process.env.MESSAGE_LAMBDA_URL),

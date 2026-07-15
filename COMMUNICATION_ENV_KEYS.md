@@ -11,8 +11,10 @@ COMMUNICATION_EVENT_API_TOKEN=replace-with-a-long-random-token
 COMMUNICATION_LOG_RETENTION_DAYS=7
 OTP_RETENTION_DAYS=7
 
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/REPLACE/WITH/YOUR_WEBHOOK
-SLACK_CHANNEL_NAME=internal-team
+SLACK_BOT_TOKEN=xoxb-replace-with-bot-user-oauth-token
+SLACK_DEFAULT_CHANNEL_ID=C0123456789
+SLACK_DEFAULT_CHANNEL_NAME=internal-team
+SLACK_CHANNEL_CACHE_SECONDS=300
 
 META_WHATSAPP_API_VERSION=v25.0
 META_WHATSAPP_ACCESS_TOKEN=replace-with-meta-access-token
@@ -63,7 +65,25 @@ MESSAGE_LAMBDA_WEBHOOK_TOKEN=replace-with-a-private-webhook-token
 
 In Lambda mode, Meta, SES and Slack provider secrets can live in Lambda instead of the CRM server. The CRM continues sending the same channel payloads and retaining logs for seven days.
 
-## Slack dashboard API
+## Slack setup and dashboard API
+
+Add these Slack bot scopes before installing or reinstalling the app:
+
+```text
+chat:write
+channels:read
+groups:read
+```
+
+`chat:write.public` is optional when the bot must post to public channels without being invited. Invite the app manually to every private channel it should see or use.
+
+Synchronize channels:
+
+```http
+GET /api/communication/slack/channels?refresh=1
+```
+
+Send to a selected channel:
 
 ```http
 POST /api/communication/slack/send
@@ -72,9 +92,10 @@ Content-Type: application/json
 
 ```json
 {
+  "channelId": "C0123456789",
   "channelName": "internal-team",
   "message": "A new high-priority lead requires review."
 }
 ```
 
-The incoming webhook is connected to one actual Slack channel. `SLACK_CHANNEL_NAME` and the dashboard field are used for display and logs, so keep them matched to the webhook channel.
+The channel ID controls the actual Slack destination. The channel name is retained for display and seven-day communication logs.

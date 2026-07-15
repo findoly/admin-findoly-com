@@ -1,6 +1,7 @@
 const Communication = require("../../models/Communication");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const messageGateway = require("./message-gateway");
+const { normalizeChannelId } = require("./slack-service");
 const { renderText, normalizeVariables } = require("./template-renderer");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
@@ -44,10 +45,9 @@ const normalizeRecipientContact = function (value, channel) {
   if (!contact) return "";
   if (channel === "email") return emailValue(contact, { label: "Recipient email" });
   if (channel === "slack") {
-    return textValue(contact.replace(/^#/, ""), {
-      label: "Slack channel name",
+    return normalizeChannelId(contact, {
+      label: "Slack channel ID",
       required: true,
-      maxLength: 100,
     });
   }
   return validateMobile(contact, { label: "Recipient mobile number", required: false });
@@ -218,12 +218,21 @@ const send = async function (input, actor) {
   let template = null;
   let preview = null;
   let recipientContact = "";
+  let slackChannelName = "";
 
   if (isSlack) {
     recipientContact = normalizeRecipientContact(
-      source.channelName || source.recipientContact || process.env.SLACK_CHANNEL_NAME || "internal-team",
+      source.channelId || source.recipientContact || process.env.SLACK_DEFAULT_CHANNEL_ID || "",
       channel,
     );
+    slackChannelName = textValue(
+      source.channelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
+      {
+        label: "Slack channel name",
+        required: false,
+        maxLength: 100,
+      },
+    ).replace(/^#/, "");
     const message = textValue(source.message || source.text || "", {
       label: "Slack message",
       required: true,
@@ -259,7 +268,10 @@ const send = async function (input, actor) {
     label: "Communication metadata",
     maxBytes: 50000,
   });
-  if (isSlack) metadata.slackChannelName = recipientContact;
+  if (isSlack) {
+    metadata.slackChannelId = recipientContact;
+    metadata.slackChannelName = slackChannelName;
+  }
 
   const communication = await Communication.create({
     enquiryId: optionalIdentifier(source.enquiryId, "Requirement ID"),
@@ -300,7 +312,8 @@ const send = async function (input, actor) {
     const result = await messageGateway.send({
       channel,
       to: recipientContact,
-      channelName: isSlack ? recipientContact : "",
+      channelId: isSlack ? recipientContact : "",
+      channelName: isSlack ? slackChannelName : "",
       templateName: template ? template.name : "",
       language: template ? template.language : "",
       category: template ? template.category : "",
@@ -360,7 +373,8 @@ const retry = async function (communicationId, actor) {
     return send(
       {
         channel: "slack",
-        channelName: current.recipientContact || process.env.SLACK_CHANNEL_NAME || "internal-team",
+        channelId: current.recipientContact || current.metadata?.slackChannelId || process.env.SLACK_DEFAULT_CHANNEL_ID || "",
+        channelName: current.metadata?.slackChannelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
         recipientName: current.recipientName || "Internal team",
         message: current.message || "",
         subject: current.subject || "Internal Slack notification",

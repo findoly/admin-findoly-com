@@ -32,6 +32,7 @@ const ensureDefaultRules = async function () {
           emailEnabled: false,
           emailTemplateId: "",
           slackEnabled: false,
+          slackChannelId: "",
           slackChannelName: "",
           slackMessage: "",
           createdBy: "system",
@@ -132,14 +133,18 @@ const sendRule = async function (rule, context, actor) {
   }
   const slackMessage = String(rule.slackMessage || "").trim();
   if (rule.slackEnabled && slackMessage) {
+    const channelId = String(
+      rule.slackChannelId || process.env.SLACK_DEFAULT_CHANNEL_ID || "",
+    ).trim();
     const channelName = String(
-      rule.slackChannelName || process.env.SLACK_CHANNEL_NAME || "internal-team",
+      rule.slackChannelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
     ).replace(/^#/, "");
     results.push(
       await communicationService.send(
         {
           ...base,
           channel: "slack",
+          channelId,
           channelName,
           recipientName: "Internal team",
           message: renderText(slackMessage, variables),
@@ -147,6 +152,7 @@ const sendRule = async function (rule, context, actor) {
           idempotencyKey: `${rule.ruleId}:slack:${base.enquiryId}:${suffix}`,
           metadata: {
             ...base.metadata,
+            slackChannelId: channelId,
             slackChannelName: channelName,
           },
         },

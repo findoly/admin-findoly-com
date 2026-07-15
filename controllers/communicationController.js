@@ -10,6 +10,7 @@ const otpService = require("../services/communication/otp-service");
 const notificationService = require("../services/communication/notification-service");
 const webhookService = require("../services/communication/webhook-service");
 const whatsappService = require("../services/communication/whatsapp-service");
+const slackService = require("../services/communication/slack-service");
 const { configurationStatus } = require("../services/communication/communication-config");
 
 const actor = function (req) {
@@ -76,8 +77,20 @@ const sendSlack = async function (req, res, next) {
   }
 };
 
-const retry = async function (req, res, next) {
+
+const listSlackChannels = async function (req, res, next) {
   try {
+    const refresh = ["1", "true", "yes"].includes(String(req.query?.refresh || "").toLowerCase());
+    res.json({
+      success: true,
+      data: await slackService.listChannels({ refresh }),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const retry = async function (req, res, next) {  try {
     res.status(201).json({
       success: true,
       data: await service.retry(req.params.communicationId, actor(req)),
@@ -326,6 +339,7 @@ module.exports = {
   update,
   send,
   sendSlack,
+  listSlackChannels,
   retry,
   dashboard,
   config,

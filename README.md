@@ -177,8 +177,8 @@ The CRM includes a built-in Communication Center at `/communications` for:
 - Meta WhatsApp Cloud API template creation, submission, status synchronization and test sending
 - approved WhatsApp Utility, Authentication and Marketing templates
 - Amazon SES email templates and test sending
-- simple internal Slack messages through one Incoming Webhook and channel name
-- WhatsApp or email lead-status notification rules
+- internal Slack messages to multiple manually created channels through one bot token
+- WhatsApp, email or Slack lead-status notification rules
 - separate OTP request and verification APIs with hashed OTP storage, expiry, resend cooldown and attempt limits
 - WhatsApp delivery/read/failure webhooks and inbound-message logging
 - Amazon SES/SNS delivery, bounce, complaint, reject, open and delay updates
@@ -201,6 +201,7 @@ The CRM includes a built-in Communication Center at `/communications` for:
 ### Public and integration endpoints
 
 ```text
+GET  /api/communication/slack/channels
 POST /api/communication/slack/send
 POST /api/communication/otp/send
 POST /api/communication/otp/verify
@@ -248,12 +249,13 @@ The Lambda request receives the channel, recipient, template, variables, rendere
 
 ### Slack setup
 
-1. Create a Slack Incoming Webhook for the internal channel where you manually add team members.
-2. Set `SLACK_WEBHOOK_URL` to the generated webhook URL.
-3. Set `SLACK_CHANNEL_NAME` to the same channel name for display and CRM logging.
-4. Push messages from the Slack card on `/communications`, or call `POST /api/communication/slack/send` with `channelName` and `message`.
+1. Create or open the Slack app and add the bot scopes `chat:write`, `channels:read`, and `groups:read`. Add `chat:write.public` only when the bot must post to public channels without being invited.
+2. Install or reinstall the app to the workspace and copy the **Bot User OAuth Token** beginning with `xoxb-`.
+3. Set `SLACK_BOT_TOKEN`. Optionally set `SLACK_DEFAULT_CHANNEL_ID`, `SLACK_DEFAULT_CHANNEL_NAME`, and `SLACK_CHANNEL_CACHE_SECONDS`.
+4. Invite the Slack app to every private channel that should appear in the CRM channel selector.
+5. Use **Sync channels** on `/communications` or `/communications/rules`, then select the required channel and send or save the rule.
 
-An Incoming Webhook is tied to its configured Slack channel. The dashboard channel name is kept for display and audit logs; it does not move the webhook to another channel.
+The CRM calls Slack `conversations.list` to discover accessible public/private channels and `chat.postMessage` to send. One bot token supports multiple manually created channels; each rule stores both the Slack channel ID and display name.
 
 ### Seven-day MongoDB TTL retention
 
@@ -268,6 +270,6 @@ Secrets are never stored or displayed in the CRM database. The settings page onl
 
 ### Slack in notification rules
 
-Communication Rules can also send internal Slack notifications. Enable Slack on a rule, enter the display channel name, and write the message using supported variables such as `{{lead_id}}`, `{{customer_name}}`, `{{lead_status}}`, `{{provider_name}}`, and `{{note}}`.
+Communication Rules can also send internal Slack notifications. Enable Slack on a rule, select a synchronized channel, and write the message using supported variables such as `{{lead_id}}`, `{{customer_name}}`, `{{lead_status}}`, `{{provider_name}}`, and `{{note}}`.
 
-Slack rule delivery uses the same `SLACK_WEBHOOK_URL` configured for manual Slack messages. Incoming webhooks are bound to a Slack destination, so the rule channel name is stored for CRM display and logs; the webhook configuration controls the actual destination channel. Blank Slack rule messages are rejected and are never sent.
+Each rule stores the Slack channel ID used by `chat.postMessage` and the channel name used for CRM display/logging. Blank Slack messages and missing channel IDs are rejected. Existing webhook-era Slack rules should be opened once and saved with a synchronized channel.

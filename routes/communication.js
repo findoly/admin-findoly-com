@@ -4,6 +4,7 @@ const c = require("../controllers/communicationController");
 router.get("/dashboard", c.dashboard);
 router.get("/config", c.config);
 router.post("/send", c.send);
+router.get("/slack/channels", c.listSlackChannels);
 router.post("/slack/send", c.sendSlack);
 router.post("/:communicationId/retry", c.retry);
 router.get("/templates", c.listTemplates);

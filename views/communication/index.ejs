@@ -65,7 +65,7 @@
                 <div class="card-header crm-card-heading">
                   <div>
                     <h5 class="mb-1">Push internal Slack notification</h5>
-                    <p class="text-muted mb-0">Posts a simple message to the Slack channel connected to your incoming webhook.</p>
+                    <p class="text-muted mb-0">Select any Slack channel available to the bot and push a simple internal message.</p>
                   </div>
                 </div>
                 <form @submit.prevent="sendSlack()">
@@ -73,9 +73,19 @@
                     <div x-show="slackSuccess" x-cloak class="alert alert-success" x-text="slackSuccess"></div>
                     <div x-show="slackError" x-cloak class="alert alert-danger" x-text="slackError"></div>
                     <div class="mb-3">
-                      <label class="form-label">Channel name</label>
-                      <input class="form-control" x-model="slackForm.channelName" maxlength="100" placeholder="internal-team" required>
-                      <div class="form-text">The webhook decides the actual Slack destination. Keep this name matched to that channel.</div>
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0">Slack channel</label>
+                        <button type="button" class="btn btn-light btn-sm" @click="loadSlackChannels(true)" :disabled="slackSyncing">
+                          <span x-text="slackSyncing ? 'Syncing…' : 'Sync channels'"></span>
+                        </button>
+                      </div>
+                      <select class="form-select" x-model="slackForm.channelId" @change="selectSlackChannel()" required>
+                        <option value="">Select Slack channel</option>
+                        <template x-for="channel in slackChannels" :key="channel.id">
+                          <option :value="channel.id" x-text="'#' + channel.name + (channel.isPrivate ? ' (private)' : '')"></option>
+                        </template>
+                      </select>
+                      <div class="form-text">Private channels appear only after the Slack app is invited to them.</div>
                     </div>
                     <div>
                       <label class="form-label">Message</label>
@@ -83,8 +93,8 @@
                     </div>
                   </div>
                   <div class="card-footer d-flex justify-content-between align-items-center">
-                    <span class="text-muted fs-sm" x-text="config.slack?.available ? (config.deliveryMode === 'lambda' ? 'Slack delivery available through Lambda' : 'Slack webhook configured') : 'Slack delivery is not configured'"></span>
-                    <button class="btn btn-primary" :disabled="slackSending || !config.slack?.available">
+                    <span class="text-muted fs-sm" x-text="config.slack?.available ? (config.deliveryMode === 'lambda' ? 'Slack delivery available through Lambda' : 'Slack bot configured') : 'Slack delivery is not configured'"></span>
+                    <button class="btn btn-primary" :disabled="slackSending || !config.slack?.available || !slackForm.channelId">
                       <span x-text="slackSending ? 'Pushing…' : 'Push to Slack'"></span>
                     </button>
                   </div>
@@ -103,7 +113,7 @@
                     <tbody>
                       <template x-for="row in recentSlack" :key="row.communicationId">
                         <tr>
-                          <td><strong x-text="'#' + (row.recipientContact || 'internal-team')"></strong></td>
+                          <td><strong x-text="'#' + (row.metadata?.slackChannelName || row.recipientContact || 'internal-team')"></strong><div class="text-muted fs-sm" x-text="row.metadata?.slackChannelId || ''"></div></td>
                           <td style="max-width:320px"><div class="text-truncate" x-text="row.message || '—'"></div></td>
                           <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span><div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div></td>
                           <td x-text="row.actor || 'system'"></td>
@@ -132,7 +142,7 @@
                   <div class="d-flex justify-content-between mb-3"><span>Delivery mode</span><strong x-text="humanize(config.deliveryMode)"></strong></div>
                   <div class="d-flex justify-content-between mb-3"><span>Meta WhatsApp</span><span class="crm-status" :class="config.whatsapp?.accessToken && config.whatsapp?.phoneNumberId ? 'status-approved' : 'status-rejected'" x-text="config.whatsapp?.accessToken && config.whatsapp?.phoneNumberId ? 'Configured' : 'Incomplete'"></span></div>
                   <div class="d-flex justify-content-between mb-3"><span>Amazon SES</span><span class="crm-status" :class="config.email?.fromEmail ? 'status-approved' : 'status-rejected'" x-text="config.email?.fromEmail ? 'Configured' : 'Incomplete'"></span></div>
-                  <div class="d-flex justify-content-between mb-3"><span>Slack webhook</span><span class="crm-status" :class="config.slack?.available ? 'status-approved' : 'status-rejected'" x-text="config.slack?.available ? 'Configured' : 'Missing'"></span></div>
+                  <div class="d-flex justify-content-between mb-3"><span>Slack bot</span><span class="crm-status" :class="config.slack?.available ? 'status-approved' : 'status-rejected'" x-text="config.slack?.available ? 'Configured' : 'Missing'"></span></div>
                   <div class="d-flex justify-content-between"><span>OTP secret</span><span class="crm-status" :class="config.otp?.secret ? 'status-approved' : 'status-rejected'" x-text="config.otp?.secret ? 'Configured' : 'Missing'"></span></div>
                   <a class="btn btn-light w-100 mt-4" href="/communications/settings">Open settings checklist</a>
                 </div>
@@ -154,7 +164,9 @@
           slackError: '',
           slackSuccess: '',
           slackSending: false,
-          slackForm: { channelName: '', message: '' },
+          slackSyncing: false,
+          slackChannels: [],
+          slackForm: { channelId: '', channelName: '', message: '' },
           pagination: createCursorPagination(10),
           async load() {
             try {
@@ -162,10 +174,38 @@
               this.recent = this.data.communications?.recent || [];
               this.recentSlack = this.data.communications?.recentSlack || [];
               this.config = this.data.configuration || {};
-              if (!this.slackForm.channelName) this.slackForm.channelName = this.config.slack?.channelName || 'internal-team';
+              await this.loadSlackChannels(false);
             } catch (error) {
               this.error = error.message;
             }
+          },
+          async loadSlackChannels(refresh) {
+            if (!this.config.slack?.botToken || this.config.deliveryMode === 'lambda') return;
+            this.slackSyncing = true;
+            this.slackError = '';
+            try {
+              const suffix = refresh ? '?refresh=1' : '';
+              this.slackChannels = (await apiFetch('/api/communication/slack/channels' + suffix)).data || [];
+              if (!this.slackForm.channelId && this.config.slack?.defaultChannelId) {
+                const defaultChannel = this.slackChannels.find((item) => item.id === this.config.slack.defaultChannelId);
+                if (defaultChannel) {
+                  this.slackForm.channelId = defaultChannel.id;
+                  this.slackForm.channelName = defaultChannel.name;
+                }
+              }
+              if (!this.slackForm.channelId && this.slackChannels.length === 1) {
+                this.slackForm.channelId = this.slackChannels[0].id;
+                this.slackForm.channelName = this.slackChannels[0].name;
+              }
+            } catch (error) {
+              this.slackError = error.message;
+            } finally {
+              this.slackSyncing = false;
+            }
+          },
+          selectSlackChannel() {
+            const selected = this.slackChannels.find((item) => item.id === this.slackForm.channelId);
+            this.slackForm.channelName = selected?.name || '';
           },
           async sendSlack() {
             this.slackSending = true;

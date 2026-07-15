@@ -42,9 +42,10 @@
             <section class="card h-100">
               <div class="card-header"><h5 class="mb-0">Internal Slack notifications</h5></div>
               <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Incoming webhook</span><span class="crm-status" :class="config.slack?.webhookUrl?'status-approved':'status-rejected'" x-text="config.slack?.webhookUrl?'Configured':'Missing'"></span></div>
-                <div class="d-flex justify-content-between py-2"><span>Channel name</span><strong x-text="'#' + (config.slack?.channelName||'internal-team')"></strong></div>
-                <p class="text-muted mt-3 mb-0">The Slack webhook controls the actual destination channel. Team membership is managed directly in Slack.</p>
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Bot User OAuth Token</span><span class="crm-status" :class="config.slack?.botToken?'status-approved':'status-rejected'" x-text="config.slack?.botToken?'Configured':'Missing'"></span></div>
+                <div class="d-flex justify-content-between border-bottom py-2"><span>Default channel ID</span><strong x-text="config.slack?.defaultChannelId||'Not set'"></strong></div>
+                <div class="d-flex justify-content-between py-2"><span>Default channel name</span><strong x-text="'#' + (config.slack?.defaultChannelName||'internal-team')"></strong></div>
+                <p class="text-muted mt-3 mb-0">Use one xoxb bot token for multiple channels. Required bot scopes: chat:write, channels:read and groups:read. Invite the app to private channels.</p>
               </div>
             </section>
           </div>

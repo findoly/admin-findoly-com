@@ -4,29 +4,191 @@
   <body x-data="crmShell()" x-init="initShell()">
     <%- include('../partials/navbar') %>
     <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
-      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Choose which CRM events send WhatsApp, email, and internal Slack notifications.</p></div></div></div>
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div>
+            <div class="crm-page-eyebrow">Communication Center</div>
+            <h1 class="page-title mb-1"><%= title %></h1>
+            <p class="crm-page-subtitle mb-0">Choose which CRM events send WhatsApp, email, and internal Slack notifications.</p>
+          </div>
+        </div>
+      </div>
       <div class="content" x-data="rulePage()" x-init="load()">
-        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
         <div class="d-flex flex-wrap gap-2 mb-3">
-  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
-  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
-  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
-  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
-  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
-  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
-</div>
-        <section class="card mb-3" x-show="editing"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Edit notification rule</h5><p class="text-muted mb-0">A rule sends only when enabled and a valid recipient contact exists.</p></div></div><form @submit.prevent="save()"><div class="card-body"><div class="row g-3"><div class="col-md-4"><label class="form-label">Rule name</label><input class="form-control" x-model="form.name" required></div><div class="col-md-4"><label class="form-label">Event</label><input class="form-control" x-model="form.event" readonly></div><div class="col-md-4"><label class="form-label">Recipient</label><select class="form-select" x-model="form.recipientSource"><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option></select></div><div class="col-md-3"><label class="form-label">Rule enabled</label><select class="form-select" x-model="form.enabled"><option :value="true">Yes</option><option :value="false">No</option></select></div><div class="col-md-3"><label class="form-label">WhatsApp</label><select class="form-select" x-model="form.whatsappEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div><div class="col-md-6"><label class="form-label">WhatsApp template</label><select class="form-select" x-model="form.whatsappTemplateId" :required="form.whatsappEnabled"><option value="">Select approved template</option><template x-for="template in whatsappTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div><div class="col-md-3"><label class="form-label">Email</label><select class="form-select" x-model="form.emailEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div><div class="col-md-6"><label class="form-label">Email template</label><select class="form-select" x-model="form.emailTemplateId" :required="form.emailEnabled"><option value="">Select active template</option><template x-for="template in emailTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div><div class="col-md-3"><label class="form-label">Slack</label><select class="form-select" x-model="form.slackEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div><div class="col-md-3"><label class="form-label">Slack channel</label><input class="form-control" x-model="form.slackChannelName" :required="form.slackEnabled" placeholder="internal-team"><div class="form-text">The configured incoming webhook determines the actual Slack channel.</div></div><div class="col-md-9"><label class="form-label">Slack message</label><textarea class="form-control" rows="4" x-model="form.slackMessage" :required="form.slackEnabled" placeholder="Lead {{lead_id}} changed to {{lead_status}}."></textarea><div class="form-text">Supported variables: {{customer_name}}, {{lead_id}}, {{requirement_title}}, {{lead_status}}, {{category}}, {{provider_name}}, {{note}}.</div></div><div class="col-12"><label class="form-label">Description</label><textarea class="form-control" rows="3" x-model="form.description"></textarea></div></div></div><div class="card-footer d-flex gap-2"><button class="btn btn-primary" :disabled="saving">Save rule</button><button type="button" class="btn btn-light" @click="editing=false">Cancel</button></div></form></section>
-        <section class="card crm-data-card"><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Rule</th><th>Event</th><th>Recipient</th><th>WhatsApp</th><th>Email</th><th>Slack</th><th>Status</th><th></th></tr></thead><tbody><template x-for="row in rows" :key="row.ruleId"><tr><td><div class="fw-semibold" x-text="row.name"></div><div class="text-muted fs-sm" x-text="row.description"></div></td><td x-text="humanize(row.event)"></td><td x-text="humanize(row.recipientSource)"></td><td><span x-text="row.whatsappEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="templateName(row.whatsappTemplateId)"></div></td><td><span x-text="row.emailEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="templateName(row.emailTemplateId)"></div></td><td><span x-text="row.slackEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="row.slackEnabled ? ('#' + (row.slackChannelName || 'internal-team')) : ''"></div></td><td><span class="crm-status" :class="row.enabled ? 'status-approved' : 'status-inactive'" x-text="row.enabled ? 'Enabled' : 'Disabled'"></span></td><td class="text-end"><button class="btn btn-light btn-sm" @click="edit(row)">Edit</button></td></tr></template></tbody></table></div></section>
+          <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
+          <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
+          <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
+          <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
+          <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
+          <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
+        </div>
+
+        <section class="card mb-3" x-show="editing">
+          <div class="card-header crm-card-heading">
+            <div>
+              <h5 class="mb-1">Edit notification rule</h5>
+              <p class="text-muted mb-0">A rule sends only when enabled and a valid recipient contact or Slack channel exists.</p>
+            </div>
+          </div>
+          <form @submit.prevent="save()">
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">Rule name</label><input class="form-control" x-model="form.name" required></div>
+                <div class="col-md-4"><label class="form-label">Event</label><input class="form-control" x-model="form.event" readonly></div>
+                <div class="col-md-4"><label class="form-label">Recipient</label><select class="form-select" x-model="form.recipientSource"><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option></select></div>
+                <div class="col-md-3"><label class="form-label">Rule enabled</label><select class="form-select" x-model="form.enabled"><option :value="true">Yes</option><option :value="false">No</option></select></div>
+                <div class="col-md-3"><label class="form-label">WhatsApp</label><select class="form-select" x-model="form.whatsappEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
+                <div class="col-md-6"><label class="form-label">WhatsApp template</label><select class="form-select" x-model="form.whatsappTemplateId" :required="form.whatsappEnabled"><option value="">Select approved template</option><template x-for="template in whatsappTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>
+                <div class="col-md-3"><label class="form-label">Email</label><select class="form-select" x-model="form.emailEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
+                <div class="col-md-6"><label class="form-label">Email template</label><select class="form-select" x-model="form.emailTemplateId" :required="form.emailEnabled"><option value="">Select active template</option><template x-for="template in emailTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>
+                <div class="col-md-3"><label class="form-label">Slack</label><select class="form-select" x-model="form.slackEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
+                <div class="col-md-6">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label mb-0">Slack channel</label>
+                    <button type="button" class="btn btn-light btn-sm" @click="loadSlackChannels(true)" :disabled="slackSyncing">
+                      <span x-text="slackSyncing ? 'Syncing…' : 'Sync channels'"></span>
+                    </button>
+                  </div>
+                  <select class="form-select" x-model="form.slackChannelId" @change="selectSlackChannel()" :required="form.slackEnabled">
+                    <option value="">Select Slack channel</option>
+                    <option x-show="savedChannelMissing()" :value="form.slackChannelId" x-text="'#' + (form.slackChannelName || form.slackChannelId) + ' (saved)'"></option>
+                    <template x-for="channel in slackChannels" :key="channel.id">
+                      <option :value="channel.id" x-text="'#' + channel.name + (channel.isPrivate ? ' (private)' : '')"></option>
+                    </template>
+                  </select>
+                  <div class="form-text">The rule stores the channel ID. Invite the Slack app to private channels before syncing.</div>
+                </div>
+                <div class="col-md-9"><label class="form-label">Slack message</label><textarea class="form-control" rows="4" x-model="form.slackMessage" :required="form.slackEnabled" placeholder="Lead {{lead_id}} changed to {{lead_status}}."></textarea><div class="form-text">Supported variables: {{customer_name}}, {{lead_id}}, {{requirement_title}}, {{lead_status}}, {{category}}, {{provider_name}}, {{note}}.</div></div>
+                <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" rows="3" x-model="form.description"></textarea></div>
+              </div>
+            </div>
+            <div class="card-footer d-flex gap-2"><button class="btn btn-primary" :disabled="saving">Save rule</button><button type="button" class="btn btn-light" @click="editing=false">Cancel</button></div>
+          </form>
+        </section>
+
+        <section class="card crm-data-card">
+          <div class="table-responsive">
+            <table class="table mb-0">
+              <thead><tr><th>Rule</th><th>Event</th><th>Recipient</th><th>WhatsApp</th><th>Email</th><th>Slack</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="row in rows" :key="row.ruleId">
+                  <tr>
+                    <td><div class="fw-semibold" x-text="row.name"></div><div class="text-muted fs-sm" x-text="row.description"></div></td>
+                    <td x-text="humanize(row.event)"></td>
+                    <td x-text="humanize(row.recipientSource)"></td>
+                    <td><span x-text="row.whatsappEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="templateName(row.whatsappTemplateId)"></div></td>
+                    <td><span x-text="row.emailEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="templateName(row.emailTemplateId)"></div></td>
+                    <td><span x-text="row.slackEnabled ? 'Enabled' : 'Disabled'"></span><div class="text-muted fs-sm" x-text="row.slackEnabled ? ('#' + (row.slackChannelName || row.slackChannelId || 'Not selected')) : ''"></div><div class="text-muted fs-sm" x-show="row.slackEnabled" x-text="row.slackChannelId || ''"></div></td>
+                    <td><span class="crm-status" :class="row.enabled ? 'status-approved' : 'status-inactive'" x-text="row.enabled ? 'Enabled' : 'Disabled'"></span></td>
+                    <td class="text-end"><button class="btn btn-light btn-sm" @click="edit(row)">Edit</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div><%- include('../partials/footer') %>
     </div></div></div>
     <script>
       function rulePage() {
-        return { rows:[],templates:[],editing:false,saving:false,error:'',message:'',form:{},
-          get whatsappTemplates(){return this.templates.filter((item)=>item.channel==='whatsapp'&&item.status==='approved'&&item.isActive!==false);}, get emailTemplates(){return this.templates.filter((item)=>item.channel==='email'&&item.status==='active'&&item.isActive!==false);},
-          async load(){try{const results=await Promise.all([apiFetch('/api/communication/rules'),apiFetch('/api/communication/templates?limit=500')]);this.rows=results[0].data||[];this.templates=results[1].data||[];}catch(error){this.error=error.message;}},
-          templateName(id){return this.templates.find((item)=>item.templateId===id)?.name||'';},
-          edit(row){this.form=JSON.parse(JSON.stringify(row));if(this.form.slackEnabled===undefined)this.form.slackEnabled=false;if(!this.form.slackChannelName)this.form.slackChannelName='internal-team';if(!this.form.slackMessage)this.form.slackMessage='';this.editing=true;this.message='';window.scrollTo({top:0,behavior:'smooth'});},
-          async save(){this.saving=true;this.error='';this.message='';try{const body=await apiFetch('/api/communication/rules/'+this.form.ruleId,{method:'PUT',body:JSON.stringify(this.form)});this.message='Notification rule saved.';this.editing=false;await this.load();}catch(error){this.error=error.message;}finally{this.saving=false;}}
+        return {
+          rows: [],
+          templates: [],
+          config: {},
+          slackChannels: [],
+          slackSyncing: false,
+          editing: false,
+          saving: false,
+          error: '',
+          message: '',
+          form: {},
+          get whatsappTemplates() {
+            return this.templates.filter((item) => item.channel === 'whatsapp' && item.status === 'approved' && item.isActive !== false);
+          },
+          get emailTemplates() {
+            return this.templates.filter((item) => item.channel === 'email' && item.status === 'active' && item.isActive !== false);
+          },
+          async load() {
+            this.error = '';
+            try {
+              const results = await Promise.all([
+                apiFetch('/api/communication/rules'),
+                apiFetch('/api/communication/templates?limit=500'),
+                apiFetch('/api/communication/config'),
+              ]);
+              this.rows = results[0].data || [];
+              this.templates = results[1].data || [];
+              this.config = results[2].data || {};
+              await this.loadSlackChannels(false);
+            } catch (error) {
+              this.error = error.message;
+            }
+          },
+          async loadSlackChannels(refresh) {
+            if (!this.config.slack?.botToken || this.config.deliveryMode === 'lambda') return;
+            this.slackSyncing = true;
+            try {
+              const suffix = refresh ? '?refresh=1' : '';
+              this.slackChannels = (await apiFetch('/api/communication/slack/channels' + suffix)).data || [];
+              if (this.editing && !this.form.slackChannelId && this.form.slackChannelName) {
+                const match = this.slackChannels.find((channel) => channel.name === this.form.slackChannelName);
+                if (match) {
+                  this.form.slackChannelId = match.id;
+                  this.form.slackChannelName = match.name;
+                }
+              }
+              if (refresh) this.message = 'Slack channels synchronized.';
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.slackSyncing = false;
+            }
+          },
+          selectSlackChannel() {
+            const selected = this.slackChannels.find((channel) => channel.id === this.form.slackChannelId);
+            if (selected) this.form.slackChannelName = selected.name;
+          },
+          savedChannelMissing() {
+            return Boolean(this.form.slackChannelId) && !this.slackChannels.some((channel) => channel.id === this.form.slackChannelId);
+          },
+          templateName(id) {
+            return this.templates.find((item) => item.templateId === id)?.name || '';
+          },
+          edit(row) {
+            this.form = JSON.parse(JSON.stringify(row));
+            if (this.form.slackEnabled === undefined) this.form.slackEnabled = false;
+            if (!this.form.slackChannelId && this.form.slackChannelName) {
+              const match = this.slackChannels.find((channel) => channel.name === this.form.slackChannelName);
+              if (match) this.form.slackChannelId = match.id;
+            }
+            if (!this.form.slackChannelName) this.form.slackChannelName = this.config.slack?.defaultChannelName || 'internal-team';
+            if (!this.form.slackMessage) this.form.slackMessage = '';
+            this.editing = true;
+            this.message = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          },
+          async save() {
+            this.saving = true;
+            this.error = '';
+            this.message = '';
+            try {
+              this.selectSlackChannel();
+              await apiFetch('/api/communication/rules/' + this.form.ruleId, {
+                method: 'PUT',
+                body: JSON.stringify(this.form),
+              });
+              this.message = 'Notification rule saved.';
+              this.editing = false;
+              await this.load();
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.saving = false;
+            }
+          },
         };
       }
     </script>
