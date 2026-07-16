@@ -47,6 +47,12 @@ const frontendController = {
   invoiceEdit: render("invoice/form", "Edit invoice"),
   distributions: render("distribution/index", "Lead distribution"),
   reports: render("report/index", "Reports"),
+  employees: render("employee/index", "Employees"),
+  employeeCreate: render("employee/form", "Create employee"),
+  employeeEdit: render("employee/form", "Edit employee"),
+  roles: render("role/index", "Roles and permissions"),
+  roleCreate: render("role/form", "Create role"),
+  roleEdit: render("role/form", "Edit role"),
 };
 
 module.exports = frontendController;

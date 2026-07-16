@@ -1,0 +1,21 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+%>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Administration</div><h1 class="page-title mb-1">Roles and permissions</h1><p class="crm-page-subtitle mb-0">Control exactly which CRM pages and actions each employee may access.</p></div><% if (canAccess('roles.create')) { %><a href="/roles/new" class="btn btn-primary crm-primary-action">New role</a><% } %></div></div>
+      <main class="content" x-data="roleList()" x-init="load()"><div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <section class="card" :class="loading && 'crm-loading'"><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Role</th><th>Description</th><th>Permissions</th><th>Employees</th><th>Status</th><th class="text-end">Action</th></tr></thead><tbody>
+          <template x-for="role in rows" :key="role.roleId"><tr><td><strong x-text="role.name"></strong><div class="text-muted fs-sm" x-text="role.isSystem ? 'System role' : 'Custom role'"></div></td><td x-text="role.description || '—'"></td><td><span class="badge bg-light text-body" x-text="role.permissions.includes('*') ? 'All permissions' : role.permissions.length + ' permissions'"></span></td><td x-text="role.employeeCount"></td><td><span class="crm-status" :class="role.active ? 'status-active' : 'status-inactive'" x-text="role.active ? 'Active' : 'Inactive'"></span></td><td class="text-end"><% if (canAccess('roles.edit')) { %><a class="crm-row-action" :href="'/roles/'+role.roleId+'/edit'">Edit</a><% } else { %><span class="text-muted">—</span><% } %></td></tr></template>
+          <tr x-show="!loading && !rows.length"><td colspan="6"><div class="crm-empty-state"><strong>No roles found</strong><span>Create a role to assign feature access.</span></div></td></tr>
+        </tbody></table></div></section>
+      </main><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>function roleList(){return{rows:[],loading:false,error:'',async load(){this.loading=true;try{this.rows=(await apiFetch('/api/roles')).data||[];}catch(error){this.error=error.message;}finally{this.loading=false;}}};}</script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

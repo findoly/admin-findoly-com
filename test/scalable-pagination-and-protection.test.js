@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 const request = require("supertest");
+const { adminCookie } = require("./helpers/auth");
 const mongoose = require("mongoose");
 
 process.env.SKIP_DB = "true";
@@ -26,16 +27,6 @@ function source(relativePath) {
   return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 }
 
-function adminCookie() {
-  const value = Buffer.from(
-    JSON.stringify({
-      email: "admin@example.com",
-      name: "Admin",
-      exp: Date.now() + 60_000,
-    }),
-  ).toString("base64url");
-  return `service_crm_admin=${value}`;
-}
 
 test("cursor pagination uses stable keyset values and bounded page sizes", async () => {
   assert.equal(normalizeLimit("0"), 20);

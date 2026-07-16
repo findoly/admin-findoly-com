@@ -61,6 +61,8 @@ Application queries use one named identifier per collection:
 | `communications` | `communicationId` |
 | `invoices` | `invoiceId` |
 | `formtemplates` | `formTemplateId` |
+| `crmemployees` | `employeeId` |
+| `crmroles` | `roleId` |
 
 New values are plain UUID v4 values with hyphens removed:
 
@@ -116,6 +118,61 @@ The old command remains an alias:
 ```bash
 npm run migrate:lead-distribution
 ```
+
+## CRM employee login, roles and permissions
+
+CRM username/password authentication has been removed. Employees sign in only with a registered Indian mobile number and OTP.
+
+The browser always calls the CRM application host:
+
+```text
+POST /api/auth/send-otp
+POST /api/auth/verify-otp
+```
+
+The CRM server then makes server-side requests to the Findoly OTP service:
+
+```text
+POST https://api.findoly.com/otp/send-otp
+POST https://api.findoly.com/otp/verify-otp
+```
+
+Verification sends only:
+
+```json
+{
+  "mobile": "9000000000",
+  "otp": "1234"
+}
+```
+
+Successful verification creates a signed, HTTP-only cookie session valid for 24 hours. In production the cookie is also marked `Secure` and uses `SameSite=Lax`. Set a strong `AUTH_COOKIE_SECRET`; old `ADMIN_EMAIL` and `ADMIN_PASSWORD` variables are not used.
+
+### First Super Admin setup
+
+Set these values before the first login:
+
+```env
+AUTH_COOKIE_SECRET=replace-with-at-least-32-random-characters
+CRM_BOOTSTRAP_MOBILE=9000000000
+CRM_BOOTSTRAP_NAME=CRM Administrator
+CRM_OTP_BASE_URL=https://api.findoly.com/otp
+```
+
+When `crmemployees` is empty, only the configured bootstrap mobile may request CRM login. After its OTP is successfully verified, the CRM creates the initial Super Admin employee and the default roles. Remove `CRM_BOOTSTRAP_MOBILE` from the environment after first setup if desired.
+
+Administrators can then use **Employees** and **Roles & permissions** to:
+
+- create and activate/deactivate employee profiles
+- assign default or custom roles
+- grant page and action permissions
+- revoke access immediately by deactivating an employee or role
+
+Protected pages and JSON APIs both enforce permissions. Employee and role changes take effect on the employee's next request, even when an older 24-hour cookie still exists.
+
+### Appearance themes
+
+The original appearance remains the default. Six additional optional presets are available: Soft Blue, Soft Green, Soft Purple, Soft Peach, Soft Grey and Soft Orange. The selected theme is saved per employee profile in that browser and does not modify the Findoly logo, fonts or layout.
 
 ## Frontend and API examples
 

@@ -1,8 +1,9 @@
 const router = require("express").Router();
 const c = require("../controllers/invoiceController");
-router.get("/", c.list);
-router.post("/", c.create);
-router.get("/:invoiceId", c.get);
-router.put("/:invoiceId", c.update);
-router.patch("/:invoiceId", c.update);
+const { requirePermission } = require("../middleware/auth");
+router.get("/", requirePermission("billing.view"), c.list);
+router.post("/", requirePermission("billing.create"), c.create);
+router.get("/:invoiceId", requirePermission("billing.view"), c.get);
+router.put("/:invoiceId", requirePermission("billing.edit"), c.update);
+router.patch("/:invoiceId", requirePermission("billing.edit"), c.update);
 module.exports = router;

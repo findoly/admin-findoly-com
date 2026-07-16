@@ -191,6 +191,10 @@
           // The sidebar still works when browser storage is unavailable.
         }
       },
+      can(permission) {
+        const permissions = Array.isArray(this.admin.permissions) ? this.admin.permissions : [];
+        return permissions.includes('*') || permissions.includes(permission);
+      },
       pathIs(path) {
         return location.pathname === path || location.pathname.startsWith(path + '/');
       },

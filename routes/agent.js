@@ -1,9 +1,10 @@
 const router = require("express").Router();
 const controller = require("../controllers/agentController");
-router.get("/", controller.list);
-router.post("/", controller.create);
-router.get("/:agentId/requirements", controller.requirements);
-router.get("/:agentId", controller.get);
-router.put("/:agentId", controller.update);
-router.patch("/:agentId", controller.update);
+const { requirePermission } = require("../middleware/auth");
+router.get("/", requirePermission("agents.view"), controller.list);
+router.post("/", requirePermission("agents.create"), controller.create);
+router.get("/:agentId/requirements", requirePermission("agents.view"), controller.requirements);
+router.get("/:agentId", requirePermission("agents.view"), controller.get);
+router.put("/:agentId", requirePermission("agents.edit"), controller.update);
+router.patch("/:agentId", requirePermission("agents.edit"), controller.update);
 module.exports = router;

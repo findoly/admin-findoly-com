@@ -66,6 +66,6 @@ test("CRM exposes minimal agent management routes", () => {
   const apiRoutes = source("routes/main.js");
   const pageRoutes = source("routes/frontend.js");
   assert.match(apiRoutes, /router\.use\("\/agent", require\("\.\/agent"\)\)/);
-  assert.match(pageRoutes, /router\.get\("\/agents", pageAuth, page\.agents\)/);
-  assert.match(pageRoutes, /router\.get\("\/agents\/:agentId", pageAuth, page\.agentShow\)/);
+  assert.match(pageRoutes, /router\.get\("\/agents", \.\.\.protectedPage\("agents\.view"\), page\.agents\)/);
+  assert.match(pageRoutes, /router\.get\("\/agents\/:agentId", \.\.\.protectedPage\("agents\.view"\), page\.agentShow\)/);
 });

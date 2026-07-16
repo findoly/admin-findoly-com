@@ -23,7 +23,7 @@ const {
   getPagination,
 } = require("../utils/pagination");
 const { normalizedError } = require("../middleware/error");
-const { safeEqual } = require("../controllers/authController");
+const { encodeSession, decodeSession } = require("../middleware/auth");
 
 function expectStatus(fn, status, pattern = /./) {
   assert.throws(fn, (error) => {
@@ -196,8 +196,17 @@ const errorCases = [
   ["error normalizer preserves safe client errors", () => assert.deepEqual(normalizedError({ status: 422, message: "Cannot process" }), { status: 422, message: "Cannot process" })],
   ["error normalizer hides server error details", () => assert.deepEqual(normalizedError({ status: 500, message: "database password leaked" }), { status: 500, message: "Something went wrong" })],
   ["error normalizer converts invalid status to server error", () => assert.deepEqual(normalizedError({ status: 200, message: "bad" }), { status: 500, message: "Something went wrong" })],
-  ["safe credential comparison matches equal text", () => assert.equal(safeEqual("secret", "secret"), true)],
-  ["safe credential comparison rejects different text", () => assert.equal(safeEqual("secret", "Secret"), false)],
-  ["safe credential comparison supports values of different lengths", () => assert.equal(safeEqual("a", "a very long value"), false)],
+  ["signed auth session round trips", () => {
+    const token = encodeSession({ v: 1, employeeId: "employee-1", exp: Date.now() + 1000 });
+    assert.equal(decodeSession(token).employeeId, "employee-1");
+  }],
+  ["signed auth session rejects tampering", () => {
+    const token = encodeSession({ v: 1, employeeId: "employee-1", exp: Date.now() + 1000 });
+    assert.throws(() => decodeSession(token + "x"), /Invalid session/);
+  }],
+  ["signed auth session requires employee identity", () => {
+    const token = encodeSession({ v: 1, exp: Date.now() + 1000 });
+    assert.throws(() => decodeSession(token), /Invalid session payload/);
+  }],
 ];
 for (const [name, fn] of errorCases) test(name, fn);

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Employee access</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">The registered mobile number is the only login identity. No username or password is stored.</p></div><a href="/employees" class="btn btn-light crm-primary-action">Back to employees</a></div></div>
+      <main class="content"><div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-data="employeeForm()" x-init="init()"><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <form class="card" @submit.prevent="save()"><div class="card-body" :class="loading && 'crm-loading'"><div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Employee name</label><input class="form-control" x-model="form.name" maxlength="120" required></div>
+          <div class="col-md-3"><label class="form-label">Employee code</label><input class="form-control text-uppercase" x-model="form.employeeCode" maxlength="40" placeholder="EMP001"></div>
+          <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" x-model="form.status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select></div>
+          <div class="col-md-4"><label class="form-label">Mobile for OTP login</label><div class="input-group"><span class="input-group-text">+91</span><input class="form-control" x-model="form.mobile" @input="form.mobile=digits(form.mobile)" inputmode="numeric" maxlength="10" required></div></div>
+          <div class="col-md-4"><label class="form-label">Email</label><input type="email" class="form-control" x-model="form.email" maxlength="254"></div>
+          <div class="col-md-4"><label class="form-label">Assigned role</label><select class="form-select" x-model="form.roleId" required><option value="">Select role</option><template x-for="role in roles" :key="role.roleId"><option :value="role.roleId" x-text="role.name"></option></template></select></div>
+          <div class="col-md-6"><label class="form-label">Designation</label><input class="form-control" x-model="form.designation" maxlength="120" placeholder="Sales Executive"></div>
+          <div class="col-md-6"><label class="form-label">Department</label><input class="form-control" x-model="form.department" maxlength="120" placeholder="Sales"></div>
+          <div class="col-12"><label class="form-label">Internal notes</label><textarea class="form-control" rows="4" x-model="form.notes" maxlength="5000"></textarea></div>
+          <template x-if="mode==='edit'"><div class="col-12"><div class="alert alert-light border mb-0"><strong>Login and audit details</strong><div class="mt-2"><span class="me-3">Employee ID: <code x-text="form.employeeId"></code></span><span class="me-3">Last login: <span x-text="formatDate(form.lastLoginAt)"></span></span><span>Created: <span x-text="formatDate(form.createdAt)"></span></span></div></div></div></template>
+        </div></div><div class="card-footer d-flex"><a href="/employees" class="btn btn-light">Cancel</a><button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : 'Save employee'"></button></div></form>
+      </div></main>
+      <%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function employeeForm(){return{mode:pageMode(),recordId:pageMode()==='edit'?pathRecordId(true):'',roles:[],form:{name:'',employeeCode:'',mobile:'',email:'',roleId:'',designation:'',department:'',status:'active',notes:''},loading:true,saving:false,error:'',digits(v){return String(v||'').replace(/\D/g,'').slice(-10);},async init(){try{this.roles=(await apiFetch('/api/employees/metadata')).data.roles||[];if(this.mode==='edit'){this.form={...this.form,...(await apiFetch('/api/employees/'+this.recordId)).data};}}catch(error){this.error=error.message;}finally{this.loading=false;}},async save(){this.error='';this.saving=true;try{if(!/^[6-9]\d{9}$/.test(this.form.mobile))throw new Error('Enter a valid 10-digit Indian mobile number');if(!this.form.roleId)throw new Error('Select an employee role');const url=this.mode==='edit'?'/api/employees/'+this.recordId:'/api/employees';const body=await apiFetch(url,{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.form)});location.href='/employees/'+body.data.employeeId+'/edit';}catch(error){this.error=error.message;}finally{this.saving=false;}}};}
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

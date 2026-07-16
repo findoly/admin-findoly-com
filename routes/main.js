@@ -15,6 +15,10 @@ router.post("/communication/events/:event", communicationController.integrationE
 router.post("/communications/events/:event", communicationController.integrationEvent);
 router.use(apiAuth);
 router.use("/dashboard", require("./dashboard"));
+router.use("/employee", require("./employee"));
+router.use("/employees", require("./employee"));
+router.use("/role", require("./role"));
+router.use("/roles", require("./role"));
 router.use("/catalog", require("./catalog"));
 router.use("/enquiry", require("./enquiry"));
 router.use("/enquiries", require("./enquiry"));

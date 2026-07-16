@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 const request = require("supertest");
+const { adminCookie } = require("./helpers/auth");
 
 process.env.SKIP_DB = "true";
 process.env.AUTH_COOKIE_NAME = "service_crm_admin";
@@ -30,16 +31,6 @@ function allViewFiles() {
   return files;
 }
 
-function adminCookie() {
-  const value = Buffer.from(
-    JSON.stringify({
-      email: "admin@example.com",
-      name: "Admin",
-      exp: Date.now() + 60_000,
-    }),
-  ).toString("base64url");
-  return `service_crm_admin=${value}`;
-}
 
 test("CRM separates frontend page routes from JSON API routes", async () => {
   assert.equal(typeof app, "function");

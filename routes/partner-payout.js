@@ -1,9 +1,10 @@
 const router = require("express").Router();
 const controller = require("../controllers/partnerPayoutController");
-router.get("/", controller.list);
-router.get("/agent/:agentId/summary", controller.agentSummary);
-router.get("/agent/:agentId/withdrawals", controller.agentWithdrawals);
-router.post("/:withdrawalId/transition", controller.transition);
-router.post("/:withdrawalId/payout", controller.payout);
-router.get("/:withdrawalId", controller.get);
+const { requirePermission } = require("../middleware/auth");
+router.get("/", requirePermission("partnerPayouts.view"), controller.list);
+router.get("/agent/:agentId/summary", requirePermission("partnerPayouts.view"), controller.agentSummary);
+router.get("/agent/:agentId/withdrawals", requirePermission("partnerPayouts.view"), controller.agentWithdrawals);
+router.post("/:withdrawalId/transition", requirePermission("partnerPayouts.manage"), controller.transition);
+router.post("/:withdrawalId/payout", requirePermission("partnerPayouts.manage"), controller.payout);
+router.get("/:withdrawalId", requirePermission("partnerPayouts.view"), controller.get);
 module.exports = router;

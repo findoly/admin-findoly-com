@@ -1,12 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
+const { adminCookie } = require("./helpers/auth");
 const mongoose = require("mongoose");
 
 process.env.SKIP_DB = "true";
 process.env.AUTH_COOKIE_NAME = "service_crm_admin";
-process.env.ADMIN_EMAIL = "admin@example.com";
-process.env.ADMIN_PASSWORD = "strong-test-password";
 process.env.NODE_ENV = "test";
 
 const app = require("../app");
@@ -18,15 +17,6 @@ const Communication = require("../models/Communication");
 const Invoice = require("../models/Invoice");
 const LeadDistribution = require("../models/LeadDistribution");
 const WalletTransaction = require("../models/WalletTransaction");
-
-function adminCookie(exp = Date.now() + 60_000) {
-  const value = Buffer.from(JSON.stringify({
-    email: "admin@example.com",
-    name: "Admin",
-    exp,
-  })).toString("base64url");
-  return `service_crm_admin=${value}`;
-}
 
 test("health endpoint is public and reports CRM service", async () => {
   const response = await request(app).get("/api/health");
@@ -53,38 +43,23 @@ test("root redirects authenticated users to dashboard", async () => {
   assert.equal(response.headers.location, "/dashboard");
 });
 
-test("login rejects missing email", async () => {
-  const response = await request(app).post("/api/auth/login").send({ password: "strong-test-password" });
-  assert.equal(response.status, 400);
-  assert.match(response.body.message, /Email is required/);
-});
-
-test("login rejects invalid email format", async () => {
-  const response = await request(app).post("/api/auth/login").send({ email: "admin", password: "strong-test-password" });
-  assert.equal(response.status, 400);
-  assert.match(response.body.message, /Email is invalid/);
-});
-
-test("login rejects missing password", async () => {
-  const response = await request(app).post("/api/auth/login").send({ email: "admin@example.com" });
-  assert.equal(response.status, 400);
-  assert.match(response.body.message, /Password is required/);
-});
-
-test("login rejects wrong credentials", async () => {
-  const response = await request(app).post("/api/auth/login").send({ email: "admin@example.com", password: "wrong" });
+test("password login endpoint is removed", async () => {
+  const response = await request(app).post("/api/auth/login").send({ email: "admin@example.com", password: "old-password" });
   assert.equal(response.status, 401);
   assert.equal(response.body.success, false);
+  assert.equal((response.headers["set-cookie"] || []).length, 0);
 });
 
-test("login accepts valid credentials and sets HTTP-only cookie", async () => {
-  const response = await request(app).post("/api/auth/login").send({ email: "ADMIN@example.com", password: "strong-test-password" });
-  assert.equal(response.status, 200);
-  assert.equal(response.body.data.email, "admin@example.com");
-  const cookies = response.headers["set-cookie"] || [];
-  assert.ok(cookies.some((cookie) => /service_crm_admin=/.test(cookie)));
-  assert.ok(cookies.some((cookie) => /HttpOnly/i.test(cookie)));
-  assert.ok(cookies.some((cookie) => /SameSite=Lax/i.test(cookie)));
+test("OTP send rejects a missing mobile number", async () => {
+  const response = await request(app).post("/api/auth/send-otp").send({});
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /Mobile number is required/);
+});
+
+test("OTP verification uses mobile and OTP only", async () => {
+  const response = await request(app).post("/api/auth/verify-otp").send({ mobile: "9819595467" });
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /OTP is required/);
 });
 
 test("auth me rejects missing cookie", async () => {
@@ -107,7 +82,7 @@ test("auth me rejects malformed cookie", async () => {
 test("auth me returns current admin for valid session", async () => {
   const response = await request(app).get("/api/auth/me").set("Cookie", [adminCookie()]);
   assert.equal(response.status, 200);
-  assert.equal(response.body.data.email, "admin@example.com");
+  assert.equal(response.body.data.mobile, "9819595467");
 });
 
 test("logout rejects unauthenticated request", async () => {
@@ -189,6 +164,8 @@ const protectedApiRoutes = [
   "/api/invoices",
   "/api/distribution",
   "/api/distributions",
+  "/api/employees",
+  "/api/roles",
 ];
 for (const route of protectedApiRoutes) {
   test(`protected API route ${route} returns JSON 401 without a session`, async () => {
@@ -216,6 +193,8 @@ const protectedPages = [
   "/billing/new",
   "/distributions",
   "/reports",
+  "/employees",
+  "/roles",
 ];
 for (const route of protectedPages) {
   test(`protected page ${route} redirects unauthenticated users`, async () => {
@@ -249,6 +228,10 @@ const renderPages = [
   "/billing/I1/edit",
   "/distributions",
   "/reports",
+  "/employees",
+  "/employees/new",
+  "/roles",
+  "/roles/new",
 ];
 for (const route of renderPages) {
   test(`authenticated frontend page ${route} renders without database reads`, async () => {

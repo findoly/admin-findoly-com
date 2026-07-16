@@ -1,3 +1,6 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+%>
 <div class="navbar navbar-expand-lg navbar-static crm-topbar">
   <div class="container-fluid px-3 px-lg-4">
     <button type="button" class="crm-mobile-menu d-lg-none me-2" @click="sidebarOpen = true" aria-label="Open navigation">
@@ -14,11 +17,13 @@
       </a>
     </div>
 
+    <% if (canAccess('requirements.view')) { %>
     <form class="crm-global-search d-none d-md-flex" action="/enquiries" method="get">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
       <input type="search" name="q" placeholder="Search leads, customers or mobile" aria-label="Search requirements">
       <kbd>⌘ K</kbd>
     </form>
+    <% } %>
 
     <ul class="nav flex-row align-items-center gap-2 ms-auto">
       <li class="nav-item">
@@ -28,17 +33,17 @@
       </li>
       <li class="nav-item dropdown">
         <button type="button" class="crm-admin-menu" data-bs-toggle="dropdown" aria-expanded="false">
-          <span class="crm-admin-avatar" x-text="(admin.name || admin.email || 'A').charAt(0).toUpperCase()">A</span>
+          <span class="crm-admin-avatar" x-text="(admin.name || admin.mobile || 'E').charAt(0).toUpperCase()">A</span>
           <span class="crm-admin-copy d-none d-sm-flex">
             <strong x-text="admin.name || 'Admin'">Admin</strong>
-            <small x-text="admin.email || 'Administrator'">Administrator</small>
+            <small x-text="admin.roleName || admin.mobile || 'Employee'">Administrator</small>
           </span>
           <svg class="crm-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
         </button>
         <div class="dropdown-menu dropdown-menu-end crm-admin-dropdown">
           <div class="px-3 py-2 border-bottom">
             <div class="fw-semibold" x-text="admin.name || 'Admin'">Admin</div>
-            <div class="text-muted fs-sm" x-text="admin.email"></div>
+            <div class="text-muted fs-sm" x-text="admin.mobile ? '+91 '+admin.mobile : admin.email"></div><div class="text-muted fs-sm" x-text="admin.roleName || 'Employee'"></div>
           </div>
           <button type="button" class="dropdown-item text-danger" @click="logout()">
             <svg class="crm-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg>
@@ -54,7 +59,7 @@
   <div class="crm-appearance-panel-header">
     <div>
       <h5 class="mb-1">Appearance settings</h5>
-      <div class="text-muted fs-sm">Saved in this browser for this admin device.</div>
+      <div class="text-muted fs-sm">Saved in this browser for this employee profile.</div>
     </div>
     <button type="button" class="btn btn-light btn-icon rounded-pill" data-crm-appearance-close aria-label="Close appearance settings">
       <svg class="crm-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -109,6 +114,30 @@
         <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="google" data-preset-label="Google style">
           <span style="--preset-1:#4285f4;--preset-2:#ea4335;--preset-3:#fbbc05;--preset-4:#34a853;--preset-5:#ffffff"></span>
           <b>Google style</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softBlue" data-preset-label="Soft blue">
+          <span style="--preset-1:#f2f6fc;--preset-2:#5b7fb5;--preset-3:#f6f9fd;--preset-4:#dfeaf8;--preset-5:#26364d"></span>
+          <b>Soft blue</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softGreen" data-preset-label="Soft green">
+          <span style="--preset-1:#f0f8f4;--preset-2:#4f8f70;--preset-3:#f6faf8;--preset-4:#dcefe5;--preset-5:#294439"></span>
+          <b>Soft green</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softPurple" data-preset-label="Soft purple">
+          <span style="--preset-1:#f6f2fb;--preset-2:#8069ad;--preset-3:#faf8fc;--preset-4:#e9e0f5;--preset-5:#403552"></span>
+          <b>Soft purple</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softPeach" data-preset-label="Soft peach">
+          <span style="--preset-1:#fff5f0;--preset-2:#bd775e;--preset-3:#fff9f6;--preset-4:#f9e3d9;--preset-5:#543a31"></span>
+          <b>Soft peach</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softGrey" data-preset-label="Soft grey">
+          <span style="--preset-1:#f5f6f8;--preset-2:#667085;--preset-3:#f7f8fa;--preset-4:#e4e7ec;--preset-5:#344054"></span>
+          <b>Soft grey</b>
+        </button>
+        <button type="button" class="crm-theme-preset crm-theme-preset-five" data-appearance-preset="softOrange" data-preset-label="Soft orange">
+          <span style="--preset-1:#fff7ed;--preset-2:#c97932;--preset-3:#fffbf6;--preset-4:#fde7cb;--preset-5:#513b27"></span>
+          <b>Soft orange</b>
         </button>
       </div>
     </section>

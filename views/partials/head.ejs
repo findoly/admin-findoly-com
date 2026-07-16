@@ -23,6 +23,10 @@
       }, { once: true });
     })();
   </script>
+  <script>
+    window.__crmServerUser = <%- JSON.stringify(((typeof currentAdmin !== "undefined") && currentAdmin && (currentAdmin.employeeId || currentAdmin.mobile)) || "guest").replace(/</g, "\\u003c") %>;
+    document.documentElement.dataset.crmUser = window.__crmServerUser;
+  </script>
   <link href="/css/inter.css" rel="stylesheet" type="text/css">
   <link href="/css/styles.min.css" rel="stylesheet" type="text/css">
   <link href="/css/all.min.css" rel="stylesheet" type="text/css">

@@ -1,4 +1,5 @@
 const router = require("express").Router();
 const c = require("../controllers/dashboardController");
-router.get("/", c.get);
+const { requirePermission } = require("../middleware/auth");
+router.get("/", requirePermission("dashboard.view"), c.get);
 module.exports = router;

@@ -6,44 +6,67 @@
       <div class="content-wrapper">
         <div class="content-inner">
           <div class="content d-flex justify-content-center align-items-center">
-            <form class="login-form" @submit.prevent="submit">
-              <div class="card mb-0">
+            <form class="login-form" @submit.prevent="step === 'mobile' ? sendOtp() : verifyOtp()">
+              <div class="card mb-0 crm-otp-login-card">
                 <div class="card-body">
-                  <div class="text-center mb-3">
+                  <div class="text-center mb-4">
                     <div class="crm-brand-mark mx-auto mb-3">C</div>
-                    <h5 class="mb-0">CRM sign in</h5>
-                    <span class="d-block text-muted"
-                      >Use your admin credentials</span
-                    >
+                    <h5 class="mb-1">CRM employee sign in</h5>
+                    <span class="d-block text-muted">Use your registered mobile number and OTP</span>
                   </div>
-                  <div
-                    x-show="error"
-                    x-cloak
-                    class="alert alert-danger"
-                    x-text="error"
-                  ></div>
+
+                  <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+                  <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+
                   <div class="mb-3">
-                    <label class="form-label">Email</label
-                    ><input
-                      class="form-control"
-                      type="email"
-                      x-model="form.email"
-                      maxlength="254"
-                      required
-                    />
+                    <label class="form-label">Mobile number</label>
+                    <div class="input-group">
+                      <span class="input-group-text">+91</span>
+                      <input
+                        class="form-control"
+                        type="tel"
+                        inputmode="numeric"
+                        autocomplete="tel"
+                        maxlength="10"
+                        placeholder="Enter 10-digit mobile"
+                        x-model="form.mobile"
+                        @input="form.mobile = digits(form.mobile)"
+                        :readonly="step === 'otp'"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div class="mb-3">
-                    <label class="form-label">Password</label
-                    ><input
-                      class="form-control"
-                      type="password"
-                      x-model="form.password"
-                      maxlength="500"
-                      required
-                    />
-                  </div>
+
+                  <template x-if="step === 'otp'">
+                    <div>
+                      <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <label class="form-label mb-0">One-time password</label>
+                          <button type="button" class="btn btn-link btn-sm p-0" @click="changeMobile()">Change mobile</button>
+                        </div>
+                        <input
+                          class="form-control crm-otp-input"
+                          type="text"
+                          inputmode="numeric"
+                          autocomplete="one-time-code"
+                          maxlength="8"
+                          placeholder="Enter OTP"
+                          x-model="form.otp"
+                          @input="form.otp = String(form.otp || '').replace(/\D/g, '').slice(0, 8)"
+                          required
+                        />
+                      </div>
+                      <div class="d-flex justify-content-between align-items-center mb-3 fs-sm">
+                        <span class="text-muted">Session stays active for 24 hours</span>
+                        <button type="button" class="btn btn-link btn-sm p-0" :disabled="loading || resendSeconds > 0" @click="sendOtp(true)">
+                          <span x-text="resendSeconds > 0 ? 'Resend in ' + resendSeconds + 's' : 'Resend OTP'"></span>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
                   <button class="btn btn-primary w-100" :disabled="loading">
-                    <span x-text="loading ? 'Signing in…' : 'Sign in'"></span>
+                    <span x-text="loading ? (step === 'mobile' ? 'Sending OTP…' : 'Verifying…') : (step === 'mobile' ? 'Send OTP' : 'Verify and sign in')"></span>
                   </button>
                 </div>
               </div>
@@ -54,29 +77,72 @@
     </div>
     <script>
       function safeReturnTo(value) {
-        const target = String(value || "/dashboard");
-        return target.startsWith("/") && !target.startsWith("//")
-          ? target
-          : "/dashboard";
+        const target = String(value || '/dashboard');
+        return target.startsWith('/') && !target.startsWith('//') ? target : '/dashboard';
       }
 
       function loginPage() {
         return {
-          form: { email: "admin@example.com", password: "change-me" },
+          step: 'mobile',
+          form: { mobile: '', otp: '' },
           loading: false,
-          error: "",
-          returnTo: safeReturnTo(new URLSearchParams(location.search).get("returnTo")),
-          async submit() {
+          error: '',
+          message: '',
+          resendSeconds: 0,
+          resendTimer: null,
+          returnTo: safeReturnTo(new URLSearchParams(location.search).get('returnTo')),
+          digits(value) { return String(value || '').replace(/\D/g, '').slice(-10); },
+          startCountdown() {
+            window.clearInterval(this.resendTimer);
+            this.resendSeconds = 60;
+            this.resendTimer = window.setInterval(() => {
+              this.resendSeconds -= 1;
+              if (this.resendSeconds <= 0) window.clearInterval(this.resendTimer);
+            }, 1000);
+          },
+          async sendOtp(isResend = false) {
+            this.error = '';
+            this.message = '';
+            if (!/^[6-9]\d{9}$/.test(this.form.mobile)) {
+              this.error = 'Enter a valid 10-digit Indian mobile number';
+              return;
+            }
             this.loading = true;
-            this.error = "";
             try {
-              const response = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(this.form),
+              const response = await fetch('/api/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mobile: this.form.mobile })
               });
-              const body = await response.json();
-              if (!response.ok) throw new Error(body.message || "Login failed");
+              const body = await response.json().catch(() => ({}));
+              if (!response.ok || body.success === false) throw new Error(body.message || 'Unable to send OTP');
+              this.step = 'otp';
+              this.form.otp = '';
+              this.message = body.data?.message || (isResend ? 'OTP sent again' : 'OTP sent successfully');
+              this.startCountdown();
+              this.$nextTick(() => document.querySelector('.crm-otp-input')?.focus());
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          async verifyOtp() {
+            this.error = '';
+            this.message = '';
+            if (!/^\d{4,8}$/.test(this.form.otp)) {
+              this.error = 'Enter the OTP sent to your mobile';
+              return;
+            }
+            this.loading = true;
+            try {
+              const response = await fetch('/api/auth/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mobile: this.form.mobile, otp: this.form.otp })
+              });
+              const body = await response.json().catch(() => ({}));
+              if (!response.ok || body.success === false) throw new Error(body.message || 'OTP verification failed');
               location.href = this.returnTo;
             } catch (error) {
               this.error = error.message;
@@ -84,6 +150,14 @@
               this.loading = false;
             }
           },
+          changeMobile() {
+            window.clearInterval(this.resendTimer);
+            this.step = 'mobile';
+            this.form.otp = '';
+            this.error = '';
+            this.message = '';
+            this.resendSeconds = 0;
+          }
         };
       }
     </script>
