@@ -52,7 +52,7 @@ async function normalizeInput(input = {}, current = {}) {
     notes: textValue(input.notes ?? current.notes, { label: "Agent notes", maxLength: 5000 }),
     payoutPerReferralPaise: numberValue(input.payoutPerReferralPaise, { label: "Payout per referral", fallback: current.payoutPerReferralPaise ?? 5000, min: 5000, max: 20000, integer: true }),
     payoutEnabled: booleanValue(input.payoutEnabled, { label: "Payout enabled", fallback: current.payoutEnabled === true }),
-    payoutMode: enumValue(input.payoutMode, ["UPI", "IMPS", "NEFT", "RTGS"], { label: "Payout mode", fallback: current.payoutMode || "IMPS" }),
+    payoutMode: enumValue(input.payoutMode, ["UPI", "IMPS", "NEFT", "RTGS"], { label: "Payout mode", fallback: current.payoutMode || "IMPS", normalize: false }),
     razorpayContactId: textValue(input.razorpayContactId ?? current.razorpayContactId, { label: "Razorpay contact ID", maxLength: 80 }),
     razorpayFundAccountId: textValue(input.razorpayFundAccountId ?? current.razorpayFundAccountId, { label: "Razorpay fund account ID", maxLength: 80 }),
     payoutAccountLabel: textValue(input.payoutAccountLabel ?? current.payoutAccountLabel, { label: "Payout account label", maxLength: 160 }),
