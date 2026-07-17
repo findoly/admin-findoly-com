@@ -25,6 +25,12 @@ const providerSchema = new mongoose.Schema(
     walletCurrency: { type: String, default: "INR" },
     walletUpdatedAt: { type: Date, default: null },
     lastLoginAt: { type: Date, default: null },
+    outcomeWarningCount: { type: Number, default: 0, min: 0 },
+    outcomeLastWarningAt: { type: Date, default: null },
+    outcomeLastWarningReason: { type: String, default: "", maxlength: 2000 },
+    platformRestrictionReason: { type: String, default: "", maxlength: 2000 },
+    platformRestrictedAt: { type: Date, default: null },
+    platformRestrictedBy: { type: String, default: "" },
   },
   {
     collection: "providers",

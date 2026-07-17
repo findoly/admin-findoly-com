@@ -7,7 +7,10 @@ const { validateMobile } = require("../../utils/mobile");
 const {
   canonicalLeadStatus,
   resolveLeadStatusTransition,
+  PROVIDER_CONTROLLED_STATUS,
 } = require("../../utils/lead-journey");
+const { PROVIDER_LEAD_STATUSES } = require("../../utils/provider-lead-status");
+const providerStatusService = require("../distribution/provider-status-service");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const {
   textValue,
@@ -25,15 +28,8 @@ const {
 } = require("../../utils/validation");
 
 const LEAD_PRIORITIES = Object.freeze(["low", "normal", "high", "urgent"]);
+const LEAD_INTENTS = Object.freeze(["not_assessed", "low", "medium", "high"]);
 const OFFER_STATUSES = Object.freeze(["offered", "unlocked", "withdrawn", "expired"]);
-const PROVIDER_LEAD_STATUSES = Object.freeze([
-  "contacted",
-  "confirmed",
-  "on_hold",
-  "rejected",
-  "invalid",
-  "not_interested",
-]);
 const INTERNAL_METADATA_FIELDS = Object.freeze([
   "rejectedFromStatus",
   "rejectionReason",
@@ -121,6 +117,10 @@ function normalizeInput(input = {}, current = {}) {
     priority: enumValue(input.priority, LEAD_PRIORITIES, {
       label: "Lead priority",
       fallback: current.priority || "normal",
+    }),
+    leadIntent: enumValue(input.leadIntent, LEAD_INTENTS, {
+      label: "Lead intent",
+      fallback: current.leadIntent || "not_assessed",
     }),
     preferredDate: dateOnlyValue(
       input.preferredDate ?? current.preferredDate,
@@ -210,8 +210,12 @@ function presentEnquiry(row = {}) {
     externalEnquiryId:
       row.externalEnquiryId || source.externalEnquiryId || "",
     journeyStatus: canonicalLeadStatus(row.status),
-    agentReferralValidation: row.agentReferralValidation || (row.agentId ? "pending" : ""),
+    leadIntent: LEAD_INTENTS.includes(String(row.leadIntent || "").toLowerCase()) ? String(row.leadIntent).toLowerCase() : "not_assessed",
+    agentReferralValidation: row.agentReferralValidation || "pending",
+    leadValidationMethod: row.leadValidationMethod || "",
     agentSaleConversion: row.agentSaleConversion || "pending",
+    providerConfirmedCount: Number(row.providerConfirmedCount || 0),
+    providerSaleConversionStatus: row.providerSaleConversionStatus || (canonicalLeadStatus(row.status) === PROVIDER_CONTROLLED_STATUS ? "converted" : "pending"),
     partnerEligibilityDate: row.partnerEligibilityDate || (row.agentId && row.createdAt ? new Date(new Date(row.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000) : null),
     partnerPayoutStatus: row.partnerPayoutStatus || (row.agentId ? "waiting_period" : ""),
     isActive: row.isActive !== false,
@@ -232,11 +236,13 @@ const STATUS_FILTERS = Object.freeze({
   verification: ["verification", "verification_pending", "verified"],
   approved: ["approved"],
   distributed: ["distributed", "in_progress", "completed", "closed"],
+  sale_converted: ["sale_converted"],
   rejected: ["rejected"],
 });
 
 function historyArrays(distribution = {}) {
   return [
+    distribution.providerSaleOutcomeHistory,
     distribution.providerLeadStatusHistory,
     distribution.providerStatusHistory,
     distribution.providerTimeline,
@@ -271,14 +277,13 @@ function providerJourney(distribution = {}) {
   for (const history of historyArrays(distribution)) {
     for (const item of history) {
       if (!item || typeof item !== "object") continue;
-      const status = text(
-        item.status || item.providerLeadStatus || item.toStatus,
-      );
-      const createdAt =
-        item.createdAt || item.updatedAt || item.statusUpdatedAt || null;
-      if (!status && !item.message) continue;
+      const outcome = text(item.outcome || item.providerSaleOutcome || item.toOutcome);
+      const status = text(item.status || item.providerLeadStatus || item.toStatus);
+      const createdAt = item.createdAt || item.updatedAt || item.statusUpdatedAt || null;
+      if (!outcome && !status && !item.message) continue;
       events.push({
-        type: "provider_status",
+        type: outcome ? "provider_outcome" : "provider_status",
+        outcome,
         status,
         reason: text(item.reason || item.providerLeadReason),
         note: text(item.note || item.providerLeadNote),
@@ -288,6 +293,26 @@ function providerJourney(distribution = {}) {
           distribution.providerId || "provider",
         ),
         createdAt,
+      });
+    }
+  }
+
+  if (distribution.providerSaleOutcome) {
+    const currentTime = distribution.providerSaleOutcomeUpdatedAt || null;
+    const alreadyIncluded = events.some(
+      (event) =>
+        event.type === "provider_outcome" &&
+        event.outcome === distribution.providerSaleOutcome &&
+        String(event.createdAt || "") === String(currentTime || ""),
+    );
+    if (!alreadyIncluded) {
+      events.push({
+        type: "provider_outcome",
+        outcome: distribution.providerSaleOutcome,
+        note: distribution.providerSaleOutcomeNote || "",
+        message: "",
+        actor: distribution.providerSaleOutcomeUpdatedBy || distribution.providerId || "provider",
+        createdAt: currentTime,
       });
     }
   }
@@ -373,6 +398,7 @@ async function create(input = {}, actor = "admin") {
   data.statusUpdatedAt = now;
   data.statusUpdatedBy = actor;
   data.isActive = true;
+  data.agentReferralValidation = "pending";
   data.timeline = [
     {
       timelineId: uuid(),
@@ -455,7 +481,10 @@ async function list(filters = {}) {
     query.referralId = textValue(filters.referralId, { label: "Referral ID filter", maxLength: 6 }).toUpperCase();
   }
   if (filters.agentReferralValidation) {
-    query.agentReferralValidation = enumValue(filters.agentReferralValidation, ["pending", "valid", "invalid"], { label: "Agent referral validation filter" });
+    const validationStatus = enumValue(filters.agentReferralValidation, ["pending", "valid", "invalid"], { label: "Lead validation filter" });
+    query.agentReferralValidation = validationStatus === "pending"
+      ? { $in: ["", "pending", null] }
+      : validationStatus;
   }
   if (filters.partnerPayoutStatus) {
     query.partnerPayoutStatus = enumValue(filters.partnerPayoutStatus, ["waiting_period", "unpaid", "reserved", "paid", "not_eligible"], { label: "Partner payout status filter" });
@@ -518,9 +547,16 @@ async function list(filters = {}) {
 }
 
 async function get(enquiryId) {
-  const enquiry = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
+  let enquiry = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
   if (!enquiry) {
     throw Object.assign(new Error("Lead not found"), { status: 404 });
+  }
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(enquiry.status))) {
+    const reconciled = await providerStatusService.syncSaleConversion(
+      enquiry.enquiryId || enquiry.id || enquiryId,
+      { actor: "crm-read-reconciliation", notify: false },
+    );
+    enquiry = reconciled.lead || enquiry;
   }
   return presentEnquiry(enquiry);
 }
@@ -570,6 +606,17 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "distributionCount",
     "unlockedCount",
     "distributedAt",
+    "providerConfirmedCount",
+    "providerSaleConversionStatus",
+    "providerSaleConversionUpdatedAt",
+    "providerSaleConversionProviderId",
+    "providerSaleConversionProviderName",
+    "providerSaleConvertedAt",
+    "providerSaleConvertedBy",
+    "agentSaleConversion",
+    "agentSaleConversionNote",
+    "agentSaleConvertedAt",
+    "agentSaleConvertedBy",
   ]) {
     if (input[field] !== undefined) {
       throw validationError(`${field} is maintained by the CRM and cannot be edited directly`);
@@ -589,7 +636,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
 
   if (
     updated.isActive !== false &&
-    ["approved", "distributed"].includes(canonicalLeadStatus(updated.status))
+    ["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(updated.status))
   ) {
     await distribute(updated, actor);
   } else if (updated.isActive !== false) {
@@ -614,10 +661,21 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
       { status: 409 },
     );
   }
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(existing.status))) {
+    throw Object.assign(
+      new Error("Employees cannot move, restore or reject a lead after it has been distributed. Provider confirmations control sale conversion."),
+      { status: 409 },
+    );
+  }
 
   const isAgentRequirement = Boolean(existing.agentId && (existing.sourceChannel === "agent" || existing.sourceWebsite === "agent-portal" || existing.metadata?.agentSubmission));
   if (isAgentRequirement) {
     await require("../partner-payout/partner-payout-service").assertRequirementNotPayoutProcessing(existing);
+  }
+  if (existing.agentReferralValidation !== "valid") {
+    throw validationError(
+      "Complete lead validation first. Mark the lead Valid to use journey actions, or mark it Invalid to reject the lead automatically.",
+    );
   }
   if (isAgentRequirement && !String(input.note || input.reason || "").trim()) {
     throw validationError("A status-change note is required for Agent Portal requirements");
@@ -630,10 +688,6 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     metadata,
   );
   const now = new Date();
-
-  if (isAgentRequirement && ["approved", "distributed"].includes(transition.toStatus) && existing.agentReferralValidation !== "valid") {
-    throw validationError("Mark the agent referral Valid before approving or distributing it");
-  }
 
   if (transition.action === "reject") {
     metadata.rejectedFromStatus = transition.fromStatus;
@@ -681,7 +735,7 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
 
   const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
   const distributionEnquiryId = existing.enquiryId || existing.id || enquiryId;
-  if (["approved", "distributed"].includes(transition.toStatus)) {
+  if (["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(transition.toStatus)) {
     await distribute(updated, actor);
   } else {
     await LeadDistribution.updateMany(
@@ -803,7 +857,7 @@ async function setActiveState(
     );
     await refreshDistributionSummary(reference);
   } else if (
-    ["approved", "distributed"].includes(canonicalLeadStatus(existing.status))
+    ["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(existing.status))
   ) {
     const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
     await distribute(updated, actor);
@@ -834,6 +888,7 @@ function distributionData(enquiry, provider) {
     preferredDate: enquiry.preferredDate,
     preferredSlot: enquiry.preferredSlot,
     priority: enquiry.priority,
+    leadIntent: enquiry.leadIntent || "not_assessed",
     sourceWebsite: enquiry.sourceWebsite,
     customerName: enquiry.name,
     customerMobile: enquiry.mobile,
@@ -883,7 +938,7 @@ async function distribute(enquiryDocument, actor = "system") {
   if (!enquiry.enquiryId) {
     throw validationError("Lead Reference ID is required for distribution");
   }
-  if (!["approved", "distributed"].includes(enquiry.journeyStatus)) {
+  if (!["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(enquiry.journeyStatus)) {
     throw validationError("Approve the lead before distributing it");
   }
   if (enquiry.isActive === false) {
@@ -892,8 +947,8 @@ async function distribute(enquiryDocument, actor = "system") {
       { status: 409 },
     );
   }
-  if (enquiry.agentId && enquiry.agentReferralValidation !== "valid") {
-    throw validationError("Only Valid agent referrals can be distributed to providers");
+  if (enquiry.agentReferralValidation !== "valid") {
+    throw validationError("Only Valid leads can be distributed to providers");
   }
 
   const reference = identifierValue(enquiry.enquiryId || enquiry.id, {
@@ -955,6 +1010,10 @@ async function distribute(enquiryDocument, actor = "system") {
   await Enquiry.updateOne(enquiryQuery(reference), {
     $set: { distributedAt: now, updatedAt: new Date() },
   });
+  await providerStatusService.syncSaleConversion(reference, {
+    actor,
+    notify: false,
+  });
   return summary;
 }
 
@@ -1011,6 +1070,13 @@ async function listProviderStatuses(enquiryId, filters = {}) {
       providerMobile: 1,
       status: 1,
       contactUnlocked: 1,
+      providerSaleOutcome: 1,
+      providerSaleOutcomeNote: 1,
+      providerSaleOutcomeUpdatedAt: 1,
+      outcomeVerificationStatus: 1,
+      outcomeVerificationNote: 1,
+      outcomeVerifiedAt: 1,
+      outcomeVerifiedBy: 1,
       providerLeadStatus: 1,
       providerLeadReason: 1,
       providerLeadNote: 1,
@@ -1046,21 +1112,11 @@ async function updateAgentReferralValidation(enquiryId, input = {}, actor = "adm
   return get(enquiryId);
 }
 
-async function updateAgentSaleConversion(enquiryId, input = {}, actor = "admin") {
-  await require("../partner-payout/partner-payout-service").updateSaleConversion(enquiryId, input, actor);
-  const lead = await get(enquiryId);
-  await notificationService.trigger(
-    "sale_conversion_updated",
-    {
-      lead,
-      status: lead.agentSaleConversion || "",
-      note: input.note || input.reason || "",
-      trigger: "sale_conversion_updated",
-      idempotencySuffix: new Date().toISOString(),
-    },
-    actor,
+async function updateAgentSaleConversion() {
+  throw Object.assign(
+    new Error("Sale conversion is provider-controlled. Employees cannot update it manually."),
+    { status: 405 },
   );
-  return lead;
 }
 
 module.exports = {

@@ -36,11 +36,40 @@
                         <dt class="col-5">Mobile</dt><dd class="col-7" x-text="distribution.providerMobile ? '+91 ' + distribution.providerMobile : '—'"></dd>
                         <dt class="col-5">Offer status</dt><dd class="col-7" x-text="humanize(distribution.status)"></dd>
                         <dt class="col-5">Contact</dt><dd class="col-7" x-text="distribution.contactUnlocked ? 'Unlocked' : 'Locked'"></dd>
-                        <dt class="col-5">Provider status</dt><dd class="col-7" x-text="distribution.providerLeadStatus ? humanize(distribution.providerLeadStatus) : 'Not updated'"></dd>
+                        <dt class="col-5">Sale outcome</dt><dd class="col-7" x-text="distribution.providerSaleOutcome ? humanize(distribution.providerSaleOutcome) : 'Pending'"></dd>
+                        <dt class="col-5">Outcome note</dt><dd class="col-7" x-text="distribution.providerSaleOutcomeNote || '—'"></dd>
+                        <dt class="col-5">Activity status</dt><dd class="col-7" x-text="distribution.providerLeadStatus ? humanize(distribution.providerLeadStatus) : '—'"></dd>
                         <dt class="col-5">Reason</dt><dd class="col-7" x-text="distribution.providerLeadReason ? humanize(distribution.providerLeadReason) : '—'"></dd>
-                        <dt class="col-5">Note</dt><dd class="col-7" x-text="distribution.providerLeadNote || '—'"></dd>
-                        <dt class="col-5">Last update</dt><dd class="col-7" x-text="formatDate(distribution.providerLeadStatusUpdatedAt || distribution.updatedAt)"></dd>
+                        <dt class="col-5">Activity note</dt><dd class="col-7" x-text="distribution.providerLeadNote || '—'"></dd>
+                        <dt class="col-5">Verification</dt><dd class="col-7" x-text="distribution.outcomeVerificationStatus ? humanize(distribution.outcomeVerificationStatus) : 'Not reviewed'"></dd>
+                        <dt class="col-5">Last outcome update</dt><dd class="col-7" x-text="formatDate(distribution.providerSaleOutcomeUpdatedAt || distribution.providerLeadStatusUpdatedAt || distribution.updatedAt)"></dd>
                       </dl>
+                    </div>
+                  </div>
+
+                  <div class="card mb-3" x-show="distribution.contactUnlocked" x-cloak>
+                    <div class="card-header"><h5 class="mb-0">Findoly outcome verification</h5></div>
+                    <div class="card-body">
+                      <div class="alert alert-warning py-2">Review the provider outcome against customer calls, WhatsApp, booking evidence, and communication history. Account action is always manual.</div>
+                      <label class="form-label">Verification result</label>
+                      <select class="form-select mb-2" x-model="reviewForm.verificationStatus">
+                        <option value="pending_review">Pending review</option>
+                        <option value="under_review">Under review</option>
+                        <option value="verified">Verified</option>
+                        <option value="unable_to_verify">Unable to verify</option>
+                        <option value="incorrect_status">Incorrect status</option>
+                      </select>
+                      <label class="form-label">Provider action</label>
+                      <select class="form-select mb-2" x-model="reviewForm.reviewAction" :disabled="reviewForm.verificationStatus !== 'incorrect_status'">
+                        <option value="none">No account action</option>
+                        <option value="warning">Issue warning</option>
+                        <option value="suspend">Temporarily suspend portal access</option>
+                        <option value="ban">Block provider from platform</option>
+                      </select>
+                      <label class="form-label">Review note</label>
+                      <textarea class="form-control mb-2" rows="3" maxlength="2000" x-model="reviewForm.note" placeholder="Record what was verified and why this result was selected"></textarea>
+                      <button class="btn btn-primary w-100" type="button" @click="saveReview()" :disabled="reviewSaving || !reviewForm.note.trim()" x-text="reviewSaving ? 'Saving…' : 'Save verification review'"></button>
+                      <div class="text-success fs-sm mt-2" x-show="success" x-text="success"></div>
                     </div>
                   </div>
                   <a class="btn btn-light" :href="'/providers/' + distribution.providerId" x-show="distribution.providerId">Open provider</a>
@@ -84,10 +113,14 @@
           lead: {},
           distribution: {},
           error: '',
+          success: '',
+          reviewSaving: false,
+          reviewForm: { verificationStatus: 'pending_review', reviewAction: 'none', note: '' },
           get providerJourney() { return this.distribution.providerJourney || []; },
           eventTitle(event) {
             if (event.type === 'distributed') return 'Lead offered';
             if (event.type === 'unlocked') return 'Contact unlocked';
+            if (event.type === 'provider_outcome') return 'Provider marked ' + humanize(event.outcome || 'outcome');
             if (event.status) return 'Provider marked ' + humanize(event.status);
             return event.message || 'Provider update';
           },
@@ -103,8 +136,32 @@
               const body = await apiFetch('/api/enquiry/' + this.leadId + '/providers/' + this.distributionId);
               this.lead = body.data?.lead || {};
               this.distribution = body.data?.distribution || {};
+              this.reviewForm = {
+                verificationStatus: this.distribution.outcomeVerificationStatus || 'pending_review',
+                reviewAction: 'none',
+                note: this.distribution.outcomeVerificationNote || ''
+              };
             } catch (error) {
               this.error = error.message;
+            }
+          },
+          async saveReview() {
+            if (!this.distribution.providerId || !this.reviewForm.note.trim()) return;
+            this.reviewSaving = true;
+            this.error = '';
+            this.success = '';
+            try {
+              const body = await apiFetch('/api/provider/' + this.distribution.providerId + '/distributions/' + this.distributionId + '/outcome-review', {
+                method: 'PATCH',
+                body: JSON.stringify(this.reviewForm)
+              });
+              this.distribution = body.data?.distribution || this.distribution;
+              this.success = 'Provider outcome review saved.';
+              this.reviewForm.reviewAction = 'none';
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.reviewSaving = false;
             }
           }
         };

@@ -5,6 +5,8 @@ const LEAD_JOURNEY = Object.freeze([
   "distributed",
 ]);
 
+const PROVIDER_CONTROLLED_STATUS = "sale_converted";
+
 const STATUS_ALIASES = Object.freeze({
   verification_pending: "verification",
   verified: "verification",
@@ -16,6 +18,7 @@ const STATUS_ALIASES = Object.freeze({
 const VALID_STATUS_INPUTS = Object.freeze([
   ...LEAD_JOURNEY,
   "rejected",
+  PROVIDER_CONTROLLED_STATUS,
   ...Object.keys(STATUS_ALIASES),
 ]);
 const VALID_ACTIONS = Object.freeze([
@@ -28,6 +31,7 @@ const VALID_ACTIONS = Object.freeze([
 function canonicalLeadStatus(value) {
   const status = String(value || "new").trim().toLowerCase();
   if (status === "rejected") return "rejected";
+  if (status === PROVIDER_CONTROLLED_STATUS) return PROVIDER_CONTROLLED_STATUS;
   if (LEAD_JOURNEY.includes(status)) return status;
   return STATUS_ALIASES[status] || "new";
 }
@@ -61,6 +65,16 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
 
   let targetStatus = currentStatus;
   let resolvedAction = action;
+
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(currentStatus)) {
+    throw statusError(
+      "Lead journey is provider-controlled after distribution and cannot be changed by an employee",
+    );
+  }
+
+  if (requestedStatus === PROVIDER_CONTROLLED_STATUS) {
+    throw statusError("Sale conversion can only be updated by an unlocked provider");
+  }
 
   if (action === "reject" || requestedStatus === "rejected") {
     if (currentStatus === "rejected") {
@@ -135,4 +149,5 @@ module.exports = {
   VALID_ACTIONS,
   canonicalLeadStatus,
   resolveLeadStatusTransition,
+  PROVIDER_CONTROLLED_STATUS,
 };

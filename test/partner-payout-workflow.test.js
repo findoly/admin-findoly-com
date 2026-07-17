@@ -12,14 +12,14 @@ test("agent payout rate is configured per CRM agent", () => {
   assert.ok(model.schema.path("razorpayFundAccountId"));
 });
 
-test("agent requirements have validation, maturity, conversion and payment fields", () => {
+test("leads have validation fields while agent leads retain payout fields", () => {
   const model = require("../models/Enquiry");
-  for (const field of ["agentReferralValidation", "agentSaleConversion", "partnerEligibilityDate", "partnerPayoutStatus", "partnerWithdrawalId", "partnerPaidAt"]) assert.ok(model.schema.path(field), field);
+  for (const field of ["agentReferralValidation", "leadValidationMethod", "agentSaleConversion", "partnerEligibilityDate", "partnerPayoutStatus", "partnerWithdrawalId", "partnerPaidAt"]) assert.ok(model.schema.path(field), field);
 });
 
-test("invalid agent referrals are blocked from distribution and agent status changes require notes", () => {
+test("unvalidated leads are blocked from distribution and agent status changes require notes", () => {
   const service = read("services/enquiry/enquiry-service.js");
-  assert.match(service, /Only Valid agent referrals can be distributed/);
+  assert.match(service, /Only Valid leads can be distributed/);
   assert.match(service, /status-change note is required for Agent Portal requirements/);
 });
 

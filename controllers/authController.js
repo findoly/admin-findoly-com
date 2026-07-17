@@ -9,6 +9,10 @@ const {
   createBootstrapEmployee,
   ensureDefaultRoles,
 } = require("../services/access/access-service");
+const {
+  claimSendSlot,
+  releaseSendSlot,
+} = require("../services/access/otp-rate-limit-service");
 
 const OTP_SERVICE_BASE_URL = String(
   process.env.CRM_OTP_BASE_URL || "https://api.findoly.com/otp",
@@ -37,8 +41,20 @@ async function requestOtpApi(url, payload) {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body?.success === false || ["error", "failed", "fail"].includes(String(body?.status || "").toLowerCase())) {
-      const message = body?.message || body?.error || body?.data?.message || "OTP service request failed";
-      throw Object.assign(new Error(message), { status: response.status >= 400 && response.status < 500 ? 400 : 502 });
+      const rawRetryAfter = body?.retryAfterSeconds || body?.retryAfter || response.headers.get("retry-after");
+      const retryAfterSeconds = Number.isFinite(Number(rawRetryAfter))
+        ? Math.max(1, Math.ceil(Number(rawRetryAfter)))
+        : 0;
+      let message = body?.message || body?.error || body?.data?.message || "OTP service request failed";
+      if (response.status === 429 && retryAfterSeconds > 0 && !/wait|second|minute/i.test(message)) {
+        message = `Too many OTP requests. Please wait ${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"} and try again.`;
+      }
+      const status = response.status === 429
+        ? 429
+        : response.status >= 400 && response.status < 500
+          ? 400
+          : 502;
+      throw Object.assign(new Error(message), { status, retryAfterSeconds });
     }
     return body;
   } catch (error) {
@@ -60,9 +76,12 @@ async function assertLoginAllowed(mobile) {
 }
 
 async function sendOtp(req, res, next) {
+  let mobile = "";
+  let rateLimitClaim = null;
   try {
-    const mobile = employeeMobile(req.body?.mobile);
+    mobile = employeeMobile(req.body?.mobile);
     await assertLoginAllowed(mobile);
+    rateLimitClaim = await claimSendSlot(mobile);
     const response = await requestOtpApi(SEND_OTP_URL, { mobile });
     return res.json({
       success: true,
@@ -73,6 +92,37 @@ async function sendOtp(req, res, next) {
       },
     });
   } catch (error) {
+    if (rateLimitClaim && error?.code !== "CRM_OTP_SEND_RATE_LIMIT") {
+      await releaseSendSlot(mobile, rateLimitClaim.requestId).catch(() => {});
+    }
+    if (error?.code === "CRM_OTP_SEND_RATE_LIMIT") {
+      res.set("Retry-After", String(error.retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        code: "OTP_RESEND_WAIT",
+        message: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
+    }
+    if (error?.status === 429) {
+      const retryAfterSeconds = Number(error.retryAfterSeconds || 0);
+      if (retryAfterSeconds > 0) res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        code: "OTP_SERVICE_RATE_LIMIT",
+        message: error.message || "The OTP service has temporarily limited requests. Please try again shortly.",
+        ...(retryAfterSeconds > 0 ? { retryAfterSeconds } : {}),
+      });
+    }
+    if ([502, 504].includes(Number(error?.status))) {
+      return res.status(503).json({
+        success: false,
+        code: "OTP_SERVICE_UNAVAILABLE",
+        message: error.status === 504
+          ? "The OTP service took too long to respond. Please try again."
+          : "We could not send an OTP because the OTP service is temporarily unavailable. Please try again shortly.",
+      });
+    }
     return next(error);
   }
 }
@@ -91,7 +141,6 @@ async function verifyOtp(req, res, next) {
     }
 
     await assertLoginAllowed(mobile);
-    console.log("verify otp", VERIFY_OTP_URL)
     await requestOtpApi(VERIFY_OTP_URL, { mobile, otp });
 
     await ensureDefaultRoles();
@@ -125,6 +174,25 @@ async function verifyOtp(req, res, next) {
       },
     });
   } catch (error) {
+    if (error?.status === 429) {
+      const retryAfterSeconds = Number(error.retryAfterSeconds || 0);
+      if (retryAfterSeconds > 0) res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        code: "OTP_VERIFICATION_RESTRICTED",
+        message: error.message || "OTP verification is temporarily restricted. Please try again later.",
+        ...(retryAfterSeconds > 0 ? { retryAfterSeconds } : {}),
+      });
+    }
+    if ([502, 504].includes(Number(error?.status))) {
+      return res.status(503).json({
+        success: false,
+        code: "OTP_SERVICE_UNAVAILABLE",
+        message: error.status === 504
+          ? "The OTP service took too long to verify your code. Please try again."
+          : "We could not verify your OTP because the OTP service is temporarily unavailable. Please try again shortly.",
+      });
+    }
     return next(error);
   }
 }

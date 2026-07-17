@@ -98,6 +98,48 @@
     return 'status-' + String(value || 'unknown').toLowerCase().replace(/_/g, '-');
   }
 
+  function showCrmToast(message, type = 'success', durationMs) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    let region = document.getElementById('crm-toast-region');
+    if (!region) {
+      region = document.createElement('div');
+      region.id = 'crm-toast-region';
+      region.className = 'crm-toast-region';
+      region.setAttribute('aria-live', 'polite');
+      region.setAttribute('aria-atomic', 'false');
+      document.body.appendChild(region);
+    }
+    const normalizedType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+    const toast = document.createElement('div');
+    toast.className = 'crm-toast crm-toast-' + normalizedType;
+    toast.setAttribute('role', normalizedType === 'error' ? 'alert' : 'status');
+    const icon = document.createElement('span');
+    icon.className = 'crm-toast-icon';
+    icon.textContent = normalizedType === 'success' ? '✓' : normalizedType === 'error' ? '!' : normalizedType === 'warning' ? '!' : 'i';
+    const content = document.createElement('div');
+    content.className = 'crm-toast-content';
+    const title = document.createElement('strong');
+    title.textContent = normalizedType === 'success' ? 'Success' : normalizedType === 'error' ? 'Unable to complete action' : normalizedType === 'warning' ? 'Attention' : 'Information';
+    const body = document.createElement('span');
+    body.textContent = text;
+    content.append(title, body);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'crm-toast-close';
+    close.setAttribute('aria-label', 'Close notification');
+    close.textContent = '×';
+    const dismiss = () => {
+      toast.classList.add('is-leaving');
+      window.setTimeout(() => toast.remove(), 180);
+    };
+    close.addEventListener('click', dismiss);
+    toast.append(icon, content, close);
+    region.appendChild(toast);
+    const lifetime = Number(durationMs) || (normalizedType === 'error' ? 9000 : 6000);
+    window.setTimeout(dismiss, lifetime);
+  }
+
   function createCursorPagination(limit = 20) {
     return {
       limit,
@@ -180,6 +222,7 @@
           this.admin = (await apiFetch('/api/auth/me')).data || {};
         } catch (error) {
           this.shellError = error.message;
+          showCrmToast(error.message, 'error');
         }
       },
       toggleSidebar() {

@@ -157,6 +157,9 @@ AUTH_COOKIE_SECRET=replace-with-at-least-32-random-characters
 CRM_BOOTSTRAP_MOBILE=9000000000
 CRM_BOOTSTRAP_NAME=CRM Administrator
 CRM_OTP_BASE_URL=https://api.findoly.com/otp
+CRM_OTP_RESEND_SECONDS=30
+CRM_OTP_MAX_SENDS_PER_MINUTE=2
+CRM_OTP_RATE_WINDOW_SECONDS=60
 ```
 
 When `crmemployees` is empty, only the configured bootstrap mobile may request CRM login. After its OTP is successfully verified, the CRM creates the initial Super Admin employee and the default roles. Remove `CRM_BOOTSTRAP_MOBILE` from the environment after first setup if desired.
@@ -169,6 +172,10 @@ Administrators can then use **Employees** and **Roles & permissions** to:
 - revoke access immediately by deactivating an employee or role
 
 Protected pages and JSON APIs both enforce permissions. Employee and role changes take effect on the employee's next request, even when an older 24-hour cookie still exists.
+
+### CRM login OTP request protection
+
+The browser does not enforce a countdown or request quota. The CRM server stores OTP send limits in MongoDB so the policy works across browser refreshes, application restarts and multiple application instances. By default, a mobile number may request at most two OTPs in a 60-second window, with at least 30 seconds between requests. When blocked, the API returns HTTP `429`, a `Retry-After` header and a customer-facing message containing the exact remaining wait in seconds. OTP verification has no CRM-side rate limiter; any verification restrictions returned by the Findoly OTP service are passed through as clear messages.
 
 ### Appearance themes
 
@@ -223,7 +230,7 @@ The CRM now includes minimal agent management at `/agents`:
 
 ## Partner referral payouts
 
-Agent Portal requirements now require CRM referral validation (`pending`, `valid`, or `invalid`). Only valid requirements can move to provider distribution. Partner withdrawals use matured referrals at least 14 days old, complete blocks of 10, and a minimum 20% sale conversion. Configure each agent's ₹50–₹200 rate and verified RazorpayX fund account in the CRM agent profile.
+Every lead now requires CRM lead validation (`pending`, `valid`, or `invalid`) before an employee can move it through the journey or distribute it. Employees must record whether validation happened by phone call, WhatsApp, email, in person, or another method; choosing Other requires an explanation. Invalid leads are automatically rejected before distribution. Agent Portal partner withdrawals continue to use only valid matured referrals at least 14 days old, complete blocks of 10, and a minimum 20% sale conversion. Configure each agent's ₹50–₹200 rate and verified RazorpayX fund account in the CRM agent profile.
 
 Set the RazorpayX values from `.env.example`, allowlist the CRM server IP in RazorpayX, and configure the payout webhook URL as `/api/webhooks/razorpay/payouts`. Run `npm run migrate:agent-payouts` once for existing Agent Portal requirements.
 
@@ -269,7 +276,48 @@ POST /api/webhooks/message-delivery
 POST /api/communication/events/:event
 ```
 
-`/api/communication/events/:event` is intended for the provider or agent portal. Protect it with `COMMUNICATION_EVENT_API_TOKEN`. The request can include `enquiryId`, `provider`, `status`, `note`, and other event context. Supported default events include `provider_confirmed`, `provider_rejected`, `provider_invalid`, and `sale_conversion_updated`.
+`/api/communication/events/:event` is intended for the provider or agent portal. Protect it with `COMMUNICATION_EVENT_API_TOKEN` and send the token in either `x-communication-token` or `Authorization: Bearer <token>`.
+
+### Provider lead-status integration
+
+After an unlocked provider changes a lead status, the provider portal should call one of these event names:
+
+```text
+provider_confirmed
+provider_on_hold
+provider_rejected
+provider_invalid
+provider_not_interested
+provider_contacted
+```
+
+The generic event names `provider_status` and `provider_status_updated` are also supported when the request contains a valid `status` value.
+
+Identify the unlocked provider record using either `leadDistributionId`, or the combination of `enquiryId` and `providerId`:
+
+```json
+{
+  "leadDistributionId": "DISTRIBUTION_REFERENCE",
+  "enquiryId": "LEAD_REFERENCE",
+  "providerId": "PROVIDER_REFERENCE",
+  "status": "confirmed",
+  "reason": "",
+  "note": "Customer confirmed the purchase"
+}
+```
+
+`status` is optional for a named event such as `provider_confirmed`, but required for a generic provider-status event. A reason or note is mandatory for `rejected`, `invalid`, and `not_interested`.
+
+Sale conversion is calculated from the **current status of every unlocked provider**:
+
+- one or more currently Confirmed providers changes `Distributed` to `Sale Converted`;
+- rejection, invalidation, or hold by another provider does not cancel an existing confirmation;
+- when the last Confirmed provider changes away from Confirmed, the lead automatically returns to `Distributed`;
+- employees cannot manually reject, move backward, or change sale conversion after distribution.
+
+Each automatic conversion or reversal is written to the lead timeline. The CRM also reconciles provider confirmation when a distributed lead is opened, but the integration event should still be called immediately so the CRM updates without waiting for a page view.
+
+Other communication events, including `sale_conversion_updated`, may still be used for notification rules but do not directly override the provider-calculated lead status.
 
 ### Local-to-Lambda migration
 
@@ -330,3 +378,31 @@ Secrets are never stored or displayed in the CRM database. The settings page onl
 Communication Rules can also send internal Slack notifications. Enable Slack on a rule, select a synchronized channel, and write the message using supported variables such as `{{lead_id}}`, `{{customer_name}}`, `{{lead_status}}`, `{{provider_name}}`, and `{{note}}`.
 
 Each rule stores the Slack channel ID used by `chat.postMessage` and the channel name used for CRM display/logging. Blank Slack messages and missing channel IDs are rejected. Existing webhook-era Slack rules should be opened once and saved with a synchronized channel.
+
+## Provider portal synchronization
+
+The provider portal and CRM use the same MongoDB database and compatible `enquiries`, `leaddistributions`, and `providers` records. CRM employees assign lead intent (`high`, `medium`, `low`, or `not_assessed`) from the lead form. The provider marketplace displays that value together with competition and unlock information.
+
+Provider browsers call only the provider portal host. The provider backend notifies CRM through:
+
+```text
+POST /api/communication/events/provider_feedback_updated
+```
+
+Both services must share the same integration token:
+
+```env
+# CRM
+COMMUNICATION_EVENT_API_TOKEN=<shared-random-secret>
+
+# Provider portal
+CRM_API_BASE_URL=https://admin.findoly.com
+CRM_COMMUNICATION_EVENT_PATH=/api/communication/events
+COMMUNICATION_EVENT_API_TOKEN=<same-shared-random-secret>
+```
+
+Provider sale outcome is mandatory (`confirmed` or `not_confirmed`). Activity status remains optional. Any current provider confirmation changes a Distributed lead to Sale Converted. When no provider remains confirmed, the lead returns to Distributed.
+
+Provider outcome updates create Communication Center events such as `provider_confirmed`, `provider_not_confirmed`, `provider_follow_up`, `provider_rejected`, and `provider_invalid`. Enable and configure the corresponding communication rules when Slack, WhatsApp, or email alerts are required.
+
+CRM users can review an unlocked provider outcome from the lead's provider journey. Verification results are manual: Pending review, Under review, Verified, Unable to verify, or Incorrect status. A warning, temporary suspension, or permanent block can be applied only after the outcome is marked Incorrect status and a review note is recorded.

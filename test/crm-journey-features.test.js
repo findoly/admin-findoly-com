@@ -33,6 +33,7 @@ test("lead journey only allows next, previous and rejection transitions", () => 
     "distributed",
   ]);
   assert.equal(canonicalLeadStatus("verification_pending"), "verification");
+  assert.equal(canonicalLeadStatus("sale_converted"), "sale_converted");
   assert.equal(
     resolveLeadStatusTransition("new", { action: "next" }).toStatus,
     "verification",

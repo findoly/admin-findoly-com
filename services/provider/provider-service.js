@@ -37,6 +37,14 @@ const OFFER_STATUSES = Object.freeze([
   "withdrawn",
   "expired",
 ]);
+const OUTCOME_VERIFICATION_STATUSES = Object.freeze([
+  "pending_review",
+  "verified",
+  "unable_to_verify",
+  "incorrect_status",
+  "under_review",
+]);
+const PROVIDER_REVIEW_ACTIONS = Object.freeze(["none", "warning", "suspend", "ban"]);
 
 function categoryToken(value) {
   return tokenValue(value, {
@@ -241,7 +249,16 @@ async function listDistributions(providerId, filters = {}) {
       enquiryId: 1,
       leadTitle: 1,
       status: 1,
+      providerSaleOutcome: 1,
+      providerSaleOutcomeNote: 1,
+      providerSaleOutcomeUpdatedAt: 1,
+      outcomeVerificationStatus: 1,
+      outcomeVerificationNote: 1,
+      outcomeVerifiedAt: 1,
+      outcomeVerifiedBy: 1,
       providerLeadStatus: 1,
+      providerLeadReason: 1,
+      providerLeadNote: 1,
       contactUnlocked: 1,
       leadPricePaise: 1,
       distributedAt: 1,
@@ -323,7 +340,7 @@ async function syncApprovedLeads(providerDocument) {
   }
 
   const enquiries = Enquiry.find({
-    status: { $in: ["approved", "distributed"] },
+    status: { $in: ["approved", "distributed", "sale_converted"] },
     isActive: { $ne: false },
     categorySlug: { $in: provider.categorySlugs || [] },
   }).cursor();
@@ -342,6 +359,77 @@ async function syncApprovedLeads(providerDocument) {
   );
 }
 
+async function reviewProviderOutcome(providerId, leadDistributionId, input = {}, actor = "admin") {
+  const provider = await get(providerId);
+  const distributionId = identifierValue(leadDistributionId, { label: "Lead distribution ID" });
+  const distribution = await LeadDistribution.findOne({
+    providerId: provider.providerId,
+    leadDistributionId: distributionId,
+    contactUnlocked: true,
+  }).lean();
+  if (!distribution) {
+    throw Object.assign(new Error("Unlocked provider lead not found"), { status: 404 });
+  }
+
+  const verificationStatus = enumValue(input.verificationStatus, OUTCOME_VERIFICATION_STATUSES, {
+    label: "Outcome verification status",
+  });
+  const reviewAction = enumValue(input.reviewAction, PROVIDER_REVIEW_ACTIONS, {
+    label: "Provider account action",
+    fallback: "none",
+  });
+  const note = textValue(input.note, {
+    label: "Review note",
+    required: true,
+    maxLength: 2000,
+    preserveWhitespace: true,
+  });
+  if (reviewAction !== "none" && verificationStatus !== "incorrect_status") {
+    throw validationError("Warning or account restriction can be applied only after marking the outcome Incorrect status");
+  }
+
+  const now = new Date();
+  await LeadDistribution.updateOne(
+    { leadDistributionId: distributionId, providerId: provider.providerId },
+    {
+      $set: {
+        outcomeVerificationStatus: verificationStatus,
+        outcomeVerificationNote: note,
+        outcomeVerifiedAt: now,
+        outcomeVerifiedBy: actor,
+        updatedAt: now,
+      },
+    },
+  );
+
+  const providerSet = { updatedAt: now };
+  const providerUpdate = { $set: providerSet };
+  if (reviewAction === "warning") {
+    providerUpdate.$inc = { outcomeWarningCount: 1 };
+    providerSet.outcomeLastWarningAt = now;
+    providerSet.outcomeLastWarningReason = note;
+  } else if (reviewAction === "suspend") {
+    providerSet.status = "inactive";
+    providerSet.portalAccessEnabled = false;
+    providerSet.platformRestrictionReason = note;
+    providerSet.platformRestrictedAt = now;
+    providerSet.platformRestrictedBy = actor;
+  } else if (reviewAction === "ban") {
+    providerSet.status = "blocked";
+    providerSet.portalAccessEnabled = false;
+    providerSet.platformRestrictionReason = note;
+    providerSet.platformRestrictedAt = now;
+    providerSet.platformRestrictedBy = actor;
+  }
+  await Provider.updateOne(providerQuery(provider.providerId), providerUpdate);
+
+  return {
+    provider: await get(provider.providerId),
+    distribution: await LeadDistribution.findOne({ leadDistributionId: distributionId }).lean(),
+    reviewAction,
+  };
+}
+
 module.exports = {
   list,
   get,
@@ -356,4 +444,7 @@ module.exports = {
   PROVIDER_STATUSES,
   ONBOARDING_STAGES,
   OFFER_STATUSES,
+  OUTCOME_VERIFICATION_STATUSES,
+  PROVIDER_REVIEW_ACTIONS,
+  reviewProviderOutcome,
 };

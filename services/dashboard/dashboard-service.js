@@ -11,6 +11,7 @@ async function getDashboard() {
     verification: ["verification", "verification_pending", "verified"],
     approved: ["approved"],
     distributed: ["distributed", "in_progress", "completed", "closed"],
+    sale_converted: ["sale_converted"],
     rejected: ["rejected"],
   };
 

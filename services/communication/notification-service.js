@@ -10,9 +10,16 @@ const DEFAULT_RULES = Object.freeze([
   ["Lead rejected", "lead_rejected", "Customer notification when a lead is rejected"],
   ["Lead on hold", "lead_on_hold", "Customer notification when a lead is placed on hold"],
   ["Lead distributed", "lead_distributed", "Customer notification when a lead is distributed"],
-  ["Provider confirmed", "provider_confirmed", "Customer notification when a provider confirms the lead"],
+  ["Provider confirmed", "provider_confirmed", "Customer or internal notification when a provider confirms the lead"],
+  ["Provider not confirmed", "provider_not_confirmed", "Customer or internal notification when a provider marks the sale not confirmed"],
+  ["Provider contacted", "provider_contacted", "Notification when a provider records customer contact"],
+  ["Provider valid", "provider_valid", "Notification when a provider records the lead as valid"],
+  ["Provider follow up", "provider_follow_up", "Notification when a provider schedules further follow up"],
+  ["Provider on hold", "provider_on_hold", "Notification when a provider places the lead on hold"],
   ["Provider rejected", "provider_rejected", "Internal or customer notification when a provider rejects the lead"],
   ["Provider invalid", "provider_invalid", "Internal notification when a provider marks the lead invalid"],
+  ["Provider not interested", "provider_not_interested", "Internal notification when a provider marks the lead not interested"],
+  ["Provider other update", "provider_other", "Internal notification for another provider activity update"],
   ["Sale conversion updated", "sale_conversion_updated", "Notification after sale-conversion status changes"],
 ]);
 

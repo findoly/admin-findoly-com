@@ -12,6 +12,7 @@ const webhookService = require("../services/communication/webhook-service");
 const whatsappService = require("../services/communication/whatsapp-service");
 const slackService = require("../services/communication/slack-service");
 const { configurationStatus } = require("../services/communication/communication-config");
+const providerStatusService = require("../services/distribution/provider-status-service");
 
 const actor = function (req) {
   return req.admin?.email || "api";
@@ -259,14 +260,79 @@ const integrationEvent = async function (req, res, next) {
       throw Object.assign(new Error("Invalid communication integration token"), { status: 401 });
     }
     const context = { ...(req.body || {}) };
-    if (!context.lead && context.enquiryId) {
+    const providerLeadStatus = providerStatusService.providerStatusFromEvent(
+      req.params.event,
+      context.activityStatus || context.status,
+    );
+    const providerSaleOutcome = providerStatusService.providerOutcomeFromEvent(
+      req.params.event,
+      context.outcome || context.providerSaleOutcome,
+    );
+    const isProviderFeedbackEvent = Boolean(
+      providerLeadStatus ||
+      providerSaleOutcome ||
+      ["provider_feedback_updated", "provider-feedback-updated", "provider_outcome_updated", "provider-outcome-updated"].includes(String(req.params.event || "").toLowerCase()),
+    );
+    let providerStatusUpdate = null;
+
+    if (isProviderFeedbackEvent) {
+      providerStatusUpdate = await providerStatusService.updateProviderLeadFeedback(
+        {
+          ...context,
+          outcome: providerSaleOutcome || context.outcome,
+          activityStatus: providerLeadStatus || context.activityStatus,
+          enquiryId: context.enquiryId || context.lead?.enquiryId,
+          providerId:
+            context.providerId ||
+            context.provider?.providerId ||
+            context.provider?.id,
+          leadDistributionId:
+            context.leadDistributionId || context.distributionId,
+        },
+        "provider-integration",
+      );
+      context.lead = providerStatusUpdate.lead;
+      context.distribution = providerStatusUpdate.distribution;
+      context.outcome = providerStatusUpdate.distribution.providerSaleOutcome;
+      context.activityStatus = providerStatusUpdate.distribution.providerLeadStatus;
+    } else if (!context.lead && context.enquiryId) {
       const lead = await Enquiry.findOne({ enquiryId: context.enquiryId }).lean();
       if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
       context.lead = lead;
     }
+
+    const notificationEvents = [];
+    if (isProviderFeedbackEvent) {
+      if (context.outcome === "confirmed") notificationEvents.push("provider_confirmed");
+      if (context.outcome === "not_confirmed") notificationEvents.push("provider_not_confirmed");
+      if (context.activityStatus) notificationEvents.push(`provider_${context.activityStatus}`);
+    } else {
+      notificationEvents.push(req.params.event);
+    }
+
+    const notification = [];
+    for (const eventName of [...new Set(notificationEvents)]) {
+      notification.push(
+        ...(await notificationService.trigger(
+          eventName,
+          {
+            ...context,
+            status: eventName.startsWith("provider_")
+              ? eventName.replace(/^provider_/, "")
+              : context.status,
+            trigger: eventName,
+          },
+          "integration-api",
+        )),
+      );
+    }
     res.json({
       success: true,
-      data: await notificationService.trigger(req.params.event, context, "integration-api"),
+      data: {
+        notification,
+        notificationEvents,
+        providerStatusUpdate,
+      },
     });
   } catch (error) {
     next(error);

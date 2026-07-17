@@ -58,8 +58,8 @@
                       </div>
                       <div class="d-flex justify-content-between align-items-center mb-3 fs-sm">
                         <span class="text-muted">Session stays active for 24 hours</span>
-                        <button type="button" class="btn btn-link btn-sm p-0" :disabled="loading || resendSeconds > 0" @click="sendOtp(true)">
-                          <span x-text="resendSeconds > 0 ? 'Resend in ' + resendSeconds + 's' : 'Resend OTP'"></span>
+                        <button type="button" class="btn btn-link btn-sm p-0" :disabled="loading" @click="sendOtp(true)">
+                          <span>Resend OTP</span>
                         </button>
                       </div>
                     </div>
@@ -88,18 +88,8 @@
           loading: false,
           error: '',
           message: '',
-          resendSeconds: 0,
-          resendTimer: null,
           returnTo: safeReturnTo(new URLSearchParams(location.search).get('returnTo')),
           digits(value) { return String(value || '').replace(/\D/g, '').slice(-10); },
-          startCountdown() {
-            window.clearInterval(this.resendTimer);
-            this.resendSeconds = 60;
-            this.resendTimer = window.setInterval(() => {
-              this.resendSeconds -= 1;
-              if (this.resendSeconds <= 0) window.clearInterval(this.resendTimer);
-            }, 1000);
-          },
           async sendOtp(isResend = false) {
             this.error = '';
             this.message = '';
@@ -118,8 +108,7 @@
               if (!response.ok || body.success === false) throw new Error(body.message || 'Unable to send OTP');
               this.step = 'otp';
               this.form.otp = '';
-              this.message = body.data?.message || (isResend ? 'OTP sent again' : 'OTP sent successfully');
-              this.startCountdown();
+              this.message = body.data?.message || (isResend ? 'A new OTP has been sent.' : 'OTP sent successfully.');
               this.$nextTick(() => document.querySelector('.crm-otp-input')?.focus());
             } catch (error) {
               this.error = error.message;
@@ -151,12 +140,10 @@
             }
           },
           changeMobile() {
-            window.clearInterval(this.resendTimer);
             this.step = 'mobile';
             this.form.otp = '';
             this.error = '';
             this.message = '';
-            this.resendSeconds = 0;
           }
         };
       }

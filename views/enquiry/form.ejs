@@ -101,6 +101,16 @@
                       </select>
                     </div>
                     <div class="col-md-3">
+                      <label class="form-label">Lead intent</label>
+                      <select class="form-select" x-model="form.leadIntent">
+                        <option value="not_assessed">Not assessed</option>
+                        <option value="low">Low intent</option>
+                        <option value="medium">Medium intent</option>
+                        <option value="high">High intent</option>
+                      </select>
+                      <div class="form-text">This value is shown to providers before unlock.</div>
+                    </div>
+                    <div class="col-md-3">
                       <label class="form-label">Lead price (₹)</label>
                       <input type="number" min="0" max="10000000" step="0.01" class="form-control" x-model.number="priceRupees" required />
                     </div>
@@ -170,6 +180,7 @@
                     requirementTitle: "",
                     status: "new",
                     priority: "normal",
+                    leadIntent: "not_assessed",
                     preferredDate: "",
                     preferredSlot: "",
                     sourceWebsite: "manual-admin",
@@ -232,6 +243,7 @@
                       serviceType: this.form.serviceType,
                       requirementTitle: this.form.requirementTitle,
                       priority: this.form.priority,
+                      leadIntent: this.form.leadIntent,
                       preferredDate: this.form.preferredDate,
                       preferredSlot: this.form.preferredSlot,
                       sourceWebsite: this.form.sourceWebsite,

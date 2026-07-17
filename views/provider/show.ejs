@@ -37,6 +37,9 @@
                         <dt class="col-5">Provider ID</dt><dd class="col-7" x-text="provider.providerId"></dd>
                         <dt class="col-5">Mobile</dt><dd class="col-7" x-text="provider.mobile ? '+91 ' + provider.mobile : '—'"></dd>
                         <dt class="col-5">Status</dt><dd class="col-7" x-text="humanize(provider.status)"></dd>
+                        <dt class="col-5">Portal access</dt><dd class="col-7" x-text="provider.portalAccessEnabled === false ? 'Restricted' : 'Enabled'"></dd>
+                        <dt class="col-5">Outcome warnings</dt><dd class="col-7" x-text="provider.outcomeWarningCount || 0"></dd>
+                        <dt class="col-5" x-show="provider.platformRestrictionReason">Restriction reason</dt><dd class="col-7" x-show="provider.platformRestrictionReason" x-text="provider.platformRestrictionReason"></dd>
                         <dt class="col-5">Wallet</dt><dd class="col-7 fw-semibold" x-text="money(provider.walletBalancePaise)"></dd>
                         <dt class="col-5">Categories</dt><dd class="col-7" x-text="(provider.categorySlugs||[]).join(', ') || '—'"></dd>
                       </dl>
@@ -51,19 +54,22 @@
                     </div>
                     <div class="table-responsive">
                       <table class="table mb-0">
-                        <thead><tr><th>Lead</th><th>Offer status</th><th>Provider status</th><th>Price</th><th>Date</th></tr></thead>
+                        <thead><tr><th>Lead</th><th>Offer</th><th>Sale outcome</th><th>Activity</th><th>Verification</th><th>Price</th><th>Date</th><th></th></tr></thead>
                         <tbody>
-                          <template x-if="offerLoading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="offerLoading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="d in offers" :key="d.leadDistributionId">
                             <tr>
                               <td><a :href="'/enquiries/'+d.enquiryId" x-text="d.leadTitle||d.enquiryId"></a></td>
                               <td x-text="humanize(d.status)"></td>
-                              <td x-text="d.providerLeadStatus ? humanize(d.providerLeadStatus) : 'Not updated'"></td>
+                              <td x-text="d.providerSaleOutcome ? humanize(d.providerSaleOutcome) : (d.contactUnlocked ? 'Pending' : '—')"></td>
+                              <td x-text="d.providerLeadStatus ? humanize(d.providerLeadStatus) : '—'"></td>
+                              <td x-text="d.outcomeVerificationStatus ? humanize(d.outcomeVerificationStatus) : (d.providerSaleOutcome ? 'Pending review' : '—')"></td>
                               <td x-text="money(d.leadPricePaise)"></td>
                               <td x-text="formatDate(d.distributedAt)"></td>
+                              <td><a class="btn btn-light btn-sm" :href="'/enquiries/' + d.enquiryId + '/providers/' + d.leadDistributionId" x-show="d.contactUnlocked">Review</a></td>
                             </tr>
                           </template>
-                          <tr x-show="!offerLoading && !offers.length"><td colspan="5" class="text-center text-muted py-4">No lead offers</td></tr>
+                          <tr x-show="!offerLoading && !offers.length"><td colspan="8" class="text-center text-muted py-4">No lead offers</td></tr>
                         </tbody>
                       </table>
                     </div>

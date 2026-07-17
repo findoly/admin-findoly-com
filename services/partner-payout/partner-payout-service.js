@@ -5,6 +5,7 @@ const AgentWithdrawal = require("../../models/AgentWithdrawal");
 const uuid = require("../../utils/uuid");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { textValue, enumValue, identifierValue, queryTextValue, validationError } = require("../../utils/validation");
+const { canonicalLeadStatus, PROVIDER_CONTROLLED_STATUS } = require("../../utils/lead-journey");
 const razorpay = require("./razorpay-service");
 
 const WAITING_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
@@ -12,6 +13,7 @@ const ACTIVE_WITHDRAWAL_STATUSES = ["submitted", "under_review", "eligibility_ap
 const WITHDRAWAL_STATUSES = ["submitted", "under_review", "eligibility_approved", "finance_approved", "payout_processing", "paid", "rejected", "cancelled", "payout_failed", "eligibility_changed", "payout_reversed"];
 const INVALID_REQUIREMENT_STATUSES = ["rejected", "invalid", "not_interested"];
 const VALIDATION_STATUSES = ["pending", "valid", "invalid"];
+const VALIDATION_METHODS = ["phone_call", "whatsapp", "email", "in_person", "other"];
 const CONVERSION_STATUSES = ["pending", "converted", "not_converted"];
 const INVALID_REASONS = ["duplicate", "incorrect_details", "customer_not_interested", "fake_referral", "unreachable", "outside_assigned_category", "other"];
 
@@ -425,33 +427,91 @@ async function markEligibilityChangedForRequirement(enquiryId, reason, actor = "
 }
 
 async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admin") {
-  const status = enumValue(input.status, VALIDATION_STATUSES, { label: "Referral validation status" });
-  const note = textValue(input.note, { label: "Referral validation note", required: true, maxLength: 2000, preserveWhitespace: true });
+  const status = enumValue(input.status, ["valid", "invalid"], { label: "Lead validation status" });
+  const method = enumValue(input.method, VALIDATION_METHODS, { label: "Validation method" });
+  const noteRequired = status === "invalid" || method === "other";
+  const note = textValue(input.note, {
+    label: method === "other" ? "Other validation details" : "Validation note",
+    required: noteRequired,
+    maxLength: 2000,
+    preserveWhitespace: true,
+  });
   const reason = status === "invalid" ? enumValue(input.reason, INVALID_REASONS, { label: "Invalid referral reason" }) : "";
   const row = await Enquiry.findOne({ enquiryId }).lean();
   if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (!isAgentLead(row)) throw validationError("Referral validation is available only for Agent Portal requirements");
-  await assertRequirementNotPayoutProcessing(row);
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(row.status))) {
+    throw Object.assign(
+      new Error("Lead validation is locked after distribution. Provider statuses now control sale conversion."),
+      { status: 409 },
+    );
+  }
+  const agentLead = isAgentLead(row);
+  if (agentLead) await assertRequirementNotPayoutProcessing(row);
   const now = new Date();
-  const payoutStatus = status === "invalid" ? "not_eligible" : (eligibilityDate(row) > now ? "waiting_period" : "unpaid");
-  if (status !== "valid" && row.partnerWithdrawalId && row.partnerPayoutStatus === "reserved") {
+  const payoutStatus = agentLead
+    ? (status === "invalid" ? "not_eligible" : (eligibilityDate(row) > now ? "waiting_period" : "unpaid"))
+    : "";
+  if (agentLead && status !== "valid" && row.partnerWithdrawalId && row.partnerPayoutStatus === "reserved") {
     await markEligibilityChangedForRequirement(enquiryId, `Referral changed to ${status}: ${note}`, actor);
   }
-  await Enquiry.updateOne({ enquiryId }, {
-    $set: {
-      agentReferralValidation: status,
-      agentReferralInvalidReason: reason,
-      agentReferralValidationNote: note,
-      agentReferralValidatedAt: now,
-      agentReferralValidatedBy: actor,
-      partnerEligibilityDate: row.partnerEligibilityDate || eligibilityDate(row),
-      partnerPayoutStatus: row.partnerPayoutStatus === "paid" ? "paid" : payoutStatus,
-      updatedAt: now,
-    },
-    $push: { timeline: { timelineId: uuid(), type: "agent_referral_validation", message: `Agent referral marked ${status}`, note, reason, actor, createdAt: now } },
-  });
+
+  const set = {
+    agentReferralValidation: status,
+    leadValidationMethod: method,
+    agentReferralInvalidReason: reason,
+    agentReferralValidationNote: note,
+    agentReferralValidatedAt: now,
+    agentReferralValidatedBy: actor,
+    updatedAt: now,
+  };
+  if (agentLead) {
+    set.partnerEligibilityDate = row.partnerEligibilityDate || eligibilityDate(row);
+    set.partnerPayoutStatus = row.partnerPayoutStatus === "paid" ? "paid" : payoutStatus;
+  }
+  const timeline = [{
+    timelineId: uuid(),
+    type: "lead_validation",
+    message: `Lead marked ${status}`,
+    method,
+    note,
+    reason,
+    actor,
+    createdAt: now,
+  }];
+
+  if (status === "invalid" && canonicalLeadStatus(row.status) !== "rejected") {
+    const metadata = { ...(row.metadata || {}) };
+    metadata.rejectedFromStatus = canonicalLeadStatus(row.status);
+    metadata.rejectionReason = note;
+    metadata.lastStatusNote = note;
+    set.status = "rejected";
+    set.statusUpdatedAt = now;
+    set.statusUpdatedBy = actor;
+    set.metadata = metadata;
+    timeline.push({
+      timelineId: uuid(),
+      type: "status_changed",
+      message: "Lead was marked Invalid and automatically changed to Rejected.",
+      fromStatus: canonicalLeadStatus(row.status),
+      toStatus: "rejected",
+      action: "reject",
+      method,
+      note,
+      reason,
+      actor,
+      createdAt: now,
+    });
+  }
+
+  await Enquiry.updateOne(
+    { enquiryId },
+    { $set: set, $push: { timeline: { $each: timeline } } },
+  );
   if (status !== "valid") {
-    await LeadDistribution.updateMany({ enquiryId, contactUnlocked: { $ne: true } }, { $set: { status: "withdrawn", updatedAt: now } });
+    await LeadDistribution.updateMany(
+      { enquiryId, contactUnlocked: { $ne: true } },
+      { $set: { status: "withdrawn", updatedAt: now } },
+    );
   }
   return Enquiry.findOne({ enquiryId }).lean();
 }
@@ -483,6 +543,7 @@ module.exports = {
   ACTIVE_WITHDRAWAL_STATUSES,
   WITHDRAWAL_STATUSES,
   VALIDATION_STATUSES,
+  VALIDATION_METHODS,
   CONVERSION_STATUSES,
   INVALID_REASONS,
   isAgentLead,

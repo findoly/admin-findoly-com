@@ -73,6 +73,23 @@ async function sync(req, res, next) {
   }
 }
 
+
+async function reviewOutcome(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await service.reviewProviderOutcome(
+        req.params.providerId,
+        req.params.leadDistributionId,
+        req.body,
+        req.admin?.email || "admin",
+      ),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   list,
   get,
@@ -81,4 +98,5 @@ module.exports = {
   create,
   update,
   sync,
+  reviewOutcome,
 };

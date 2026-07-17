@@ -71,29 +71,31 @@
                         <th>Mobile</th>
                         <th>Offer</th>
                         <th>Unlock</th>
-                        <th>Provider status</th>
-                        <th>Reason / note</th>
+                        <th>Sale outcome</th>
+                        <th>Activity</th>
+                        <th>Verification</th>
                         <th>Distributed</th>
                         <th>Last updated</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      <template x-if="loading"><tr><td colspan="9"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                      <template x-if="loading"><tr><td colspan="10"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                       <template x-for="row in rows" :key="row.leadDistributionId">
                         <tr>
                           <td><div class="fw-semibold" x-text="row.providerName || row.providerBusinessName || row.providerId"></div><div class="text-muted fs-sm" x-text="row.providerBusinessName || row.providerId"></div></td>
                           <td x-text="row.providerMobile ? '+91 ' + row.providerMobile : '—'"></td>
                           <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span></td>
                           <td x-text="row.contactUnlocked ? 'Unlocked' : 'Locked'"></td>
-                          <td x-text="row.providerLeadStatus ? humanize(row.providerLeadStatus) : 'Not updated'"></td>
-                          <td><div x-text="row.providerLeadReason ? humanize(row.providerLeadReason) : '—'"></div><div class="text-muted fs-sm" x-show="row.providerLeadNote" x-text="row.providerLeadNote"></div></td>
+                          <td><span class="crm-status" :class="row.providerSaleOutcome === 'confirmed' ? 'status-sale-converted' : 'status-pending'" x-text="row.providerSaleOutcome ? humanize(row.providerSaleOutcome) : 'Pending'"></span><div class="text-muted fs-sm" x-show="row.providerSaleOutcomeNote" x-text="row.providerSaleOutcomeNote"></div></td>
+                          <td><div x-text="row.providerLeadStatus ? humanize(row.providerLeadStatus) : '—'"></div><div class="text-muted fs-sm" x-show="row.providerLeadNote" x-text="row.providerLeadNote"></div></td>
+                          <td><span class="crm-status" :class="statusClass(row.outcomeVerificationStatus || 'pending')" x-text="row.outcomeVerificationStatus ? humanize(row.outcomeVerificationStatus) : 'Not reviewed'"></span></td>
                           <td class="crm-nowrap" x-text="formatDate(row.distributedAt)"></td>
                           <td class="crm-nowrap" x-text="formatDate(row.providerLeadStatusUpdatedAt || row.updatedAt)"></td>
                           <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + leadId + '/providers/' + row.leadDistributionId">View</a></td>
                         </tr>
                       </template>
-                      <tr x-show="!loading && !rows.length"><td colspan="9"><div class="crm-empty-state"><strong>No providers found</strong><span>No provider offer matches the selected filters.</span></div></td></tr>
+                      <tr x-show="!loading && !rows.length"><td colspan="10"><div class="crm-empty-state"><strong>No providers found</strong><span>No provider offer matches the selected filters.</span></div></td></tr>
                     </tbody>
                   </table>
                 </div>

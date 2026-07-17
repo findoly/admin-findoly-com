@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Lead management</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Review the CRM journey and provider progress after distribution.</p>
+                <p class="crm-page-subtitle mb-0">Complete mandatory actions quickly, then review provider progress and activity.</p>
               </div>
               <a href="/enquiries" class="btn btn-light crm-primary-action"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirements</a>
             </div>
@@ -22,8 +22,6 @@
             <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
             <div x-data="leadShow()" x-init="load()" :class="loading && 'crm-loading'">
-              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-              <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
               <div x-show="lead.isActive === false" x-cloak class="alert alert-warning">
                 This lead is deactivated. Its Reference ID and history are preserved, unlocked providers remain accessible, and no new distribution will occur.
                 <span x-show="lead.deactivationReason"> Reason: <strong x-text="lead.deactivationReason"></strong></span>
@@ -31,19 +29,143 @@
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
-                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['approved', 'distributed'].includes(currentStatus) || (lead.agentId && lead.agentReferralValidation !== 'valid')" title="Approve and activate the lead before synchronizing providers">Sync providers</button>
+                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['approved', 'distributed', 'sale_converted'].includes(currentStatus) || lead.agentReferralValidation !== 'valid'" title="Approve and validate the lead before synchronizing providers">Sync providers</button>
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
                 <a class="btn btn-light" :href="'/communications/send?enquiryId='+recordId">Send message</a>
-                <button x-show="lead.isActive !== false" class="btn btn-outline-danger ms-auto" @click="deactivateLead()" :disabled="stateSaving">Deactivate</button>
                 <button x-show="lead.isActive === false" class="btn btn-primary ms-auto" @click="reactivateLead()" :disabled="stateSaving">Reactivate</button>
               </div>
 
-              <div class="card mb-3">
+              <section class="card crm-lead-command-center mb-3">
+                <div class="card-header crm-card-heading">
+                  <div>
+                    <div class="crm-page-eyebrow">Fast actions</div>
+                    <h2 class="card-title mb-1">Lead action centre</h2>
+                    <p class="text-muted mb-0">Complete the highlighted requirement before moving to the next action.</p>
+                  </div>
+                  <span class="crm-status" :class="statusClass(currentStatus)" x-text="humanize(currentStatus)"></span>
+                </div>
+                <div class="card-body">
+                  <div class="crm-lead-action-grid">
+                    <article class="crm-lead-action-card crm-validation-action" :class="{'is-required': !validationReady && !providerControlled, 'is-complete': lead.agentReferralValidation === 'valid', 'is-invalid': lead.agentReferralValidation === 'invalid'}">
+                      <div class="crm-action-heading">
+                        <span class="crm-action-step">1</span>
+                        <div>
+                          <h3>Lead validation</h3>
+                          <p>Mandatory before any employee journey action.</p>
+                        </div>
+                        <span class="crm-status ms-auto" :class="statusClass(lead.agentReferralValidation || 'pending')" x-text="humanize(lead.agentReferralValidation || 'pending')"></span>
+                      </div>
+
+                      <div x-show="providerControlled" x-cloak class="crm-action-lock">
+                        <strong>Lead validation locked after distribution</strong>
+                        <span>Provider statuses now control conversion. Employees cannot change validation or reject this lead.</span>
+                      </div>
+
+                      <div x-show="!providerControlled" x-cloak>
+                        <label class="form-label">Decision</label>
+                        <div class="crm-decision-options mb-2">
+                          <label :class="{'is-selected is-valid': referralForm.status === 'valid'}">
+                            <input type="radio" value="valid" x-model="referralForm.status">
+                            <span>Valid</span>
+                          </label>
+                          <label :class="{'is-selected is-invalid': referralForm.status === 'invalid'}">
+                            <input type="radio" value="invalid" x-model="referralForm.status">
+                            <span>Invalid</span>
+                          </label>
+                        </div>
+                        <label class="form-label">Validation method</label>
+                        <select class="form-select mb-2" x-model="referralForm.method">
+                          <option value="">Select how the lead was validated</option>
+                          <option value="phone_call">Phone call</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="email">Email</option>
+                          <option value="in_person">In person</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <div x-show="referralForm.status === 'invalid'" x-cloak>
+                          <label class="form-label">Invalid reason</label>
+                          <select class="form-select mb-2" x-model="referralForm.reason">
+                            <option value="">Select why the lead is invalid</option>
+                            <option value="duplicate">Duplicate</option>
+                            <option value="incorrect_details">Incorrect details</option>
+                            <option value="customer_not_interested">Customer not interested</option>
+                            <option value="fake_referral">Fake referral</option>
+                            <option value="unreachable">Unreachable</option>
+                            <option value="outside_assigned_category">Outside assigned category</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <label class="form-label" x-text="referralForm.method === 'other' ? 'How was this lead validated?' : (referralForm.status === 'invalid' ? 'Invalid lead note' : 'Validation note (optional)')"></label>
+                        <textarea class="form-control mb-2" rows="2" maxlength="2000" x-model="referralForm.note" :placeholder="referralForm.method === 'other' ? 'Describe the validation method' : (referralForm.status === 'invalid' ? 'Explain why this lead is invalid' : 'Add a short verification note, if useful')"></textarea>
+                        <button class="btn btn-primary w-100" @click="saveReferralValidation()" :disabled="referralSaving || !referralForm.status || !referralForm.method">
+                          <span x-text="referralSaving ? 'Saving…' : 'Save validation'"></span>
+                        </button>
+                        <p class="crm-action-help mb-0 mt-2" x-show="referralForm.status === 'invalid'">Saving Invalid will automatically move this lead to Rejected.</p>
+                        <p class="crm-action-help mb-0 mt-2" x-show="referralForm.method === 'other'">Please explain the validation method before saving.</p>
+                      </div>
+                    </article>
+
+                    <article class="crm-lead-action-card crm-journey-action" :class="{'is-required': validationReady && !providerControlled && !isRejected, 'is-locked': !validationReady || providerControlled}">
+                      <div class="crm-action-heading">
+                        <span class="crm-action-step">2</span>
+                        <div>
+                          <h3>Journey status</h3>
+                          <p>Move one stage at a time with a recorded note.</p>
+                        </div>
+                      </div>
+
+                      <div class="crm-current-action-status">
+                        <span>Current status</span>
+                        <strong x-text="humanize(currentStatus)"></strong>
+                        <small x-show="lead.statusUpdatedBy">Updated by <span x-text="lead.statusUpdatedBy"></span><span x-show="lead.statusUpdatedAt"> · <span x-text="formatDate(lead.statusUpdatedAt)"></span></span></small>
+                      </div>
+
+                      <div x-show="providerControlled" x-cloak class="crm-action-lock">
+                        <strong>Employee journey actions are locked</strong>
+                        <span>A distributed lead cannot move backward or be rejected. Provider confirmation controls Sale Converted and its reversal.</span>
+                      </div>
+                      <div x-show="!validationReady && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Complete lead validation first</strong>
+                        <span>Mark the lead Valid to unlock journey actions, or Invalid to reject it automatically.</span>
+                      </div>
+
+                      <div x-show="validationReady && !providerControlled" x-cloak>
+                        <label class="form-label">Reason / note</label>
+                        <textarea class="form-control mb-2" rows="2" x-model="statusNote" maxlength="1000" :disabled="lead.isActive === false" :placeholder="lead.agentId ? 'Mandatory for every status change' : 'Required when rejecting; optional for Next or Previous'"></textarea>
+                        <div class="d-flex gap-2 mb-2">
+                          <button class="btn btn-light flex-fill" @click="changeStatus('previous')" :disabled="lead.isActive === false || statusSaving || !canPrevious" x-text="isRejected ? 'Restore previous' : 'Previous'"></button>
+                          <button class="btn btn-primary flex-fill" @click="changeStatus('next')" :disabled="lead.isActive === false || statusSaving || !canNext">Next</button>
+                        </div>
+                        <button class="btn btn-outline-danger w-100" @click="changeStatus('reject')" :disabled="lead.isActive === false || statusSaving || !canReject">Reject lead</button>
+                      </div>
+                    </article>
+
+                    <article class="crm-lead-action-card crm-conversion-action" :class="{'is-complete': currentStatus === 'sale_converted'}">
+                      <div class="crm-action-heading">
+                        <span class="crm-action-step">3</span>
+                        <div>
+                          <h3>Sale conversion</h3>
+                          <p>Read-only and calculated from unlocked providers.</p>
+                        </div>
+                        <span class="crm-status ms-auto" :class="currentStatus === 'sale_converted' ? 'status-sale-converted' : 'status-pending'" x-text="saleConversionLabel"></span>
+                      </div>
+                      <div class="crm-conversion-summary">
+                        <strong x-text="providerControlled ? (lead.providerConfirmedCount || 0) : '—'"></strong>
+                        <span x-text="providerControlled ? 'providers currently Confirmed' : 'Available after distribution'"></span>
+                      </div>
+                      <p class="mb-2" x-text="saleConversionMessage"></p>
+                      <a class="btn btn-light w-100" :href="providerJourneyUrl">Review provider statuses</a>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <div class="card mb-3 crm-lead-summary-card">
                 <div class="card-header d-flex align-items-center flex-wrap gap-2">
                   <h5 class="mb-0" x-text="lead.requirementTitle || 'Requirement'"></h5>
-                  <span class="badge ms-auto" :class="lead.isActive === false ? 'bg-warning bg-opacity-10 text-warning' : (isRejected ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary')" x-text="lead.isActive === false ? 'Deactivated' : humanize(currentStatus)"></span>
+                  <span class="crm-status ms-auto" :class="lead.isActive === false ? 'status-inactive' : statusClass(currentStatus)" x-text="lead.isActive === false ? 'Deactivated' : humanize(currentStatus)"></span>
                 </div>
                 <div class="card-body">
                   <div class="row g-3">
@@ -54,9 +176,10 @@
                       </div>
                     </template>
                   </div>
-                  <hr />
-                  <h6>Additional details</h6>
-                  <pre class="crm-json bg-light p-3 rounded mb-0" x-text="JSON.stringify(lead.additionalDetails || {}, null, 2)"></pre>
+                  <details class="crm-details-panel mt-3">
+                    <summary>Additional details</summary>
+                    <pre class="crm-json bg-light p-3 rounded mb-0 mt-2" x-text="JSON.stringify(lead.additionalDetails || {}, null, 2)"></pre>
+                  </details>
                 </div>
               </div>
 
@@ -96,6 +219,7 @@
                                 <small class="text-muted" x-text="formatDate(event.createdAt)"></small>
                               </div>
                               <div class="text-muted mt-1" x-show="event.message" x-text="event.message"></div>
+                              <div class="mt-1" x-show="event.method"><span class="fw-semibold">Validation method:</span> <span x-text="humanize(event.method)"></span></div>
                               <div class="mt-1" x-show="event.note"><span class="fw-semibold">Reason/note:</span> <span x-text="event.note"></span></div>
                               <small class="text-muted d-block mt-1">Updated by <span x-text="event.actor || 'system'"></span></small>
                             </div>
@@ -126,60 +250,32 @@
                       </table>
                     </div>
                   </div>
-
-                  <div class="card">
-                    <div class="card-header d-flex align-items-center">
-                      <div>
-                        <h5 class="mb-1">Provider status</h5>
-                        <p class="text-muted mb-0">Provider journeys are shown in a separate paginated table for scalable viewing.</p>
-                      </div>
-                      <span class="badge bg-light text-dark ms-auto" x-text="(lead.distributionCount || 0) + ' providers'"></span>
-                    </div>
-                    <div class="card-body d-flex flex-wrap align-items-center gap-3">
-                      <div><div class="text-muted fs-sm">Offers</div><div class="fw-semibold fs-5" x-text="lead.distributionCount || 0"></div></div>
-                      <div><div class="text-muted fs-sm">Unlocked</div><div class="fw-semibold fs-5" x-text="lead.unlockedCount || 0"></div></div>
-                      <a class="btn btn-primary ms-auto" :href="providerJourneyUrl">View provider status table</a>
-                    </div>
-                  </div>
                 </div>
 
                 <div class="col-xl-4">
-                  <div class="card mb-3" x-show="lead.agentId">
-                    <div class="card-header"><h5 class="mb-0">Agent referral review</h5></div>
-                    <div class="card-body">
-                      <div class="d-flex justify-content-between align-items-center mb-3"><span>Referral validation</span><span class="crm-status" :class="statusClass(lead.agentReferralValidation||'pending')" x-text="humanize(lead.agentReferralValidation||'pending')"></span></div>
-                      <label class="form-label">Validation decision</label><select class="form-select mb-2" x-model="referralForm.status"><option value="pending">Pending</option><option value="valid">Valid</option><option value="invalid">Invalid</option></select>
-                      <label class="form-label" x-show="referralForm.status==='invalid'">Invalid reason</label><select class="form-select mb-2" x-show="referralForm.status==='invalid'" x-model="referralForm.reason"><option value="duplicate">Duplicate</option><option value="incorrect_details">Incorrect details</option><option value="customer_not_interested">Customer not interested</option><option value="fake_referral">Fake referral</option><option value="unreachable">Unreachable</option><option value="outside_assigned_category">Outside assigned category</option><option value="other">Other</option></select>
-                      <textarea class="form-control mb-2" rows="3" maxlength="2000" x-model="referralForm.note" placeholder="Mandatory validation note"></textarea><button class="btn btn-primary w-100 mb-3" @click="saveReferralValidation()">Save validation</button>
-                      <hr><div class="d-flex justify-content-between align-items-center mb-2"><span>Sale conversion</span><span class="crm-status" :class="statusClass(lead.agentSaleConversion||'pending')" x-text="humanize(lead.agentSaleConversion||'pending')"></span></div>
-                      <select class="form-select mb-2" x-model="conversionForm.status"><option value="pending">Pending</option><option value="converted">Converted to sale</option><option value="not_converted">Not converted</option></select><textarea class="form-control mb-2" rows="3" maxlength="2000" x-model="conversionForm.note" placeholder="Mandatory conversion note"></textarea><button class="btn btn-light w-100" @click="saveSaleConversion()">Save conversion</button>
+                  <div class="card mb-3 crm-sticky-side-card">
+                    <div class="card-header d-flex align-items-center">
+                      <div>
+                        <h5 class="mb-1">Provider status</h5>
+                        <p class="text-muted mb-0">Live conversion inputs.</p>
+                      </div>
+                      <span class="badge bg-light text-dark ms-auto" x-text="(lead.distributionCount || 0) + ' providers'"></span>
                     </div>
-                  </div>
-                  <div class="card mb-3">
-                    <div class="card-header"><h5 class="mb-0">Update journey status</h5></div>
                     <div class="card-body">
-                      <div class="mb-3">
-                        <div class="text-muted fs-sm">Current status</div>
-                        <div class="fw-semibold fs-5" x-text="humanize(currentStatus)"></div>
-                        <small class="text-muted" x-show="lead.statusUpdatedBy">Last updated by <span x-text="lead.statusUpdatedBy"></span> <span x-show="lead.statusUpdatedAt">on <span x-text="formatDate(lead.statusUpdatedAt)"></span></span></small>
+                      <div class="crm-provider-stat-grid mb-3">
+                        <div><span>Offers</span><strong x-text="lead.distributionCount || 0"></strong></div>
+                        <div><span>Unlocked</span><strong x-text="lead.unlockedCount || 0"></strong></div>
+                        <div><span>Confirmed</span><strong x-text="lead.providerConfirmedCount || 0"></strong></div>
                       </div>
-                      <label class="form-label">Reason / note</label>
-                      <textarea class="form-control mb-3" rows="3" x-model="statusNote" maxlength="1000" :disabled="lead.isActive === false"  :placeholder="lead.agentId ? 'Mandatory for every status change' : 'Required when rejecting; optional for Next or Previous'"></textarea>
-                      <div class="d-grid gap-2">
-                        <div class="d-flex gap-2">
-                          <button class="btn btn-light flex-fill" @click="changeStatus('previous')" :disabled="lead.isActive === false || statusSaving || !canPrevious" x-text="isRejected ? 'Restore previous' : 'Previous'"></button>
-                          <button class="btn btn-primary flex-fill" @click="changeStatus('next')" :disabled="lead.isActive === false || statusSaving || !canNext">Next</button>
-                        </div>
-                        <button class="btn btn-outline-danger" @click="changeStatus('reject')" :disabled="lead.isActive === false || statusSaving || isRejected">Reject lead</button>
-                      </div>
+                      <a class="btn btn-primary w-100" :href="providerJourneyUrl">View provider status table</a>
                     </div>
                   </div>
 
                   <div class="card">
                     <div class="card-header"><h5 class="mb-0">Add note</h5></div>
                     <div class="card-body">
-                      <textarea class="form-control mb-2" rows="4" x-model="note" maxlength="5000"></textarea>
-                      <button class="btn btn-light w-100" @click="addNote()">Add note</button>
+                      <textarea class="form-control mb-2" rows="4" x-model="note" maxlength="5000" placeholder="Add an internal note to the activity timeline"></textarea>
+                      <button class="btn btn-light w-100" @click="addNote()" :disabled="noteSaving || !note.trim()" x-text="noteSaving ? 'Adding…' : 'Add note'"></button>
                     </div>
                   </div>
                 </div>
@@ -194,14 +290,13 @@
                   communications: [],
                   note: '',
                   statusNote: '',
-                  referralForm: { status: 'pending', reason: 'other', note: '' },
-                  conversionForm: { status: 'pending', note: '' },
+                  referralForm: { status: '', method: '', reason: '', note: '' },
                   loading: true,
                   statusSaving: false,
+                  referralSaving: false,
+                  noteSaving: false,
                   stateSaving: false,
-                  error: '',
-                  success: '',
-                  journeySteps: ['new', 'verification', 'approved', 'distributed'],
+                  journeySteps: ['new', 'verification', 'approved', 'distributed', 'sale_converted'],
                   get providerJourneyUrl() {
                     return '/enquiries/' + this.recordId + '/providers';
                   },
@@ -211,18 +306,41 @@
                   get isRejected() {
                     return this.currentStatus === 'rejected';
                   },
+                  get providerControlled() {
+                    return ['distributed', 'sale_converted'].includes(this.currentStatus);
+                  },
+                  get validationReady() {
+                    return this.lead.agentReferralValidation === 'valid';
+                  },
                   get journeyBaseStatus() {
                     return this.isRejected ? (this.lead.metadata?.rejectedFromStatus || 'new') : this.currentStatus;
                   },
                   get canPrevious() {
-                    return this.isRejected || this.journeySteps.indexOf(this.journeyBaseStatus) > 0;
+                    return !this.providerControlled && this.validationReady && (this.isRejected || this.journeySteps.slice(0, 4).indexOf(this.journeyBaseStatus) > 0);
                   },
                   get canNext() {
-                    const index = this.journeySteps.indexOf(this.journeyBaseStatus);
-                    if (this.isRejected || index < 0 || index >= this.journeySteps.length - 1) return false;
-                    const target = this.journeySteps[index + 1];
-                    if (this.lead.agentId && ['approved','distributed'].includes(target) && this.lead.agentReferralValidation !== 'valid') return false;
-                    return true;
+                    if (this.providerControlled || !this.validationReady || this.isRejected) return false;
+                    const employeeSteps = this.journeySteps.slice(0, 4);
+                    const index = employeeSteps.indexOf(this.journeyBaseStatus);
+                    return index >= 0 && index < employeeSteps.length - 1;
+                  },
+                  get canReject() {
+                    return !this.providerControlled && this.validationReady && !this.isRejected;
+                  },
+                  get saleConversionLabel() {
+                    if (this.currentStatus === 'sale_converted') return 'Sale converted';
+                    if (this.currentStatus === 'distributed') return 'Awaiting confirmation';
+                    return 'Not started';
+                  },
+                  get saleConversionMessage() {
+                    if (this.currentStatus === 'sale_converted') {
+                      const count = Number(this.lead.providerConfirmedCount || 0);
+                      return count + ' unlocked provider' + (count === 1 ? ' is' : 's are') + ' currently Confirmed. The lead remains converted while at least one confirmation exists.';
+                    }
+                    if (this.currentStatus === 'distributed') {
+                      return 'The CRM will change this lead to Sale Converted automatically when any unlocked provider marks it Confirmed.';
+                    }
+                    return 'Sale conversion starts only after the lead reaches Distributed.';
                   },
                   get summary() {
                     return [
@@ -235,16 +353,20 @@
                       { label: 'Agent', value: this.lead.agentBusinessName || this.lead.agentName || '—' },
                       { label: 'Customer OTP', value: this.lead.customerMobileVerified ? 'Verified' : 'Not verified' },
                       { label: 'Category', value: this.lead.category || humanize(this.lead.categorySlug) },
+                      { label: 'Lead intent', value: this.lead.leadIntent === 'not_assessed' ? 'Not assessed' : humanize(this.lead.leadIntent) + ' intent' },
                       { label: 'City', value: this.lead.city },
                       { label: 'Price', value: money(this.lead.leadPricePaise) },
                       { label: 'Status', value: humanize(this.currentStatus) },
-                      { label: 'Status updated by', value: this.lead.statusUpdatedBy || '—' },
                       { label: 'Distribution', value: (this.lead.distributionCount || 0) + ' offers' },
-                      { label: 'Unlocked', value: (this.lead.unlockedCount || 0) + ' providers' }
+                      { label: 'Unlocked', value: (this.lead.unlockedCount || 0) + ' providers' },
+                      { label: 'Confirmed', value: (this.lead.providerConfirmedCount || 0) + ' providers' }
                     ];
                   },
                   get leadTimeline() {
                     return [...(this.lead.timeline || [])].sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+                  },
+                  notify(message, type = 'success') {
+                    showCrmToast(message, type);
                   },
                   stepClass(step) {
                     const stepIndex = this.journeySteps.indexOf(step);
@@ -252,11 +374,15 @@
                     return {
                       'is-complete': stepIndex < currentIndex,
                       'is-current': stepIndex === currentIndex && !this.isRejected,
-                      'is-rejected-stage': stepIndex === currentIndex && this.isRejected
+                      'is-rejected-stage': stepIndex === currentIndex && this.isRejected,
+                      'is-provider-stage': step === 'sale_converted'
                     };
                   },
                   timelineTitle(event) {
                     if (event.type === 'status_changed') return humanize(event.toStatus || 'Status changed');
+                    if (event.type === 'provider_sale_conversion') return 'Sale converted by provider';
+                    if (event.type === 'provider_sale_conversion_reverted') return 'Sale conversion reversed';
+                    if (['agent_referral_validation', 'lead_validation'].includes(event.type)) return 'Lead validation updated';
                     if (event.type === 'created') return 'Lead created';
                     if (event.type === 'note') return 'Note added';
                     if (event.type === 'deactivated') return 'Lead deactivated';
@@ -266,10 +392,14 @@
                   async load() {
                     this.loading = true;
                     try {
-                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data; this.referralForm.status=this.lead.agentReferralValidation||'pending'; this.conversionForm.status=this.lead.agentSaleConversion||'pending';
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data;
+                      const validation = this.lead.agentReferralValidation || 'pending';
+                      this.referralForm.status = ['valid', 'invalid'].includes(validation) ? validation : '';
+                      this.referralForm.method = this.lead.leadValidationMethod || '';
+                      this.referralForm.reason = this.lead.agentReferralInvalidReason || '';
                       await this.loadCommunications();
                     } catch (error) {
-                      this.error = error.message;
+                      this.notify(error.message, 'error');
                     } finally {
                       this.loading = false;
                     }
@@ -279,13 +409,22 @@
                       const body = await apiFetch('/api/communication?enquiryId=' + encodeURIComponent(this.recordId) + '&limit=20');
                       this.communications = body.data || [];
                     } catch (error) {
-                      this.error = error.message;
+                      this.notify(error.message, 'error');
                     }
                   },
                   async changeStatus(action) {
-                    this.error = '';
-                    this.success = '';
-                    if ((this.lead.agentId || action === 'reject') && !this.statusNote.trim()) { this.error = this.lead.agentId ? 'Enter a mandatory note before changing an agent requirement status' : 'Enter a rejection reason before rejecting the lead'; return; }
+                    if (this.providerControlled) {
+                      this.notify('Journey actions are locked after distribution. Provider statuses control conversion.', 'error');
+                      return;
+                    }
+                    if (!this.validationReady) {
+                      this.notify('Complete lead validation first.', 'error');
+                      return;
+                    }
+                    if ((this.lead.agentId || action === 'reject') && !this.statusNote.trim()) {
+                      this.notify(this.lead.agentId ? 'Enter a mandatory note before changing this Agent Portal requirement.' : 'Enter a rejection reason before rejecting the lead.', 'error');
+                      return;
+                    }
                     this.statusSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/status', {
@@ -293,51 +432,73 @@
                         body: JSON.stringify({ action, note: this.statusNote })
                       })).data;
                       this.statusNote = '';
-                      this.success = 'Lead status updated';
+                      this.notify('Lead status updated to ' + humanize(this.currentStatus) + '.', 'success');
                       await this.loadCommunications();
                     } catch (error) {
-                      this.error = error.message;
+                      this.notify(error.message, 'error');
                     } finally {
                       this.statusSaving = false;
                     }
                   },
-                  async saveReferralValidation() { this.error=''; this.success=''; try { if(!this.referralForm.note.trim()) throw new Error('Enter a mandatory validation note'); this.lead=(await apiFetch('/api/enquiry/'+this.recordId+'/referral-validation',{method:'POST',body:JSON.stringify(this.referralForm)})).data; this.referralForm.note=''; this.success='Referral validation updated'; } catch(error){this.error=error.message;} },
-                  async saveSaleConversion() { this.error=''; this.success=''; try { if(!this.conversionForm.note.trim()) throw new Error('Enter a mandatory conversion note'); this.lead=(await apiFetch('/api/enquiry/'+this.recordId+'/sale-conversion',{method:'POST',body:JSON.stringify(this.conversionForm)})).data; this.conversionForm.note=''; this.success='Sale conversion updated'; } catch(error){this.error=error.message;} },
+                  async saveReferralValidation() {
+                    if (!this.referralForm.status) {
+                      this.notify('Select Valid or Invalid.', 'error');
+                      return;
+                    }
+                    if (!this.referralForm.method) {
+                      this.notify('Select how the lead was validated.', 'error');
+                      return;
+                    }
+                    if (this.referralForm.method === 'other' && !this.referralForm.note.trim()) {
+                      this.notify('Please describe how the lead was validated.', 'error');
+                      return;
+                    }
+                    if (this.referralForm.status === 'invalid' && !this.referralForm.reason) {
+                      this.notify('Select why the lead is Invalid.', 'error');
+                      return;
+                    }
+                    if (this.referralForm.status === 'invalid' && !this.referralForm.note.trim()) {
+                      this.notify('Enter a reason explaining why the lead is Invalid.', 'error');
+                      return;
+                    }
+                    this.referralSaving = true;
+                    try {
+                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/referral-validation', {
+                        method: 'POST',
+                        body: JSON.stringify(this.referralForm)
+                      })).data;
+                      const markedInvalid = this.lead.agentReferralValidation === 'invalid';
+                      this.referralForm.note = '';
+                      this.notify(markedInvalid ? 'Lead marked Invalid. It was automatically moved to Rejected.' : 'Lead marked Valid. Journey actions are now available.', 'success');
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.referralSaving = false;
+                    }
+                  },
                   async addNote() {
+                    if (!this.note.trim()) return;
+                    this.noteSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/note', {
                         method: 'POST',
                         body: JSON.stringify({ note: this.note })
                       })).data;
                       this.note = '';
+                      this.notify('Note added to the lead activity timeline.', 'success');
                     } catch (error) {
-                      this.error = error.message;
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.noteSaving = false;
                     }
                   },
                   async syncDistribution() {
                     try {
                       await apiFetch('/api/enquiry/' + this.recordId + '/distribute', { method: 'POST', body: '{}' });
                       await this.load();
-                      this.success = 'Providers synchronized';
+                      this.notify('Eligible providers synchronized.', 'success');
                     } catch (error) {
-                      this.error = error.message;
-                    }
-                  },
-                  async deactivateLead() {
-                    const reason = window.prompt('Optional reason for deactivation:', this.lead.deactivationReason || '');
-                    if (reason === null) return;
-                    if (!window.confirm('Deactivate this lead? The lead will be preserved and cannot be deleted.')) return;
-                    this.stateSaving = true;
-                    try {
-                      this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/deactivate', {
-                        method: 'POST',
-                        body: JSON.stringify({ reason })
-                      })).data;
-                      this.success = 'Lead deactivated';
-                    } catch (error) {
-                      this.error = error.message;
-                    } finally {
-                      this.stateSaving = false;
+                      this.notify(error.message, 'error');
                     }
                   },
                   async reactivateLead() {
@@ -345,9 +506,9 @@
                     this.stateSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/reactivate', { method: 'POST', body: '{}' })).data;
-                      this.success = 'Lead reactivated';
+                      this.notify('Lead reactivated.', 'success');
                     } catch (error) {
-                      this.error = error.message;
+                      this.notify(error.message, 'error');
                     } finally {
                       this.stateSaving = false;
                     }
