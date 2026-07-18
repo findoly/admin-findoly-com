@@ -406,3 +406,14 @@ Provider sale outcome is mandatory (`confirmed` or `not_confirmed`). Activity st
 Provider outcome updates create Communication Center events such as `provider_confirmed`, `provider_not_confirmed`, `provider_follow_up`, `provider_rejected`, and `provider_invalid`. Enable and configure the corresponding communication rules when Slack, WhatsApp, or email alerts are required.
 
 CRM users can review an unlocked provider outcome from the lead's provider journey. Verification results are manual: Pending review, Under review, Verified, Unable to verify, or Incorrect status. A warning, temporary suspension, or permanent block can be applied only after the outcome is marked Incorrect status and a review note is recorded.
+
+
+## Nearby provider marketplace deployment
+
+Configure `GOOGLE_MAPS_API_KEY` in both CRM and provider portal. CRM geocodes lead/provider PIN codes and publishes radius-based visibility. For existing data, run once after deployment:
+
+```bash
+npm run migrate:marketplace-location
+```
+
+The script keeps existing lead/provider records intact, caches PIN-code coordinates, and recalculates locked provider distributions.

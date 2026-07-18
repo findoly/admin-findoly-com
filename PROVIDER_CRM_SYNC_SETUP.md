@@ -44,11 +44,26 @@ The provider browser never calls CRM directly. Its backend calls:
 POST https://admin.findoly.com/api/communication/events/provider_feedback_updated
 ```
 
-## 3. Lead intent
+## 3. Nearby marketplace location
+
+Configure the same Google Geocoding API capability in both applications:
+
+```env
+GOOGLE_MAPS_API_KEY=<restricted-server-key>
+GOOGLE_MAPS_TIMEOUT_MS=8000
+```
+
+- CRM requires a valid lead PIN code before marketplace distribution.
+- Each provider has one mandatory primary service PIN code and an optional full address.
+- The server stores cached approximate coordinates in `pincodelocations`.
+- Visibility expands at 5 km immediately, 10 km after 5 minutes, 25 km after 15 minutes, 50 km after 30 minutes, 100 km after 1 hour, 200 km after 2 hours, 400 km after 4 hours, and becomes unrestricted after 8 hours.
+- Lead Intent remains CRM-controlled. Unlock pricing remains the original CRM-configured credit cost; no discount is applied.
+
+## 4. Lead intent
 
 CRM is the source of truth. Employees select High, Medium, Low, or Not assessed while creating or editing a lead. The provider marketplace reads the value from the shared lead record.
 
-## 4. Provider outcome rules
+## 5. Provider outcome rules
 
 Every unlocked lead requires Confirmed or Not Confirmed. The activity status is separate and optional.
 
@@ -56,7 +71,7 @@ Every unlocked lead requires Confirmed or Not Confirmed. The activity status is 
 - No current Confirmed providers: Sale Converted returns to Distributed.
 - Other provider statuses do not cancel conversion while at least one provider remains Confirmed.
 
-## 5. Communication rules
+## 6. Communication rules
 
 CRM creates events including:
 
@@ -74,7 +89,7 @@ CRM creates events including:
 
 Enable the required Communication Center rules and configure Slack, WhatsApp, or email delivery.
 
-## 6. Provider review
+## 7. Provider review
 
 CRM users review outcomes from the lead provider journey. Warnings, suspension, and blocking are manual and require:
 
@@ -82,14 +97,15 @@ CRM users review outcomes from the lead provider journey. Warnings, suspension, 
 2. A mandatory review note.
 3. An explicit account action selected by an authorized CRM employee.
 
-## 7. Deployment order
+## 8. Deployment order
 
 1. Deploy CRM and configure the shared token.
 2. Deploy provider portal with the CRM URL and same token.
-3. Run provider indexes.
-4. Restart both Node services.
-5. Create/edit a test lead in CRM and set Lead Intent.
-6. Unlock it in provider portal.
-7. Save Confirmed and verify CRM changes to Sale Converted.
-8. Change to Not Confirmed and verify CRM returns to Distributed.
-9. Confirm Communication Center logs/events are created for enabled rules.
+3. Run provider indexes: `npm run ensure:indexes`.
+4. In CRM, run `npm run migrate:marketplace-location` once to geocode existing provider/lead PIN codes and calculate existing marketplace visibility.
+5. Restart both Node services.
+6. Create/edit a test lead in CRM and set Lead Intent.
+7. Unlock it in provider portal.
+8. Save Confirmed and verify CRM changes to Sale Converted.
+9. Change to Not Confirmed and verify CRM returns to Distributed.
+10. Confirm Communication Center logs/events are created for enabled rules.

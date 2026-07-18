@@ -66,7 +66,8 @@
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Pincode</label>
-                      <input class="form-control" x-model="form.pincode" @input="form.pincode = String(form.pincode || '').replace(/\D/g, '').slice(0, 6)" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6" />
+                      <input class="form-control" x-model="form.pincode" @input="form.pincode = String(form.pincode || '').replace(/\D/g, '').slice(0, 6)" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6" required />
+                      <div class="form-text">Required for distance-based provider marketplace visibility.</div>
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Category</label>
@@ -260,7 +261,7 @@
                       if (!/^\d{10}$/.test(this.form.mobile)) {
                         throw new Error("Customer mobile number must contain exactly 10 digits");
                       }
-                      if (this.form.pincode && !/^[1-9]\d{5}$/.test(this.form.pincode)) {
+                      if (!/^[1-9]\d{5}$/.test(this.form.pincode)) {
                         throw new Error("Pincode must contain exactly 6 digits");
                       }
                       if (!Number.isFinite(Number(this.priceRupees)) || Number(this.priceRupees) < 0) {

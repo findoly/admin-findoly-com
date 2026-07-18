@@ -11,6 +11,8 @@ const {
 } = require("../../utils/lead-journey");
 const { PROVIDER_LEAD_STATUSES } = require("../../utils/provider-lead-status");
 const providerStatusService = require("../distribution/provider-status-service");
+const { geocodePincode } = require("../location/geocoding-service");
+const { haversineDistanceKm, marketplaceVisibleAt } = require("../../utils/marketplace-radius");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const {
   textValue,
@@ -199,6 +201,15 @@ function presentEnquiry(row = {}) {
     city: row.city || address.city || "",
     state: row.state || address.state || "",
     pincode: row.pincode || address.pincode || "",
+    locationLatitude: Number.isFinite(Number(row.locationLatitude)) ? Number(row.locationLatitude) : null,
+    locationLongitude: Number.isFinite(Number(row.locationLongitude)) ? Number(row.locationLongitude) : null,
+    locationPincode: row.locationPincode || "",
+    locationLocality: row.locationLocality || "",
+    locationDistrict: row.locationDistrict || "",
+    locationState: row.locationState || "",
+    locationCountry: row.locationCountry || "India",
+    locationVerifiedAt: row.locationVerifiedAt || null,
+    marketplacePublishedAt: row.marketplacePublishedAt || null,
     category:
       typeof row.category === "string"
         ? row.category
@@ -606,6 +617,11 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "distributionCount",
     "unlockedCount",
     "distributedAt",
+    "marketplacePublishedAt",
+    "locationLatitude",
+    "locationLongitude",
+    "locationPincode",
+    "locationVerifiedAt",
     "providerConfirmedCount",
     "providerSaleConversionStatus",
     "providerSaleConversionUpdatedAt",
@@ -866,7 +882,42 @@ async function setActiveState(
   return get(enquiryId);
 }
 
+async function ensureEnquiryLocation(enquiry) {
+  const pincode = String(enquiry.pincode || "").trim();
+  if (!/^[1-9]\d{5}$/.test(pincode)) {
+    throw validationError("A valid 6-digit lead PIN code is required before marketplace distribution");
+  }
+  const alreadyVerified = pincode === String(enquiry.locationPincode || "")
+    && Number.isFinite(Number(enquiry.locationLatitude))
+    && Number.isFinite(Number(enquiry.locationLongitude));
+  if (alreadyVerified) return enquiry;
+
+  const location = await geocodePincode(pincode);
+  const locationData = {
+    locationLatitude: Number(location.latitude),
+    locationLongitude: Number(location.longitude),
+    locationPincode: pincode,
+    locationLocality: location.locality || "",
+    locationDistrict: location.district || "",
+    locationState: location.state || "",
+    locationCountry: location.country || "India",
+    locationVerifiedAt: location.verifiedAt || new Date(),
+    locationSource: location.source || "google_geocoding",
+  };
+  await Enquiry.updateOne(enquiryQuery(enquiry.enquiryId || enquiry.id), {
+    $set: { ...locationData, updatedAt: new Date() },
+  });
+  return { ...enquiry, ...locationData };
+}
+
 function distributionData(enquiry, provider) {
+  const publishedAt = enquiry.marketplacePublishedAt || enquiry.distributedAt || new Date();
+  const distanceKm = haversineDistanceKm(
+    provider.serviceLatitude,
+    provider.serviceLongitude,
+    enquiry.locationLatitude,
+    enquiry.locationLongitude,
+  );
   return {
     enquiryId: enquiry.enquiryId || enquiry.id,
     providerId: provider.providerId || provider.id,
@@ -885,6 +936,11 @@ function distributionData(enquiry, provider) {
     city: enquiry.city,
     state: enquiry.state,
     pincode: enquiry.pincode,
+    leadLatitude: Number.isFinite(Number(enquiry.locationLatitude)) ? Number(enquiry.locationLatitude) : null,
+    leadLongitude: Number.isFinite(Number(enquiry.locationLongitude)) ? Number(enquiry.locationLongitude) : null,
+    providerDistanceKm: distanceKm,
+    marketplacePublishedAt: publishedAt,
+    marketplaceVisibleAt: marketplaceVisibleAt(publishedAt, distanceKm),
     preferredDate: enquiry.preferredDate,
     preferredSlot: enquiry.preferredSlot,
     priority: enquiry.priority,
@@ -934,7 +990,7 @@ async function distribute(enquiryDocument, actor = "system") {
   const rawEnquiry = enquiryDocument.toObject
     ? enquiryDocument.toObject()
     : enquiryDocument;
-  const enquiry = presentEnquiry(rawEnquiry);
+  let enquiry = presentEnquiry(rawEnquiry);
   if (!enquiry.enquiryId) {
     throw validationError("Lead Reference ID is required for distribution");
   }
@@ -950,11 +1006,14 @@ async function distribute(enquiryDocument, actor = "system") {
   if (enquiry.agentReferralValidation !== "valid") {
     throw validationError("Only Valid leads can be distributed to providers");
   }
+  enquiry = await ensureEnquiryLocation(enquiry);
 
   const reference = identifierValue(enquiry.enquiryId || enquiry.id, {
     label: "Lead Reference ID",
   });
   const now = new Date();
+  const marketplacePublishedAt = enquiry.marketplacePublishedAt || enquiry.distributedAt || now;
+  enquiry = { ...enquiry, marketplacePublishedAt };
 
   await LeadDistribution.updateMany(
     { enquiryId: reference, contactUnlocked: { $ne: true } },
@@ -972,6 +1031,9 @@ async function distribute(enquiryDocument, actor = "system") {
       name: 1,
       businessName: 1,
       mobile: 1,
+      servicePincode: 1,
+      serviceLatitude: 1,
+      serviceLongitude: 1,
     })
     .lean()
     .cursor();
@@ -1008,7 +1070,7 @@ async function distribute(enquiryDocument, actor = "system") {
 
   const summary = await refreshDistributionSummary(reference);
   await Enquiry.updateOne(enquiryQuery(reference), {
-    $set: { distributedAt: now, updatedAt: new Date() },
+    $set: { distributedAt: now, marketplacePublishedAt, updatedAt: new Date() },
   });
   await providerStatusService.syncSaleConversion(reference, {
     actor,

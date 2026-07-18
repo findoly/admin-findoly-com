@@ -56,8 +56,17 @@
                       <input class="form-control" type="email" x-model="form.email" maxlength="254" />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">City</label>
-                      <input class="form-control" x-model="form.city" maxlength="100" />
+                      <label class="form-label">Service PIN code <span class="text-danger">*</span></label>
+                      <input class="form-control" x-model="form.servicePincode" @input="form.servicePincode = String(form.servicePincode || '').replace(/\D/g, '').slice(0, 6)" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6" placeholder="400001" required />
+                      <div class="form-text">This single PIN code controls nearby marketplace lead visibility.</div>
+                    </div>
+                    <div class="col-md-8">
+                      <label class="form-label">Full address <span class="text-muted">(optional)</span></label>
+                      <input class="form-control" x-model="form.serviceAddress" maxlength="500" placeholder="Business or service address" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Detected city</label>
+                      <input class="form-control" x-model="form.city" maxlength="100" readonly />
                     </div>
                     <div class="col-md-6">
                       <label class="form-label">Categories</label>
@@ -142,6 +151,8 @@
                     email: "",
                     city: "",
                     state: "",
+                    servicePincode: "",
+                    serviceAddress: "",
                     status: "active",
                     onboardingStage: "new",
                     categorySlugs: [],
@@ -189,6 +200,9 @@
                       }
                       if (!this.form.categorySlugs.length) {
                         throw new Error("Select at least one category");
+                      }
+                      if (!/^[1-9]\d{5}$/.test(String(this.form.servicePincode || ''))) {
+                        throw new Error("Provider service PIN code must contain exactly 6 digits");
                       }
                       const serviceAreas = this.areaText
                         .split(",")

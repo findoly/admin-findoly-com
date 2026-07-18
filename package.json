@@ -12,7 +12,8 @@
     "seed": "node scripts/seed.js",
     "migrate:structure": "node scripts/migrate-structure.js",
     "migrate:lead-distribution": "node scripts/migrate-structure.js",
-    "migrate:agent-payouts": "node scripts/migrate-agent-payouts.js"
+    "migrate:agent-payouts": "node scripts/migrate-agent-payouts.js",
+    "migrate:marketplace-location": "node scripts/backfill-marketplace-locations.js"
   },
   "engines": {
     "node": ">=18"

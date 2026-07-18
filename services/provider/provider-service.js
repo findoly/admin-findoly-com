@@ -15,8 +15,10 @@ const {
   stringArrayValue,
   queryTextValue,
   validationError,
+  pincodeValue,
 } = require("../../utils/validation");
 const enquiryService = require("../enquiry/enquiry-service");
+const { geocodePincode } = require("../location/geocoding-service");
 
 const PROVIDER_STATUSES = Object.freeze([
   "active",
@@ -104,6 +106,14 @@ function normalizeProviderInput(input = {}, current = {}) {
     state: textValue(input.state ?? current.state, {
       label: "Provider state",
       maxLength: 100,
+    }),
+    servicePincode: pincodeValue(input.servicePincode ?? current.servicePincode, {
+      label: "Provider service PIN code",
+      required: false,
+    }),
+    serviceAddress: textValue(input.serviceAddress ?? current.serviceAddress, {
+      label: "Provider full address",
+      maxLength: 500,
     }),
     serviceAreas: stringArrayValue(
       input.serviceAreas ?? current.serviceAreas,
@@ -297,8 +307,44 @@ async function listTransactions(providerId, filters = {}) {
   });
 }
 
+async function applyProviderLocation(data, current = {}) {
+  const pincode = String(data.servicePincode || "").trim();
+  if (!pincode) {
+    throw validationError("Provider service PIN code is required");
+  }
+  const sameLocation = pincode === String(current.servicePincode || "")
+    && Number.isFinite(Number(current.serviceLatitude))
+    && Number.isFinite(Number(current.serviceLongitude));
+  const location = sameLocation
+    ? {
+        latitude: Number(current.serviceLatitude),
+        longitude: Number(current.serviceLongitude),
+        locality: current.serviceLocality || "",
+        district: current.serviceDistrict || "",
+        city: current.city || "",
+        state: current.serviceState || current.state || "",
+        country: current.serviceCountry || "India",
+        verifiedAt: current.serviceLocationVerifiedAt || new Date(),
+        source: current.serviceLocationSource || "google_geocoding",
+      }
+    : await geocodePincode(pincode);
+  return {
+    ...data,
+    serviceLatitude: Number(location.latitude),
+    serviceLongitude: Number(location.longitude),
+    serviceLocality: location.locality || "",
+    serviceDistrict: location.district || "",
+    serviceState: location.state || "",
+    serviceCountry: location.country || "India",
+    serviceLocationVerifiedAt: location.verifiedAt || new Date(),
+    serviceLocationSource: location.source || "google_geocoding",
+    city: location.city || location.locality || data.city || "",
+    state: location.state || data.state || "",
+  };
+}
+
 async function create(input) {
-  const data = normalizeProviderInput(input);
+  const data = await applyProviderLocation(normalizeProviderInput(input));
   const provider = await Provider.create(data);
   await syncApprovedLeads(provider);
   return get(provider.providerId);
@@ -312,9 +358,8 @@ async function update(providerId, input = {}) {
   }
   assertProviderIdUnchanged(current, input);
 
-  await Provider.updateOne(query, {
-    $set: normalizeProviderInput(input, current),
-  });
+  const data = await applyProviderLocation(normalizeProviderInput(input, current), current);
+  await Provider.updateOne(query, { $set: data });
   const provider = await Provider.findOne(query);
   await syncApprovedLeads(provider);
   return get(providerId);
