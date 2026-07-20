@@ -38,11 +38,14 @@ COMMUNICATION_EVENT_API_TOKEN=<same-generated-secret>
 PROVIDER_OUTCOME_REMINDER_DAYS=7
 ```
 
-The provider browser never calls CRM directly. Its backend calls:
+The provider browser never calls CRM directly. Its backend calls these authenticated server-to-server endpoints:
 
 ```text
+POST https://admin.findoly.com/api/communication/events/provider_lead_unlocked
 POST https://admin.findoly.com/api/communication/events/provider_feedback_updated
 ```
+
+The CRM resolves the provider email from its own provider record. The provider portal does not choose or submit the email recipient.
 
 ## 3. Nearby marketplace location
 
@@ -73,21 +76,15 @@ Every unlocked lead requires Confirmed or Not Confirmed. The activity status is 
 
 ## 6. Communication rules
 
-CRM creates events including:
+Automatic routing is now fixed as follows:
 
-- `provider_confirmed`
-- `provider_not_confirmed`
-- `provider_contacted`
-- `provider_valid`
-- `provider_follow_up`
-- `provider_on_hold`
-- `provider_rejected`
-- `provider_invalid`
-- `provider_not_interested`
-- `provider_other`
-- `sale_conversion_updated`
+- Every CRM or provider event emitted through the Communication Center is sent to the configured internal Slack channel.
+- A provider receives email only after successfully unlocking a lead or successfully saving a lead status/outcome update.
+- Slack and email are attempted independently. A delivery failure does not roll back the lead action.
+- WhatsApp is not called by this integration. Existing WhatsApp code remains unchanged.
+- Communication records retain independent sent/failed status and idempotency keys for safe retries.
 
-Enable the required Communication Center rules and configure Slack, WhatsApp, or email delivery.
+CRM also keeps its optional Communication Center rules for any additional customized notifications.
 
 ## 7. Provider review
 
@@ -108,4 +105,4 @@ CRM users review outcomes from the lead provider journey. Warnings, suspension, 
 7. Unlock it in provider portal.
 8. Save Confirmed and verify CRM changes to Sale Converted.
 9. Change to Not Confirmed and verify CRM returns to Distributed.
-10. Confirm Communication Center logs/events are created for enabled rules.
+10. Confirm the Slack event and provider email appear in Communication Center logs; optional customized rules may create additional messages.

@@ -1,6 +1,7 @@
 const CommunicationRule = require("../../models/CommunicationRule");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("./communication-service");
+const systemEventService = require("./system-event-service");
 const { renderText } = require("./template-renderer");
 
 const DEFAULT_RULES = Object.freeze([
@@ -171,13 +172,19 @@ const sendRule = async function (rule, context, actor) {
 };
 
 const trigger = async function (event, context, actor) {
+  const source = context || {};
   const events = [event];
   if (event !== "lead_status_changed" && event.startsWith("lead_")) events.push("lead_status_changed");
   const rules = await CommunicationRule.find({ event: { $in: events }, enabled: true }).lean();
   const output = [];
+
+  if (source.skipSystemDispatch !== true) {
+    output.push(...(await systemEventService.dispatch(event, source, actor || "system")));
+  }
+
   for (const rule of rules) {
     try {
-      output.push(...(await sendRule(rule, context || {}, actor || "system")));
+      output.push(...(await sendRule(rule, source, actor || "system")));
     } catch (error) {
       console.error(`Communication rule ${rule.ruleId} failed:`, error.message);
     }

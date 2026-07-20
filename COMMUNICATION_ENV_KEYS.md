@@ -16,6 +16,12 @@ SLACK_DEFAULT_CHANNEL_ID=C0123456789
 SLACK_DEFAULT_CHANNEL_NAME=internal-team
 SLACK_CHANNEL_CACHE_SECONDS=300
 
+# Automatic Findoly event routing
+# Slack receives every event emitted through the CRM Communication Center.
+SYSTEM_EVENT_SLACK_ENABLED=true
+# Provider email is sent only after a lead unlock or provider status/outcome update.
+PROVIDER_EVENT_EMAIL_ENABLED=true
+
 META_WHATSAPP_API_VERSION=v25.0
 META_WHATSAPP_ACCESS_TOKEN=replace-with-meta-access-token
 META_WHATSAPP_PHONE_NUMBER_ID=replace-with-phone-number-id
@@ -26,7 +32,7 @@ WHATSAPP_DEFAULT_COUNTRY_CODE=91
 
 AWS_REGION=ap-south-1
 SES_FROM_EMAIL=verified-sender@example.com
-SES_FROM_NAME=VetsKart
+SES_FROM_NAME=Findoly
 
 OTP_SECRET=replace-with-at-least-32-random-characters
 OTP_EXPIRY_MINUTES=5

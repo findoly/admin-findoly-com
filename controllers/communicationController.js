@@ -8,6 +8,7 @@ const templateService = require("../services/communication/template-service");
 const ruleService = require("../services/communication/rule-service");
 const otpService = require("../services/communication/otp-service");
 const notificationService = require("../services/communication/notification-service");
+const systemEventService = require("../services/communication/system-event-service");
 const webhookService = require("../services/communication/webhook-service");
 const whatsappService = require("../services/communication/whatsapp-service");
 const slackService = require("../services/communication/slack-service");
@@ -301,6 +302,16 @@ const integrationEvent = async function (req, res, next) {
       context.lead = lead;
     }
 
+    const channelDeliveries = await systemEventService.dispatch(
+      req.params.event,
+      {
+        ...context,
+        source: "provider-portal",
+        trigger: req.params.event,
+      },
+      "integration-api",
+    );
+
     const notificationEvents = [];
     if (isProviderFeedbackEvent) {
       if (context.outcome === "confirmed") notificationEvents.push("provider_confirmed");
@@ -321,6 +332,7 @@ const integrationEvent = async function (req, res, next) {
               ? eventName.replace(/^provider_/, "")
               : context.status,
             trigger: eventName,
+            skipSystemDispatch: true,
           },
           "integration-api",
         )),
@@ -329,6 +341,7 @@ const integrationEvent = async function (req, res, next) {
     res.json({
       success: true,
       data: {
+        channelDeliveries,
         notification,
         notificationEvents,
         providerStatusUpdate,

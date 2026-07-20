@@ -278,20 +278,18 @@ POST /api/communication/events/:event
 
 `/api/communication/events/:event` is intended for the provider or agent portal. Protect it with `COMMUNICATION_EVENT_API_TOKEN` and send the token in either `x-communication-token` or `Authorization: Bearer <token>`.
 
-### Provider lead-status integration
+### Provider communication integration
 
-After an unlocked provider changes a lead status, the provider portal should call one of these event names:
+The provider backend sends two primary server-to-server events:
 
 ```text
-provider_confirmed
-provider_on_hold
-provider_rejected
-provider_invalid
-provider_not_interested
-provider_contacted
+provider_lead_unlocked
+provider_feedback_updated
 ```
 
-The generic event names `provider_status` and `provider_status_updated` are also supported when the request contains a valid `status` value.
+`provider_lead_unlocked` is emitted only after a credit or direct-payment unlock commits successfully. `provider_feedback_updated` is emitted after a provider saves the mandatory Confirmed/Not Confirmed outcome and any optional activity status.
+
+Named status events such as `provider_confirmed`, `provider_rejected`, and `provider_contacted`, plus the generic `provider_status` and `provider_status_updated` names, remain supported for compatible integrations.
 
 Identify the unlocked provider record using either `leadDistributionId`, or the combination of `enquiryId` and `providerId`:
 
@@ -356,7 +354,7 @@ The Lambda request receives the channel, recipient, template, variables, rendere
 
 1. Create or open the Slack app and add the bot scopes `chat:write`, `channels:read`, and `groups:read`. Add `chat:write.public` only when the bot must post to public channels without being invited.
 2. Install or reinstall the app to the workspace and copy the **Bot User OAuth Token** beginning with `xoxb-`.
-3. Set `SLACK_BOT_TOKEN`. Optionally set `SLACK_DEFAULT_CHANNEL_ID`, `SLACK_DEFAULT_CHANNEL_NAME`, and `SLACK_CHANNEL_CACHE_SECONDS`.
+3. Set `SLACK_BOT_TOKEN`, `SLACK_DEFAULT_CHANNEL_ID`, and `SLACK_DEFAULT_CHANNEL_NAME`. The default channel receives every automatic CRM/provider event. `SLACK_CHANNEL_CACHE_SECONDS` remains optional.
 4. Invite the Slack app to every private channel that should appear in the CRM channel selector.
 5. Use **Sync channels** on `/communications` or `/communications/rules`, then select the required channel and send or save the rule.
 
@@ -386,6 +384,7 @@ The provider portal and CRM use the same MongoDB database and compatible `enquir
 Provider browsers call only the provider portal host. The provider backend notifies CRM through:
 
 ```text
+POST /api/communication/events/provider_lead_unlocked
 POST /api/communication/events/provider_feedback_updated
 ```
 
@@ -403,7 +402,14 @@ COMMUNICATION_EVENT_API_TOKEN=<same-shared-random-secret>
 
 Provider sale outcome is mandatory (`confirmed` or `not_confirmed`). Activity status remains optional. Any current provider confirmation changes a Distributed lead to Sale Converted. When no provider remains confirmed, the lead returns to Distributed.
 
-Provider outcome updates create Communication Center events such as `provider_confirmed`, `provider_not_confirmed`, `provider_follow_up`, `provider_rejected`, and `provider_invalid`. Enable and configure the corresponding communication rules when Slack, WhatsApp, or email alerts are required.
+Automatic communication routing is applied before optional customized rules:
+
+- every CRM and provider event emitted through the Communication Center is posted to the configured internal Slack channel;
+- the provider receives an email only for a successful lead unlock or successful status/outcome update;
+- Slack and email failures are logged independently and never roll back a successful lead action;
+- this integration does not call WhatsApp.
+
+Provider outcome updates still create rule-compatible events such as `provider_confirmed`, `provider_not_confirmed`, `provider_follow_up`, `provider_rejected`, and `provider_invalid` for any additional customized notifications.
 
 CRM users can review an unlocked provider outcome from the lead's provider journey. Verification results are manual: Pending review, Under review, Verified, Unable to verify, or Incorrect status. A warning, temporary suspension, or permanent block can be applied only after the outcome is marked Incorrect status and a review note is recorded.
 

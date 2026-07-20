@@ -17,7 +17,7 @@ const fromAddress = function () {
     label: "SES sender email",
     required: true,
   });
-  const name = textValue(process.env.SES_FROM_NAME || process.env.APP_NAME || "VetsKart", {
+  const name = textValue(process.env.SES_FROM_NAME || process.env.APP_NAME || "Findoly", {
     label: "SES sender name",
     maxLength: 120,
   });

@@ -52,7 +52,7 @@ const configurationStatus = function () {
           process.env.AWS_WEB_IDENTITY_TOKEN_FILE,
       ),
       fromEmail: Boolean(process.env.SES_FROM_EMAIL),
-      fromName: process.env.SES_FROM_NAME || process.env.APP_NAME || "VetsKart",
+      fromName: process.env.SES_FROM_NAME || process.env.APP_NAME || "Findoly",
       configurationSet: process.env.SES_CONFIGURATION_SET || "",
     },
     slack: {
@@ -63,6 +63,15 @@ const configurationStatus = function () {
       available: mode === "lambda"
         ? Boolean(process.env.MESSAGE_LAMBDA_URL)
         : Boolean(process.env.SLACK_BOT_TOKEN),
+    },
+    systemRouting: {
+      slackAllEvents: process.env.SYSTEM_EVENT_SLACK_ENABLED === undefined
+        ? true
+        : truthy(process.env.SYSTEM_EVENT_SLACK_ENABLED),
+      providerUnlockAndStatusEmail: process.env.PROVIDER_EVENT_EMAIL_ENABLED === undefined
+        ? true
+        : truthy(process.env.PROVIDER_EVENT_EMAIL_ENABLED),
+      whatsappIntegrated: false,
     },
     lambda: {
       url: Boolean(process.env.MESSAGE_LAMBDA_URL),
