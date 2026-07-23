@@ -55,7 +55,9 @@ const enquirySchema = new mongoose.Schema(
     metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     timeline: { type: [mongoose.Schema.Types.Mixed], default: [] },
     distributionCount: { type: Number, default: 0 },
-    unlockedCount: { type: Number, default: 0 },
+    unlockedCount: { type: Number, default: 0, min: 0 },
+    pendingUnlockCount: { type: Number, default: 0, min: 0 },
+    maxProviderUnlocks: { type: Number, default: 5, min: 1, max: 1000 },
     distributedAt: { type: Date, default: null },
     providerConfirmedCount: { type: Number, default: 0, min: 0 },
     providerSaleConversionStatus: {
@@ -108,6 +110,7 @@ const enquirySchema = new mongoose.Schema(
 );
 
 enquirySchema.index({ status: 1, categorySlug: 1, createdAt: -1 });
+enquirySchema.index({ status: 1, categorySlug: 1, marketplacePublishedAt: -1 });
 enquirySchema.index({ agentId: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ referralId: 1, createdAt: -1 });
 enquirySchema.index({ agentId: 1, agentReferralValidation: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, createdAt: 1 });

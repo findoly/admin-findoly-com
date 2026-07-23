@@ -13,6 +13,7 @@ router.post("/communications/otp/send", communicationController.sendOtp);
 router.post("/communications/otp/verify", communicationController.verifyOtp);
 router.post("/communication/events/:event", communicationController.integrationEvent);
 router.post("/communications/events/:event", communicationController.integrationEvent);
+router.use("/customer-portal", require("./customer-portal"));
 router.use(apiAuth);
 router.use("/dashboard", require("./dashboard"));
 router.use("/employee", require("./employee"));

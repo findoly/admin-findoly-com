@@ -74,6 +74,7 @@ const leadDistributionSchema = new mongoose.Schema(
     effectiveLeadCostCredits: { type: Number, min: 0, default: undefined },
     unlockDiscountPercent: { type: Number, min: 0, max: 100, default: 0 },
     unlockCountAtPurchase: { type: Number, min: 0, default: 0 },
+    maxProviderUnlocks: { type: Number, min: 1, max: 1000, default: 5 },
   },
   {
     collection: "leaddistributions",

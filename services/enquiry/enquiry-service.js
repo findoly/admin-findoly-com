@@ -1,5 +1,4 @@
 const Enquiry = require("../../models/Enquiry");
-const Provider = require("../../models/Provider");
 const LeadDistribution = require("../../models/LeadDistribution");
 const notificationService = require("../communication/notification-service");
 const uuid = require("../../utils/uuid");
@@ -43,6 +42,13 @@ function text(value, fallback = "") {
   return String(value ?? fallback).trim();
 }
 
+function hasNumericValue(value) {
+  return value !== null
+    && value !== undefined
+    && String(value).trim() !== ""
+    && Number.isFinite(Number(value));
+}
+
 function normalizeMetadata(input, current = {}) {
   if (input === undefined) return current || {};
   const metadata = plainObjectValue(input, {
@@ -69,6 +75,10 @@ function normalizeInput(input = {}, current = {}) {
   const mobile = validateMobile(input.mobile ?? current.mobile ?? "", {
     label: "Customer mobile number",
   });
+  const committedUnlocks = Math.max(
+    1,
+    Number(current.unlockedCount || 0) + Number(current.pendingUnlockCount || 0),
+  );
 
   return {
     name: textValue(input.name ?? current.name, {
@@ -139,6 +149,13 @@ function normalizeInput(input = {}, current = {}) {
       max: 1_000_000_000,
       integer: true,
     }),
+    maxProviderUnlocks: numberValue(input.maxProviderUnlocks, {
+      label: "Maximum provider unlocks",
+      fallback: current.maxProviderUnlocks ?? 5,
+      min: committedUnlocks,
+      max: 1000,
+      integer: true,
+    }),
     currency: "INR",
     sourceWebsite: textValue(input.sourceWebsite ?? current.sourceWebsite, {
       label: "Source website",
@@ -201,8 +218,8 @@ function presentEnquiry(row = {}) {
     city: row.city || address.city || "",
     state: row.state || address.state || "",
     pincode: row.pincode || address.pincode || "",
-    locationLatitude: Number.isFinite(Number(row.locationLatitude)) ? Number(row.locationLatitude) : null,
-    locationLongitude: Number.isFinite(Number(row.locationLongitude)) ? Number(row.locationLongitude) : null,
+    locationLatitude: hasNumericValue(row.locationLatitude) ? Number(row.locationLatitude) : null,
+    locationLongitude: hasNumericValue(row.locationLongitude) ? Number(row.locationLongitude) : null,
     locationPincode: row.locationPincode || "",
     locationLocality: row.locationLocality || "",
     locationDistrict: row.locationDistrict || "",
@@ -225,6 +242,9 @@ function presentEnquiry(row = {}) {
     agentReferralValidation: row.agentReferralValidation || "pending",
     leadValidationMethod: row.leadValidationMethod || "",
     agentSaleConversion: row.agentSaleConversion || "pending",
+    unlockedCount: Number(row.unlockedCount || 0),
+    pendingUnlockCount: Number(row.pendingUnlockCount || 0),
+    maxProviderUnlocks: Number.isInteger(Number(row.maxProviderUnlocks)) && Number(row.maxProviderUnlocks) > 0 ? Number(row.maxProviderUnlocks) : 5,
     providerConfirmedCount: Number(row.providerConfirmedCount || 0),
     providerSaleConversionStatus: row.providerSaleConversionStatus || (canonicalLeadStatus(row.status) === PROVIDER_CONTROLLED_STATUS ? "converted" : "pending"),
     partnerEligibilityDate: row.partnerEligibilityDate || (row.agentId && row.createdAt ? new Date(new Date(row.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000) : null),
@@ -423,7 +443,7 @@ async function create(input = {}, actor = "admin") {
   ];
 
   const enquiry = await Enquiry.create(data);
-  if (["approved", "distributed"].includes(enquiry.status)) {
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(enquiry.status))) {
     await distribute(enquiry, actor);
   }
 
@@ -616,6 +636,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "deactivationReason",
     "distributionCount",
     "unlockedCount",
+    "pendingUnlockCount",
     "distributedAt",
     "marketplacePublishedAt",
     "locationLatitude",
@@ -652,7 +673,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
 
   if (
     updated.isActive !== false &&
-    ["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(updated.status))
+    ["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(updated.status))
   ) {
     await distribute(updated, actor);
   } else if (updated.isActive !== false) {
@@ -751,7 +772,7 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
 
   const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
   const distributionEnquiryId = existing.enquiryId || existing.id || enquiryId;
-  if (["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(transition.toStatus)) {
+  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(transition.toStatus)) {
     await distribute(updated, actor);
   } else {
     await LeadDistribution.updateMany(
@@ -873,7 +894,7 @@ async function setActiveState(
     );
     await refreshDistributionSummary(reference);
   } else if (
-    ["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(existing.status))
+    ["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(existing.status))
   ) {
     const updated = await Enquiry.findOne(enquiryQuery(enquiryId));
     await distribute(updated, actor);
@@ -888,8 +909,8 @@ async function ensureEnquiryLocation(enquiry) {
     throw validationError("A valid 6-digit lead PIN code is required before marketplace distribution");
   }
   const alreadyVerified = pincode === String(enquiry.locationPincode || "")
-    && Number.isFinite(Number(enquiry.locationLatitude))
-    && Number.isFinite(Number(enquiry.locationLongitude));
+    && hasNumericValue(enquiry.locationLatitude)
+    && hasNumericValue(enquiry.locationLongitude);
   if (alreadyVerified) return enquiry;
 
   const location = await geocodePincode(pincode);
@@ -936,8 +957,8 @@ function distributionData(enquiry, provider) {
     city: enquiry.city,
     state: enquiry.state,
     pincode: enquiry.pincode,
-    leadLatitude: Number.isFinite(Number(enquiry.locationLatitude)) ? Number(enquiry.locationLatitude) : null,
-    leadLongitude: Number.isFinite(Number(enquiry.locationLongitude)) ? Number(enquiry.locationLongitude) : null,
+    leadLatitude: hasNumericValue(enquiry.locationLatitude) ? Number(enquiry.locationLatitude) : null,
+    leadLongitude: hasNumericValue(enquiry.locationLongitude) ? Number(enquiry.locationLongitude) : null,
     providerDistanceKm: distanceKm,
     marketplacePublishedAt: publishedAt,
     marketplaceVisibleAt: marketplaceVisibleAt(publishedAt, distanceKm),
@@ -992,19 +1013,19 @@ async function distribute(enquiryDocument, actor = "system") {
     : enquiryDocument;
   let enquiry = presentEnquiry(rawEnquiry);
   if (!enquiry.enquiryId) {
-    throw validationError("Lead Reference ID is required for distribution");
+    throw validationError("Lead Reference ID is required for marketplace publishing");
   }
-  if (!["approved", "distributed", PROVIDER_CONTROLLED_STATUS].includes(enquiry.journeyStatus)) {
-    throw validationError("Approve the lead before distributing it");
+  if (!["distributed", PROVIDER_CONTROLLED_STATUS].includes(enquiry.journeyStatus)) {
+    throw validationError("Move the lead to Distributed before publishing it to the marketplace");
   }
   if (enquiry.isActive === false) {
     throw Object.assign(
-      new Error("Reactivate the lead before distributing it"),
+      new Error("Reactivate the lead before publishing it to the marketplace"),
       { status: 409 },
     );
   }
   if (enquiry.agentReferralValidation !== "valid") {
-    throw validationError("Only Valid leads can be distributed to providers");
+    throw validationError("Only Valid leads can be published to providers");
   }
   enquiry = await ensureEnquiryLocation(enquiry);
 
@@ -1013,70 +1034,60 @@ async function distribute(enquiryDocument, actor = "system") {
   });
   const now = new Date();
   const marketplacePublishedAt = enquiry.marketplacePublishedAt || enquiry.distributedAt || now;
-  enquiry = { ...enquiry, marketplacePublishedAt };
+  const maxUnlocks = numberValue(enquiry.maxProviderUnlocks, {
+    label: "Maximum provider unlocks",
+    fallback: 5,
+    min: 1,
+    max: 1000,
+    integer: true,
+  });
 
+  // Provider-specific rows are no longer required for marketplace visibility.
+  // Keep unlocked rows for customer access and audit history; retire old locked offers.
   await LeadDistribution.updateMany(
-    { enquiryId: reference, contactUnlocked: { $ne: true } },
+    {
+      enquiryId: reference,
+      contactUnlocked: { $ne: true },
+      $or: [
+        { directPaymentPendingOrderId: "" },
+        { directPaymentPendingOrderId: { $exists: false } },
+        { directPaymentPendingUntil: null },
+        { directPaymentPendingUntil: { $lte: now } },
+      ],
+    },
     { $set: { status: "withdrawn", updatedAt: now } },
   );
 
-  const providers = Provider.find({
-    status: "active",
-    portalAccessEnabled: { $ne: false },
-    categorySlugs: enquiry.categorySlug,
-  })
-    .select({
-      providerId: 1,
-      id: 1,
-      name: 1,
-      businessName: 1,
-      mobile: 1,
-      servicePincode: 1,
-      serviceLatitude: 1,
-      serviceLongitude: 1,
-    })
-    .lean()
-    .cursor();
+  const pendingUnlockCount = await LeadDistribution.countDocuments({
+    enquiryId: reference,
+    contactUnlocked: { $ne: true },
+    directPaymentPendingOrderId: { $nin: ["", null] },
+    directPaymentPendingUntil: { $gt: now },
+  });
 
-  for await (const provider of providers) {
-    const providerId = provider.providerId || provider.id;
-    if (!providerId) continue;
-    const data = distributionData(enquiry, provider);
-    const result = await LeadDistribution.updateOne(
-      {
-        enquiryId: reference,
-        providerId,
-        contactUnlocked: { $ne: true },
-      },
-      { $set: { ...data, status: "offered" } },
-    );
-
-    if (!result.matchedCount) {
-      try {
-        await LeadDistribution.create({
-          ...data,
-          leadDistributionId: uuid(),
-          status: "offered",
-          contactUnlocked: false,
-          distributedBy: actor,
-          distributedAt: now,
-        });
-      } catch (error) {
-        // A unique conflict means an already-unlocked record exists. It must remain untouched.
-        if (error?.code !== 11000) throw error;
-      }
-    }
-  }
+  await Enquiry.updateOne(enquiryQuery(reference), {
+    $set: {
+      distributedAt: enquiry.distributedAt || now,
+      marketplacePublishedAt,
+      maxProviderUnlocks: maxUnlocks,
+      pendingUnlockCount,
+      updatedAt: now,
+    },
+  });
 
   const summary = await refreshDistributionSummary(reference);
-  await Enquiry.updateOne(enquiryQuery(reference), {
-    $set: { distributedAt: now, marketplacePublishedAt, updatedAt: new Date() },
-  });
   await providerStatusService.syncSaleConversion(reference, {
     actor,
     notify: false,
   });
-  return summary;
+
+  return {
+    ...summary,
+    marketplacePublished: true,
+    marketplacePublishedAt,
+    maxProviderUnlocks: maxUnlocks,
+    remainingUnlocks: Math.max(0, maxUnlocks - Number(summary.unlockedCount || 0)),
+  };
 }
 
 async function listProviderStatuses(enquiryId, filters = {}) {

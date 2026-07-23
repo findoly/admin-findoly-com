@@ -1,17 +1,22 @@
 const RADIUS_STAGES = Object.freeze([
-  { maxDistanceKm: 5, delayMinutes: 0, label: "Nearby" },
-  { maxDistanceKm: 10, delayMinutes: 5, label: "Local" },
-  { maxDistanceKm: 25, delayMinutes: 15, label: "Local area" },
-  { maxDistanceKm: 50, delayMinutes: 30, label: "Extended area" },
-  { maxDistanceKm: 100, delayMinutes: 60, label: "Regional" },
-  { maxDistanceKm: 200, delayMinutes: 120, label: "Wide regional" },
-  { maxDistanceKm: 400, delayMinutes: 240, label: "Long distance" },
-  { maxDistanceKm: Number.POSITIVE_INFINITY, delayMinutes: 480, label: "Open network" },
+  { maxDistanceKm: 20, delayMinutes: 0, label: "Nearby" },
+  { maxDistanceKm: 50, delayMinutes: 10, label: "Local area" },
+  { maxDistanceKm: 100, delayMinutes: 30, label: "Regional" },
+  { maxDistanceKm: Number.POSITIVE_INFINITY, delayMinutes: 60, label: "Open network" },
 ]);
 
+const MARKETPLACE_MAX_AGE_MONTHS = 6;
+
 function numericCoordinate(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function numericDistance(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
 function haversineDistanceKm(lat1, lon1, lat2, lon2) {
@@ -29,22 +34,52 @@ function haversineDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 function stageForDistance(distanceKm) {
-  const distance = Number(distanceKm);
-  if (!Number.isFinite(distance) || distance < 0) return null;
+  const distance = numericDistance(distanceKm);
+  if (distance === null) return null;
   return RADIUS_STAGES.find((stage) => distance <= stage.maxDistanceKm)
     || RADIUS_STAGES[RADIUS_STAGES.length - 1];
 }
 
 function marketplaceVisibleAt(publishedAt, distanceKm) {
   const published = new Date(publishedAt || Date.now());
-  const stage = stageForDistance(distanceKm);
-  if (Number.isNaN(published.getTime()) || !stage) return null;
+  // When a provider location is unavailable, the lead becomes eligible only
+  // after the unrestricted 60-minute marketplace stage.
+  const stage = stageForDistance(distanceKm) || RADIUS_STAGES[RADIUS_STAGES.length - 1];
+  if (Number.isNaN(published.getTime())) return null;
   return new Date(published.getTime() + stage.delayMinutes * 60 * 1000);
+}
+
+function marketplaceAgeCutoff(now = new Date()) {
+  const cutoff = new Date(now);
+  if (Number.isNaN(cutoff.getTime())) return null;
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - MARKETPLACE_MAX_AGE_MONTHS);
+  return cutoff;
+}
+
+function isMarketplaceWithinAge(publishedAt, now = new Date()) {
+  const published = new Date(publishedAt || "");
+  const current = new Date(now);
+  const cutoff = marketplaceAgeCutoff(current);
+  return Boolean(
+    cutoff
+    && !Number.isNaN(published.getTime())
+    && !Number.isNaN(current.getTime())
+    && published <= current
+    && published >= cutoff,
+  );
 }
 
 function isMarketplaceVisible(record = {}, now = new Date()) {
   if (record.contactUnlocked === true || record.status === "unlocked") return true;
-  const visibleAt = record.marketplaceVisibleAt ? new Date(record.marketplaceVisibleAt) : null;
+  const publishedAt = record.marketplacePublishedAt || record.distributedAt;
+  if (!isMarketplaceWithinAge(publishedAt, now)) return false;
+  const calculatedVisibleAt = marketplaceVisibleAt(
+    publishedAt,
+    record.providerDistanceKm,
+  );
+  const visibleAt = record.marketplaceVisibleAt
+    ? new Date(record.marketplaceVisibleAt)
+    : calculatedVisibleAt;
   const current = new Date(now);
   return Boolean(
     visibleAt
@@ -55,9 +90,12 @@ function isMarketplaceVisible(record = {}, now = new Date()) {
 }
 
 module.exports = {
+  MARKETPLACE_MAX_AGE_MONTHS,
   RADIUS_STAGES,
   haversineDistanceKm,
   isMarketplaceVisible,
+  isMarketplaceWithinAge,
+  marketplaceAgeCutoff,
   marketplaceVisibleAt,
   stageForDistance,
 };

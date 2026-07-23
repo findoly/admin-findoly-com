@@ -105,9 +105,9 @@ async function distribute(req, res, next) {
         { status: 409 },
       );
     }
-    if (!["approved", "distributed", "sale_converted"].includes(lead.journeyStatus)) {
+    if (!["distributed", "sale_converted"].includes(lead.journeyStatus)) {
       throw Object.assign(
-        new Error("Approve the lead before synchronizing providers"),
+        new Error("Move the lead to Distributed before publishing it to the marketplace"),
         { status: 400 },
       );
     }
