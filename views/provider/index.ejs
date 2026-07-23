@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Provider network</div>
                 <h1 class="page-title mb-1">Providers</h1>
-                <p class="crm-page-subtitle mb-0">Manage provider eligibility, categories and wallet visibility.</p>
+                <p class="crm-page-subtitle mb-0">Manage provider eligibility, categories and credit visibility.</p>
               </div>
               <a href="/providers/new" class="btn btn-primary crm-primary-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New provider</a>
             </div>
@@ -45,7 +45,7 @@
 
                 <div class="table-responsive">
                   <table class="table crm-table mb-0">
-                    <thead><tr><th>Provider</th><th>Contact</th><th>Categories & area</th><th>Access</th><th class="text-end">Wallet</th><th aria-label="Actions"></th></tr></thead>
+                    <thead><tr><th>Provider</th><th>Contact</th><th>Categories & area</th><th>Access</th><th class="text-end">Credits</th><th aria-label="Actions"></th></tr></thead>
                     <tbody>
                       <template x-if="loading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                       <template x-for="provider in rows" :key="recordId(provider, 'providerId')">
@@ -56,7 +56,7 @@
                           <td><div class="fw-semibold" x-text="provider.mobile ? '+91 ' + provider.mobile : '—'"></div><div class="text-muted fs-sm" x-text="provider.email || 'No email'"></div></td>
                           <td><div class="crm-category-tags"><template x-for="category in (provider.categorySlugs || []).slice(0, 3)" :key="category"><span x-text="humanize(category)"></span></template><span x-show="!(provider.categorySlugs || []).length">No category</span></div><div class="text-muted fs-sm mt-1" x-text="[provider.city, provider.state].filter(Boolean).join(', ') || 'No service city'"></div></td>
                           <td><span class="crm-status" :class="statusClass(provider.status)" x-text="humanize(provider.status)"></span><div class="crm-access-line" :class="provider.portalAccessEnabled === false ? 'is-off' : 'is-on'"><span></span><b x-text="provider.portalAccessEnabled === false ? 'Portal disabled' : 'Portal enabled'"></b></div></td>
-                          <td class="text-end"><div class="fw-semibold" x-text="money(provider.walletBalancePaise)"></div><div class="text-muted fs-sm">INR balance</div></td>
+                          <td class="text-end"><div class="fw-semibold" x-text="credits(provider.walletBalancePaise)"></div><div class="text-muted fs-sm">Available balance</div></td>
                           <td class="text-end crm-nowrap"><a class="crm-row-action" :href="'/providers/' + recordId(provider, 'providerId')">View</a><a class="crm-row-action crm-row-action-muted" :href="'/providers/' + recordId(provider, 'providerId') + '/edit'">Edit</a></td>
                         </tr>
                       </template>

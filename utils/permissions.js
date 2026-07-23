@@ -21,6 +21,7 @@ const PERMISSION_GROUPS = Object.freeze([
       { key: "providers.view", label: "View providers" },
       { key: "providers.create", label: "Create providers" },
       { key: "providers.edit", label: "Edit and sync providers" },
+      { key: "provider_credits.add", label: "Add provider credits" },
     ],
   },
   {

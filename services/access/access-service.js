@@ -6,7 +6,7 @@ const { validateMobile } = require("../../utils/mobile");
 async function ensureDefaultRoles() {
   const roles = [];
   for (const definition of DEFAULT_ROLES) {
-    const role = await Role.findOneAndUpdate(
+    let role = await Role.findOneAndUpdate(
       { slug: definition.slug },
       {
         $setOnInsert: {
@@ -23,6 +23,21 @@ async function ensureDefaultRoles() {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     ).lean();
+
+    if (
+      definition.slug === "admin" &&
+      !(role.permissions || []).includes("provider_credits.add")
+    ) {
+      role = await Role.findOneAndUpdate(
+        { slug: definition.slug },
+        {
+          $addToSet: { permissions: { $each: definition.permissions } },
+          $set: { updatedBy: "system-permission-sync" },
+        },
+        { new: true },
+      ).lean();
+    }
+
     roles.push(role);
   }
   return roles;

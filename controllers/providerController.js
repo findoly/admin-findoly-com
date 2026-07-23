@@ -1,4 +1,5 @@
 const service = require("../services/provider/provider-service");
+const creditService = require("../services/provider/provider-credit-service");
 
 async function list(req, res, next) {
   try {
@@ -99,4 +100,23 @@ module.exports = {
   update,
   sync,
   reviewOutcome,
+};
+
+module.exports.addCredits = async function addCredits(req, res, next) {
+  try {
+    const data = await creditService.addCredits(
+      req.params.providerId,
+      req.body,
+      req.admin,
+    );
+    return res.status(data.duplicate ? 200 : 201).json({
+      success: true,
+      message: data.duplicate
+        ? "This credit request was already processed"
+        : "Credits added successfully",
+      data,
+    });
+  } catch (error) {
+    return next(error);
+  }
 };

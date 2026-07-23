@@ -47,6 +47,7 @@ function normalizePermissions(value, current = []) {
     "requirements.manage": ["requirements.view"],
     "providers.create": ["providers.view", "categories.view"],
     "providers.edit": ["providers.view", "categories.view"],
+    "provider_credits.add": ["providers.view"],
     "agents.create": ["agents.view", "categories.view"],
     "agents.edit": ["agents.view", "categories.view"],
     "partnerPayouts.manage": ["partnerPayouts.view"],

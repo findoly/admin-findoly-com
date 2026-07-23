@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Provider network</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Review provider eligibility, offers and wallet activity.</p>
+                <p class="crm-page-subtitle mb-0">Review provider eligibility, offers and credit activity.</p>
               </div>
               <a href="/providers" class="btn btn-light crm-primary-action"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to providers</a>
             </div>
@@ -23,9 +23,10 @@
             <div x-data="providerShow()" x-init="load()">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
-              <div class="d-flex gap-2 mb-3">
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/providers/'+recordId+'/edit'">Edit</a>
                 <button class="btn btn-primary" @click="sync()" :disabled="syncing" x-text="syncing ? 'Synchronizing…' : 'Sync approved leads'"></button>
+                <button class="btn btn-primary" type="button" x-show="can('provider_credits.add')" x-cloak @click="openCreditModal()">Add credits</button>
               </div>
               <div class="row g-3">
                 <div class="col-xl-4">
@@ -40,7 +41,7 @@
                         <dt class="col-5">Portal access</dt><dd class="col-7" x-text="provider.portalAccessEnabled === false ? 'Restricted' : 'Enabled'"></dd>
                         <dt class="col-5">Outcome warnings</dt><dd class="col-7" x-text="provider.outcomeWarningCount || 0"></dd>
                         <dt class="col-5" x-show="provider.platformRestrictionReason">Restriction reason</dt><dd class="col-7" x-show="provider.platformRestrictionReason" x-text="provider.platformRestrictionReason"></dd>
-                        <dt class="col-5">Wallet</dt><dd class="col-7 fw-semibold" x-text="money(provider.walletBalancePaise)"></dd>
+                        <dt class="col-5">Credit balance</dt><dd class="col-7 fw-semibold" x-text="credits(provider.walletBalancePaise)"></dd>
                         <dt class="col-5">Categories</dt><dd class="col-7" x-text="(provider.categorySlugs||[]).join(', ') || '—'"></dd>
                       </dl>
                     </div>
@@ -81,24 +82,30 @@
 
                   <div class="card">
                     <div class="card-header d-flex align-items-center">
-                      <div><h5 class="mb-1">Wallet transactions</h5><p class="text-muted mb-0"><span x-text="transactions.length"></span> rows on this page</p></div>
+                      <div><h5 class="mb-1">Credit transactions</h5><p class="text-muted mb-0"><span x-text="transactions.length"></span> rows on this page</p></div>
                       <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="transactionPagination.limit" @change="resetTransactions()"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
                     </div>
                     <div class="table-responsive">
                       <table class="table mb-0">
-                        <thead><tr><th>Type</th><th>Amount</th><th>Balance</th><th>Source</th><th>Date</th></tr></thead>
+                        <thead><tr><th>Type</th><th>Details</th><th>Amount</th><th>Balance</th><th>Source</th><th>Date</th></tr></thead>
                         <tbody>
-                          <template x-if="transactionLoading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="transactionLoading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="t in transactions" :key="t.walletTransactionId">
                             <tr>
                               <td x-text="humanize(t.type)"></td>
-                              <td x-text="money(t.amountPaise)"></td>
-                              <td x-text="money(t.balanceAfterPaise)"></td>
+                              <td style="min-width:260px">
+                                <div class="fw-semibold" x-text="t.description || '—'"></div>
+                                <div class="text-muted fs-sm" x-show="t.metadata && t.metadata.internalNote" x-text="t.metadata && t.metadata.internalNote"></div>
+                                <div class="text-muted fs-sm" x-show="t.metadata && t.metadata.externalReference" x-text="'Reference: ' + t.metadata.externalReference"></div>
+                                <div class="text-muted fs-sm" x-show="t.metadata && t.metadata.addedBy && t.metadata.addedBy.name" x-text="'Added by ' + t.metadata.addedBy.name"></div>
+                              </td>
+                              <td class="fw-semibold" :class="t.type === 'credit' ? 'text-success' : 'text-danger'" x-text="transactionAmount(t)"></td>
+                              <td x-text="credits(t.balanceAfterPaise)"></td>
                               <td x-text="humanize(t.source)"></td>
                               <td x-text="formatDate(t.createdAt)"></td>
                             </tr>
                           </template>
-                          <tr x-show="!transactionLoading && !transactions.length"><td colspan="5" class="text-center text-muted py-4">No wallet transactions</td></tr>
+                          <tr x-show="!transactionLoading && !transactions.length"><td colspan="6" class="text-center text-muted py-4">No credit transactions</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -109,6 +116,61 @@
                   </div>
                 </div>
               </div>
+
+              <div x-show="creditModalOpen && can('provider_credits.add')" x-cloak @keydown.escape.window="closeCreditModal()">
+                  <div class="modal fade show" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="add-provider-credits-title" style="display:block">
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content">
+                        <form @submit.prevent="addCredits()">
+                          <div class="modal-header">
+                            <div>
+                              <h5 class="modal-title" id="add-provider-credits-title">Add provider credits</h5>
+                              <p class="text-muted fs-sm mb-0">Credits are added immediately and recorded permanently.</p>
+                            </div>
+                            <button type="button" class="btn-close" aria-label="Close" @click="closeCreditModal()" :disabled="addingCredits"></button>
+                          </div>
+                          <div class="modal-body">
+                            <div class="alert alert-light border">
+                              <div class="d-flex justify-content-between"><span>Current balance</span><strong x-text="credits(provider.walletBalancePaise)"></strong></div>
+                              <div class="d-flex justify-content-between mt-2"><span>New balance</span><strong class="text-primary" x-text="credits(creditPreviewPaise())"></strong></div>
+                            </div>
+                            <div class="mb-3">
+                              <label class="form-label" for="provider-credit-amount">Credits to add</label>
+                              <input id="provider-credit-amount" class="form-control" type="number" min="0.01" max="100000" step="0.01" x-model="creditForm.amountCredits" required>
+                            </div>
+                            <div class="mb-3">
+                              <label class="form-label" for="provider-credit-reason">Reason</label>
+                              <select id="provider-credit-reason" class="form-select" x-model="creditForm.reason" required>
+                                <option value="">Select a reason</option>
+                                <option value="invalid_lead_refund">Invalid lead refund</option>
+                                <option value="technical_issue">Technical issue</option>
+                                <option value="payment_correction">Payment correction</option>
+                                <option value="goodwill_gesture">Goodwill gesture</option>
+                                <option value="promotional_credits">Promotional credits</option>
+                                <option value="retention_support">Retention support</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </div>
+                            <div class="mb-3">
+                              <label class="form-label" for="provider-credit-note">Internal note</label>
+                              <textarea id="provider-credit-note" class="form-control" rows="3" minlength="5" maxlength="2000" x-model="creditForm.note" placeholder="Explain why these credits are being added" required></textarea>
+                              <div class="form-text">Visible only to authorised CRM employees.</div>
+                            </div>
+                            <div>
+                              <label class="form-label" for="provider-credit-reference">Reference <span class="text-muted">(optional)</span></label>
+                              <input id="provider-credit-reference" class="form-control" type="text" maxlength="160" x-model="creditForm.reference" placeholder="Lead ID, payment ID or support ticket">
+                            </div>
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-light" @click="closeCreditModal()" :disabled="addingCredits">Cancel</button>
+                            <button type="submit" class="btn btn-primary" :disabled="addingCredits" x-text="addingCredits ? 'Adding credits…' : 'Confirm and add credits'"></button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="modal-backdrop fade show" @click="closeCreditModal()"></div>
+                </div>
             </div>
             <script>
               function providerShow() {
@@ -122,6 +184,9 @@
                   offerLoading: false,
                   transactionLoading: false,
                   syncing: false,
+                  creditModalOpen: false,
+                  addingCredits: false,
+                  creditForm: { amountCredits: '', reason: '', note: '', reference: '', requestId: '' },
                   error: '',
                   success: '',
                   async load() {
@@ -166,6 +231,63 @@
                   previousOffers() { if (cursorPrevious(this.offerPagination)) this.loadOffers(); },
                   nextTransactions() { if (cursorNext(this.transactionPagination)) this.loadTransactions(); },
                   previousTransactions() { if (cursorPrevious(this.transactionPagination)) this.loadTransactions(); },
+                  newCreditRequestId() {
+                    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+                    return 'credit-' + Date.now() + '-' + Math.random().toString(36).slice(2, 12);
+                  },
+                  openCreditModal() {
+                    this.creditForm = { amountCredits: '', reason: '', note: '', reference: '', requestId: this.newCreditRequestId() };
+                    this.creditModalOpen = true;
+                  },
+                  closeCreditModal() {
+                    if (!this.addingCredits) this.creditModalOpen = false;
+                  },
+                  creditPreviewPaise() {
+                    const current = Number(this.provider.walletBalancePaise || 0);
+                    const amount = Math.max(0, Number(this.creditForm.amountCredits || 0));
+                    return current + Math.round(amount * 100);
+                  },
+                  transactionAmount(transaction) {
+                    const value = credits(transaction.amountPaise);
+                    return transaction.type === 'credit' ? '+' + value : '-' + value;
+                  },
+                  async addCredits() {
+                    this.error = '';
+                    this.success = '';
+                    const amount = Number(this.creditForm.amountCredits || 0);
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                      this.error = 'Enter a valid credit amount';
+                      return;
+                    }
+                    if (!this.creditForm.reason) {
+                      this.error = 'Select a credit reason';
+                      return;
+                    }
+                    if (String(this.creditForm.note || '').trim().length < 5) {
+                      this.error = 'Internal note must contain at least 5 characters';
+                      return;
+                    }
+                    const confirmed = window.confirm('Add ' + amount.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' credits to ' + (this.provider.name || 'this provider') + '?');
+                    if (!confirmed) return;
+                    this.addingCredits = true;
+                    try {
+                      const response = await apiFetch('/api/provider/' + this.recordId + '/credits', {
+                        method: 'POST',
+                        body: JSON.stringify(this.creditForm)
+                      });
+                      this.provider.walletBalancePaise = response.data.walletBalancePaise;
+                      resetCursorPagination(this.transactionPagination);
+                      await this.loadTransactions();
+                      this.success = response.message || 'Credits added successfully';
+                      showCrmToast(this.success, 'success');
+                      this.creditModalOpen = false;
+                    } catch (error) {
+                      this.error = error.message;
+                      showCrmToast(error.message, 'error');
+                    } finally {
+                      this.addingCredits = false;
+                    }
+                  },
                   async sync() {
                     this.syncing = true;
                     this.error = '';
