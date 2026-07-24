@@ -31,7 +31,7 @@ const communicationRuleSchema = new mongoose.Schema(
     recipientSource: {
       type: String,
       default: "customer",
-      enum: ["customer", "provider", "agent", "manual"],
+      enum: ["customer", "provider", "agent", "employee", "manual"],
     },
     description: { type: String, default: "", maxlength: 1000 },
     createdBy: { type: String, default: "" },

@@ -19,6 +19,7 @@ const {
 } = require("../../utils/validation");
 const enquiryService = require("../enquiry/enquiry-service");
 const { geocodePincode } = require("../location/geocoding-service");
+const accountRegistrationService = require("../communication/account-registration-service");
 
 const PROVIDER_STATUSES = Object.freeze([
   "active",
@@ -346,11 +347,17 @@ async function applyProviderLocation(data, current = {}) {
   };
 }
 
-async function create(input) {
+async function create(input, actor = "crm-admin") {
   const data = await applyProviderLocation(normalizeProviderInput(input));
   const provider = await Provider.create(data);
   await syncApprovedLeads(provider);
-  return get(provider.providerId);
+  const created = await get(provider.providerId);
+  await accountRegistrationService.dispatch(
+    "provider_created",
+    { provider: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
+    actor,
+  );
+  return created;
 }
 
 async function update(providerId, input = {}) {

@@ -39,4 +39,5 @@ router.use("/invoice", require("./invoice"));
 router.use("/invoices", require("./invoice"));
 router.use("/distribution", require("./distribution"));
 router.use("/distributions", require("./distribution"));
+router.use("/storage", require("./storage"));
 module.exports = router;

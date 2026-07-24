@@ -26,7 +26,7 @@ async function ensureDefaultRoles() {
 
     if (
       definition.slug === "admin" &&
-      !(role.permissions || []).includes("provider_credits.add")
+      definition.permissions.some((permission) => !(role.permissions || []).includes(permission))
     ) {
       role = await Role.findOneAndUpdate(
         { slug: definition.slug },

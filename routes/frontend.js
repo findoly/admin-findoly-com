@@ -49,6 +49,7 @@ router.get("/billing/new", ...protectedPage("billing.create"), page.invoiceCreat
 router.get("/billing/:invoiceId/edit", ...protectedPage("billing.edit"), page.invoiceEdit);
 router.get("/distributions", ...protectedPage("distributions.view"), page.distributions);
 router.get("/reports", ...protectedPage("reports.view"), page.reports);
+router.get("/storage", ...protectedPage("storage.view"), page.storage);
 router.get("/employees", ...protectedPage("employees.view"), page.employees);
 router.get("/employees/new", ...protectedPage("employees.create"), page.employeeCreate);
 router.get("/employees/:employeeId/edit", ...protectedPage("employees.edit"), page.employeeEdit);

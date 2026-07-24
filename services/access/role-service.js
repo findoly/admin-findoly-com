@@ -56,6 +56,7 @@ function normalizePermissions(value, current = []) {
     "followUps.edit": ["followUps.view"],
     "communications.send": ["communications.view"],
     "communications.manage": ["communications.view"],
+    "storage.manage": ["storage.view"],
     "billing.create": ["billing.view"],
     "billing.edit": ["billing.view"],
     "employees.create": ["employees.view"],

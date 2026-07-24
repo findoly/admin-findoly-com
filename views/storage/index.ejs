@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div>
+            <div class="crm-page-eyebrow">Administration</div>
+            <h1 class="page-title mb-1"><%= title %></h1>
+            <p class="crm-page-subtitle mb-0">Browse and upload approved website assets and private documents stored in Amazon S3.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="content" x-data="storagePage()" x-init="init()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <div x-show="configLoaded && !config.configured" x-cloak class="alert alert-warning">
+          Amazon S3 is not configured. Add <code>AWS_REGION</code> and <code>AWS_S3_BUCKET</code> to the server environment. See <code>S3_FILE_MANAGER_SETUP.md</code>.
+        </div>
+
+        <section class="card mb-3" x-show="config.configured">
+          <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+              <div>
+                <div class="text-muted fs-sm">Current folder</div>
+                <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
+                  <button type="button" class="btn btn-light btn-sm" @click="openFolder('')">Root</button>
+                  <template x-for="crumb in breadcrumbs" :key="crumb.prefix">
+                    <span class="d-flex align-items-center gap-1"><span class="text-muted">/</span><button type="button" class="btn btn-light btn-sm" @click="openFolder(crumb.prefix)" x-text="crumb.name"></button></span>
+                  </template>
+                </div>
+              </div>
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <input class="form-control" style="min-width:220px" x-model="search" placeholder="Search current folder">
+                <button type="button" class="btn btn-light" @click="load(false)" :disabled="loading">Refresh</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <% if (typeof can === 'function' && can('storage.manage')) { %>
+        <section class="row g-3 mb-3" x-show="config.configured && prefix">
+          <div class="col-lg-5">
+            <form class="card h-100" @submit.prevent="createFolder()">
+              <div class="card-header"><h5 class="mb-0">Create folder</h5></div>
+              <div class="card-body"><label class="form-label">Folder name</label><input class="form-control" x-model="folderName" maxlength="255" required placeholder="new-folder"></div>
+              <div class="card-footer"><button class="btn btn-primary" :disabled="creatingFolder"><span x-text="creatingFolder ? 'Creating…' : 'Create folder'"></span></button></div>
+            </form>
+          </div>
+          <div class="col-lg-7">
+            <form class="card h-100" @submit.prevent="upload()">
+              <div class="card-header"><h5 class="mb-0">Upload file</h5></div>
+              <div class="card-body">
+                <label class="form-label">Choose file</label>
+                <input type="file" class="form-control" x-ref="fileInput" @change="selectedFile=$event.target.files[0] || null" required>
+                <div class="form-text" x-text="'Maximum ' + config.maxUploadMb + ' MB. Allowed: ' + (config.allowedExtensions || []).join(', ')"></div>
+                <label class="form-check mt-3"><input type="checkbox" class="form-check-input" x-model="replaceExisting"><span class="form-check-label">Replace an existing file with the same name</span></label>
+                <div class="progress mt-3" x-show="uploading" x-cloak><div class="progress-bar" :style="'width:' + uploadProgress + '%'" x-text="uploadProgress + '%'"></div></div>
+              </div>
+              <div class="card-footer"><button class="btn btn-primary" :disabled="uploading || !selectedFile"><span x-text="uploading ? 'Uploading…' : 'Upload to S3'"></span></button></div>
+            </form>
+          </div>
+        </section>
+        <% } %>
+
+        <section class="card crm-data-card" x-show="config.configured">
+          <div class="table-responsive">
+            <table class="table mb-0">
+              <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th class="text-end">Actions</th></tr></thead>
+              <tbody>
+                <template x-if="!loading && filteredFolders.length === 0 && filteredFiles.length === 0"><tr><td colspan="5" class="text-center text-muted py-4">This folder is empty.</td></tr></template>
+                <template x-for="folder in filteredFolders" :key="folder.prefix">
+                  <tr>
+                    <td><button type="button" class="btn btn-link p-0 fw-semibold" @click="openFolder(folder.prefix)" x-text="folder.name"></button></td>
+                    <td>Folder</td><td>—</td><td>—</td>
+                    <td class="text-end"><button class="btn btn-light btn-sm" @click="openFolder(folder.prefix)">Open</button></td>
+                  </tr>
+                </template>
+                <template x-for="file in filteredFiles" :key="file.key">
+                  <tr>
+                    <td><div class="fw-semibold" x-text="file.name"></div><div class="text-muted fs-sm" x-text="file.key"></div></td>
+                    <td><span x-text="file.isPublic ? 'Public asset' : 'Private file'"></span></td>
+                    <td x-text="formatBytes(file.sizeBytes)"></td>
+                    <td x-text="formatDate(file.lastModified)"></td>
+                    <td class="text-end"><div class="d-flex justify-content-end flex-wrap gap-1">
+                      <button class="btn btn-light btn-sm" @click="openFile(file, 'inline')">Preview</button>
+                      <button class="btn btn-light btn-sm" @click="openFile(file, 'attachment')">Download</button>
+                      <button class="btn btn-light btn-sm" x-show="file.publicUrl" @click="copyPublicUrl(file)">Copy URL</button>
+                    </div></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer text-center" x-show="nextToken"><button class="btn btn-light" @click="load(true)" :disabled="loading">Load more</button></div>
+        </section>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+
+    <script>
+      function storagePage() {
+        return {
+          config: {}, configLoaded: false, prefix: '', folders: [], files: [], nextToken: '', search: '', loading: false,
+          error: '', message: '', folderName: '', creatingFolder: false, selectedFile: null, replaceExisting: false,
+          uploading: false, uploadProgress: 0,
+          get breadcrumbs() {
+            if (!this.prefix) return [];
+            const parts = this.prefix.split('/').filter(Boolean);
+            let current = '';
+            return parts.map((name) => { current += name + '/'; return { name, prefix: current }; });
+          },
+          get filteredFolders() {
+            const query = this.search.trim().toLowerCase();
+            return query ? this.folders.filter((item) => item.name.toLowerCase().includes(query)) : this.folders;
+          },
+          get filteredFiles() {
+            const query = this.search.trim().toLowerCase();
+            return query ? this.files.filter((item) => item.name.toLowerCase().includes(query)) : this.files;
+          },
+          async init() {
+            try {
+              this.config = (await apiFetch('/api/storage/config')).data || {};
+              this.configLoaded = true;
+              if (this.config.configured) await this.load(false);
+            } catch (error) {
+              this.configLoaded = true;
+              this.error = error.message;
+            }
+          },
+          async load(append) {
+            this.loading = true; this.error = ''; if (!append) { this.nextToken = ''; }
+            try {
+              const params = new URLSearchParams({ prefix: this.prefix, limit: '200' });
+              if (append && this.nextToken) params.set('continuationToken', this.nextToken);
+              const data = (await apiFetch('/api/storage?' + params.toString())).data || {};
+              this.prefix = data.prefix || '';
+              this.folders = append ? [...this.folders, ...(data.folders || [])] : (data.folders || []);
+              this.files = append ? [...this.files, ...(data.files || [])] : (data.files || []);
+              this.nextToken = data.nextToken || '';
+            } catch (error) { this.error = error.message; }
+            finally { this.loading = false; }
+          },
+          async openFolder(prefix) { this.prefix = prefix || ''; this.search = ''; await this.load(false); },
+          async createFolder() {
+            this.creatingFolder = true; this.error = ''; this.message = '';
+            try {
+              await apiFetch('/api/storage/folders', { method:'POST', body:JSON.stringify({ prefix:this.prefix, folderName:this.folderName }) });
+              this.folderName = ''; this.message = 'Folder created.'; await this.load(false);
+            } catch (error) { this.error = error.message; }
+            finally { this.creatingFolder = false; }
+          },
+          async upload() {
+            if (!this.selectedFile) return;
+            this.uploading = true; this.uploadProgress = 10; this.error = ''; this.message = '';
+            try {
+              const payload = {
+                prefix: this.prefix,
+                fileName: this.selectedFile.name,
+                contentType: this.selectedFile.type || 'application/octet-stream',
+                sizeBytes: this.selectedFile.size,
+                replace: this.replaceExisting,
+              };
+              const signed = (await apiFetch('/api/storage/upload-url', { method:'POST', body:JSON.stringify(payload) })).data;
+              this.uploadProgress = 35;
+              const response = await fetch(signed.url, { method:signed.method || 'PUT', headers:signed.headers || {}, body:this.selectedFile });
+              if (!response.ok) throw new Error('S3 upload failed with status ' + response.status + '. Check bucket CORS and IAM permissions.');
+              this.uploadProgress = 100;
+              this.message = signed.replacing ? 'File replaced successfully.' : 'File uploaded successfully.';
+              this.selectedFile = null; this.replaceExisting = false; this.$refs.fileInput.value = '';
+              await this.load(false);
+            } catch (error) { this.error = error.message; }
+            finally { this.uploading = false; setTimeout(() => { this.uploadProgress = 0; }, 500); }
+          },
+          async openFile(file, disposition) {
+            this.error = '';
+            try {
+              const data = (await apiFetch('/api/storage/download-url', { method:'POST', body:JSON.stringify({ key:file.key, disposition }) })).data;
+              window.open(data.url, '_blank', 'noopener');
+            } catch (error) { this.error = error.message; }
+          },
+          async copyPublicUrl(file) {
+            try { await navigator.clipboard.writeText(file.publicUrl); this.message = 'Public asset URL copied.'; }
+            catch (error) { this.error = 'Could not copy the URL. Copy it manually from the file details.'; }
+          },
+          formatBytes(value) {
+            const bytes = Number(value || 0); if (!bytes) return '0 B';
+            const units = ['B','KB','MB','GB','TB']; const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+            return (bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0) + ' ' + units[index];
+          },
+          formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; },
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

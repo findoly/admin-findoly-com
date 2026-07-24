@@ -33,6 +33,10 @@ WHATSAPP_DEFAULT_COUNTRY_CODE=91
 AWS_REGION=ap-south-1
 SES_FROM_EMAIL=verified-sender@example.com
 SES_FROM_NAME=Findoly
+SUPPORT_EMAIL=support@findoly.com
+PROVIDER_PORTAL_LOGIN_URL=https://provider.findoly.com/login
+AGENT_PORTAL_LOGIN_URL=https://agent.findoly.com/login
+EMPLOYEE_CRM_LOGIN_URL=https://admin.findoly.com/login
 
 OTP_SECRET=replace-with-at-least-32-random-characters
 OTP_EXPIRY_MINUTES=5

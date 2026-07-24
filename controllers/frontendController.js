@@ -47,6 +47,7 @@ const frontendController = {
   invoiceEdit: render("invoice/form", "Edit invoice"),
   distributions: render("distribution/index", "Lead distribution"),
   reports: render("report/index", "Reports"),
+  storage: render("storage/index", "File Manager"),
   employees: render("employee/index", "Employees"),
   employeeCreate: render("employee/form", "Create employee"),
   employeeEdit: render("employee/form", "Edit employee"),

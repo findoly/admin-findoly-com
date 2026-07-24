@@ -38,12 +38,12 @@
               <div class="row g-3">
                 <div class="col-md-4"><label class="form-label">Rule name</label><input class="form-control" x-model="form.name" required></div>
                 <div class="col-md-4"><label class="form-label">Event</label><input class="form-control" x-model="form.event" readonly></div>
-                <div class="col-md-4"><label class="form-label">Recipient</label><select class="form-select" x-model="form.recipientSource"><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option></select></div>
+                <div class="col-md-4"><label class="form-label">Recipient</label><select class="form-select" x-model="form.recipientSource"><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option><option value="employee">Employee</option></select></div>
                 <div class="col-md-3"><label class="form-label">Rule enabled</label><select class="form-select" x-model="form.enabled"><option :value="true">Yes</option><option :value="false">No</option></select></div>
                 <div class="col-md-3"><label class="form-label">WhatsApp</label><select class="form-select" x-model="form.whatsappEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
                 <div class="col-md-6"><label class="form-label">WhatsApp template</label><select class="form-select" x-model="form.whatsappTemplateId" :required="form.whatsappEnabled"><option value="">Select approved template</option><template x-for="template in whatsappTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>
                 <div class="col-md-3"><label class="form-label">Email</label><select class="form-select" x-model="form.emailEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
-                <div class="col-md-6"><label class="form-label">Email template</label><select class="form-select" x-model="form.emailTemplateId" :required="form.emailEnabled"><option value="">Select active template</option><template x-for="template in emailTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>
+                <div class="col-md-6"><label class="form-label">Email template</label><select class="form-select" x-model="form.emailTemplateId" :required="form.emailEnabled"><option value="">Select active template</option><template x-for="template in emailTemplates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select><div class="form-text" x-show="eventVariables.length"><span>Available variables: </span><template x-for="(variable, index) in eventVariables" :key="variable"><span><code x-text="variableLabel(variable)"></code><span x-show="index < eventVariables.length - 1">, </span></span></template></div></div>
                 <div class="col-md-3"><label class="form-label">Slack</label><select class="form-select" x-model="form.slackEnabled"><option :value="true">Enabled</option><option :value="false">Disabled</option></select></div>
                 <div class="col-md-6">
                   <div class="d-flex justify-content-between align-items-center mb-1">
@@ -61,7 +61,7 @@
                   </select>
                   <div class="form-text">The rule stores the channel ID. Invite the Slack app to private channels before syncing.</div>
                 </div>
-                <div class="col-md-9"><label class="form-label">Slack message</label><textarea class="form-control" rows="4" x-model="form.slackMessage" :required="form.slackEnabled" placeholder="Lead {{lead_id}} changed to {{lead_status}}."></textarea><div class="form-text">Supported variables: {{customer_name}}, {{lead_id}}, {{requirement_title}}, {{lead_status}}, {{category}}, {{provider_name}}, {{note}}.</div></div>
+                <div class="col-md-9"><label class="form-label">Slack message</label><textarea class="form-control" rows="4" x-model="form.slackMessage" :required="form.slackEnabled" placeholder="Lead {{lead_id}} changed to {{lead_status}}."></textarea><div class="form-text" x-show="eventVariables.length"><span>Available variables: </span><template x-for="(variable, index) in eventVariables" :key="variable"><span><code x-text="variableLabel(variable)"></code><span x-show="index < eventVariables.length - 1">, </span></span></template></div></div>
                 <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" rows="3" x-model="form.description"></textarea></div>
               </div>
             </div>
@@ -105,6 +105,18 @@
           error: '',
           message: '',
           form: {},
+          variableSets: {
+            provider_created: ['provider_name','provider_id','business_name','email','phone','status','onboarding_stage','service_categories','service_location','city','state','login_url','support_email','registration_date'],
+            agent_created: ['agent_name','agent_id','referral_id','business_name','agent_type','email','phone','category_name','city','state','assigned_location','login_url','support_email','registration_date'],
+            employee_created: ['employee_name','employee_id','employee_code','email','phone','designation','department','role_name','login_url','support_email','registration_date'],
+            default: ['customer_name','lead_id','requirement_title','lead_status','category','provider_name','note'],
+          },
+          get eventVariables() {
+            return this.variableSets[this.form.event] || this.variableSets.default;
+          },
+          variableLabel(variable) {
+            return '{{' + variable + '}}';
+          },
           get whatsappTemplates() {
             return this.templates.filter((item) => item.channel === 'whatsapp' && item.status === 'approved' && item.isActive !== false);
           },

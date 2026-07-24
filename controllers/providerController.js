@@ -47,7 +47,7 @@ async function transactions(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    res.status(201).json({ success: true, data: await service.create(req.body) });
+    res.status(201).json({ success: true, data: await service.create(req.body, req.admin?.email || req.admin?.employeeId || "crm-admin") });
   } catch (error) {
     next(error);
   }

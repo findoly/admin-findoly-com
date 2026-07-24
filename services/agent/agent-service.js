@@ -5,6 +5,7 @@ const Enquiry = require("../../models/Enquiry");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { textValue, emailValue, enumValue, booleanValue, numberValue, tokenValue, queryTextValue, identifierValue, validationError } = require("../../utils/validation");
+const accountRegistrationService = require("../communication/account-registration-service");
 
 const AGENT_TYPES = Object.freeze(["individual", "shop"]);
 const AGENT_STATUSES = Object.freeze(["active", "inactive", "pending", "blocked"]);
@@ -81,13 +82,19 @@ async function get(agentId) {
   return presentAgent(row);
 }
 
-async function create(input = {}) {
+async function create(input = {}, actor = "crm-admin") {
   const data = await normalizeInput(input);
   if (data.payoutEnabled && !data.razorpayFundAccountId) throw validationError("Razorpay fund account ID is required when payouts are enabled");
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      const row = await Agent.create({ ...data, referralId: generateReferralId(), createdBy: "crm-admin" });
-      return get(row.agentId);
+      const row = await Agent.create({ ...data, referralId: generateReferralId(), createdBy: actor || "crm-admin" });
+      const created = await get(row.agentId);
+      await accountRegistrationService.dispatch(
+        "agent_created",
+        { agent: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
+        actor,
+      );
+      return created;
     } catch (error) {
       if (error?.code === 11000 && error?.keyPattern?.referralId) continue;
       if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) throw Object.assign(new Error("An agent already uses this mobile number"), { status: 409 });

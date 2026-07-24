@@ -9,7 +9,7 @@ const {
 } = require("../../utils/validation");
 const { normalizeChannelId } = require("./slack-service");
 
-const RECIPIENT_SOURCES = Object.freeze(["customer", "provider", "agent", "manual"]);
+const RECIPIENT_SOURCES = Object.freeze(["customer", "provider", "agent", "employee", "manual"]);
 const EVENTS = Object.freeze([
   "lead_created",
   "lead_status_changed",
@@ -22,6 +22,9 @@ const EVENTS = Object.freeze([
   "provider_invalid",
   "sale_conversion_updated",
   "manual_message",
+  "provider_created",
+  "agent_created",
+  "employee_created",
 ]);
 
 const normalizeEvent = function (value) {

@@ -11,6 +11,7 @@ const {
   validationError,
 } = require("../../utils/validation");
 const { ensureDefaultRoles } = require("./access-service");
+const accountRegistrationService = require("../communication/account-registration-service");
 
 const STATUSES = Object.freeze(["active", "inactive", "suspended"]);
 
@@ -108,7 +109,13 @@ async function create(input = {}, actor) {
     createdBy: actorValue(actor),
     updatedBy: actorValue(actor),
   });
-  return presentEmployee(employee.toObject(), role);
+  const created = presentEmployee(employee.toObject(), role);
+  await accountRegistrationService.dispatch(
+    "employee_created",
+    { employee: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
+    actorValue(actor),
+  );
+  return created;
 }
 
 async function update(employeeId, input = {}, actor) {

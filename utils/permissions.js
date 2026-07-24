@@ -87,6 +87,14 @@ const PERMISSION_GROUPS = Object.freeze([
     permissions: [{ key: "reports.view", label: "View reports" }],
   },
   {
+    key: "storage",
+    label: "File Manager",
+    permissions: [
+      { key: "storage.view", label: "Browse and download S3 files" },
+      { key: "storage.manage", label: "Upload, replace and create S3 folders" },
+    ],
+  },
+  {
     key: "employees",
     label: "Employees",
     permissions: [

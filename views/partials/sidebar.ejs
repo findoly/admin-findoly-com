@@ -2,7 +2,7 @@
   const canAccess = typeof can === 'function' ? can : () => true;
   const showWorkspace = canAccess('dashboard.view') || canAccess('requirements.view') || canAccess('providers.view') || canAccess('agents.view') || canAccess('partnerPayouts.view') || canAccess('categories.view') || canAccess('distributions.view');
   const showOperations = canAccess('followUps.view') || canAccess('communications.view') || canAccess('billing.view') || canAccess('reports.view');
-  const showAdministration = canAccess('employees.view') || canAccess('roles.view');
+  const showAdministration = canAccess('storage.view') || canAccess('employees.view') || canAccess('roles.view');
 %>
 <div class="sidebar sidebar-main sidebar-expand-lg crm-sidebar" :class="{'crm-sidebar-open': sidebarOpen, 'crm-sidebar-collapsed': sidebarCollapsed}">
   <div class="sidebar-content">
@@ -36,6 +36,7 @@
         <% if (canAccess('reports.view')) { %><li class="nav-item"><a href="/reports" title="Reports" class="nav-link" :class="{active:pathIs('/reports')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg><span>Reports</span></a></li><% } %>
 
         <% if (showAdministration) { %><li class="nav-item-header"><span>Administration</span></li><% } %>
+        <% if (canAccess('storage.view')) { %><li class="nav-item"><a href="/storage" title="File Manager" class="nav-link" :class="{active:pathIs('/storage')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg><span>File Manager</span></a></li><% } %>
         <% if (canAccess('employees.view')) { %><li class="nav-item"><a href="/employees" title="Employees" class="nav-link" :class="{active:pathIs('/employees')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M14 20a4 4 0 0 1 7 0"/></svg><span>Employees</span></a></li><% } %>
         <% if (canAccess('roles.view')) { %><li class="nav-item"><a href="/roles" title="Roles and permissions" class="nav-link" :class="{active:pathIs('/roles')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>Roles &amp; permissions</span></a></li><% } %>
       </ul>
