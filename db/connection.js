@@ -8,8 +8,10 @@ async function connectDatabase() {
   )
     return mongoose.connection;
 
-  const uri =
-    process.env.MONGODB_URI
+  const uri = String(process.env.MONGODB_URI || "").trim();
+  if (!uri) {
+    throw Object.assign(new Error("MONGODB_URI is required"), { code: "MONGODB_URI_MISSING" });
+  }
   mongoose.set("strictQuery", true);
   await mongoose.connect(uri, {
     serverSelectionTimeoutMS: Number(

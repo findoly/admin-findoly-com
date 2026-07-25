@@ -61,6 +61,9 @@ function normalizeProviderInput(input = {}, current = {}) {
   const mobile = validateMobile(input.mobile ?? current.mobile ?? "", {
     label: "Provider mobile number",
   });
+  if (!/^[6-9]\d{9}$/.test(mobile)) {
+    throw validationError("Provider mobile number must be a valid Indian mobile number");
+  }
   return {
     name: textValue(input.name ?? current.name, {
       label: "Provider name",
@@ -110,7 +113,7 @@ function normalizeProviderInput(input = {}, current = {}) {
     }),
     servicePincode: pincodeValue(input.servicePincode ?? current.servicePincode, {
       label: "Provider service PIN code",
-      required: false,
+      required: true,
     }),
     serviceAddress: textValue(input.serviceAddress ?? current.serviceAddress, {
       label: "Provider full address",
@@ -311,47 +314,130 @@ async function listTransactions(providerId, filters = {}) {
   });
 }
 
-async function applyProviderLocation(data, current = {}) {
-  const pincode = String(data.servicePincode || "").trim();
-  if (!pincode) {
-    throw validationError("Provider service PIN code is required");
-  }
-  const sameLocation = pincode === String(current.servicePincode || "")
-    && Number.isFinite(Number(current.serviceLatitude))
-    && Number.isFinite(Number(current.serviceLongitude));
-  const location = sameLocation
-    ? {
-        latitude: Number(current.serviceLatitude),
-        longitude: Number(current.serviceLongitude),
-        locality: current.serviceLocality || "",
-        district: current.serviceDistrict || "",
-        city: current.city || "",
-        state: current.serviceState || current.state || "",
-        country: current.serviceCountry || "India",
-        verifiedAt: current.serviceLocationVerifiedAt || new Date(),
-        source: current.serviceLocationSource || "google_geocoding",
-      }
-    : await geocodePincode(pincode);
+function validCoordinate(value, min, max) {
+  if (value === null || value === undefined || String(value).trim() === "") return false;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max;
+}
+
+function manualLocation(data, current = {}) {
+  const city = textValue(data.city || current.city, {
+    label: "Provider city",
+    required: true,
+    maxLength: 100,
+  });
+  const state = textValue(data.state || current.state || current.serviceState, {
+    label: "Provider state",
+    required: true,
+    maxLength: 100,
+  });
   return {
     ...data,
-    serviceLatitude: Number(location.latitude),
-    serviceLongitude: Number(location.longitude),
-    serviceLocality: location.locality || "",
-    serviceDistrict: location.district || "",
-    serviceState: location.state || "",
-    serviceCountry: location.country || "India",
-    serviceLocationVerifiedAt: location.verifiedAt || new Date(),
-    serviceLocationSource: location.source || "google_geocoding",
-    city: location.city || location.locality || data.city || "",
-    state: location.state || data.state || "",
+    city,
+    state,
+    serviceLatitude: null,
+    serviceLongitude: null,
+    serviceLocality: current.serviceLocality || "",
+    serviceDistrict: current.serviceDistrict || "",
+    serviceState: state,
+    serviceCountry: current.serviceCountry || "India",
+    serviceLocationVerifiedAt: null,
+    serviceLocationSource: "manual_pincode",
   };
 }
 
+async function applyProviderLocation(data, current = {}) {
+  const pincode = String(data.servicePincode || "").trim();
+  if (!pincode) throw validationError("Provider service PIN code is required");
+
+  const sameLocation = pincode === String(current.servicePincode || "")
+    && validCoordinate(current.serviceLatitude, -90, 90)
+    && validCoordinate(current.serviceLongitude, -180, 180);
+  if (sameLocation) {
+    return {
+      ...data,
+      serviceLatitude: Number(current.serviceLatitude),
+      serviceLongitude: Number(current.serviceLongitude),
+      serviceLocality: current.serviceLocality || "",
+      serviceDistrict: current.serviceDistrict || "",
+      serviceState: current.serviceState || current.state || data.state || "",
+      serviceCountry: current.serviceCountry || "India",
+      serviceLocationVerifiedAt: current.serviceLocationVerifiedAt || new Date(),
+      serviceLocationSource: current.serviceLocationSource || "google_geocoding",
+      city: current.city || data.city || "",
+      state: current.serviceState || current.state || data.state || "",
+    };
+  }
+
+  try {
+    const location = await geocodePincode(pincode);
+    if (
+      !validCoordinate(location?.latitude, -90, 90)
+      || !validCoordinate(location?.longitude, -180, 180)
+    ) {
+      throw Object.assign(new Error("PIN code verification returned an invalid location"), {
+        status: 503,
+        code: "GEOCODING_INVALID_RESPONSE",
+      });
+    }
+    return {
+      ...data,
+      serviceLatitude: Number(location.latitude),
+      serviceLongitude: Number(location.longitude),
+      serviceLocality: location.locality || "",
+      serviceDistrict: location.district || "",
+      serviceState: location.state || data.state || "",
+      serviceCountry: location.country || "India",
+      serviceLocationVerifiedAt: location.verifiedAt || new Date(),
+      serviceLocationSource: location.source || "google_geocoding",
+      city: location.city || location.locality || data.city || "",
+      state: location.state || data.state || "",
+    };
+  } catch (error) {
+    if (Number(error?.status || 500) < 500) throw error;
+    // A temporary maps/configuration problem must not make provider creation
+    // impossible. Save a validated manual city/state and allow later re-sync.
+    return manualLocation(data, current);
+  }
+}
+
+async function assertUniqueProviderMobile(mobile, excludingProviderId = "") {
+  const query = { normalizedMobile: mobile };
+  if (excludingProviderId) query.providerId = { $ne: excludingProviderId };
+  if (await Provider.exists(query)) {
+    throw Object.assign(new Error("A provider already uses this mobile number"), { status: 409 });
+  }
+}
+
+async function safeSyncApprovedLeads(provider, actor) {
+  try {
+    await syncApprovedLeads(provider);
+  } catch (error) {
+    console.error(`Provider lead sync failed for ${provider?.providerId || "unknown"} (${actor || "crm-admin"}):`, error.message);
+  }
+}
+
+function scheduleProviderSync(provider, actor) {
+  setImmediate(() => {
+    safeSyncApprovedLeads(provider, actor).catch(() => {});
+  });
+}
+
 async function create(input, actor = "crm-admin") {
-  const data = await applyProviderLocation(normalizeProviderInput(input));
-  const provider = await Provider.create(data);
-  await syncApprovedLeads(provider);
+  const normalized = normalizeProviderInput(input);
+  await assertUniqueProviderMobile(normalized.normalizedMobile);
+  const data = await applyProviderLocation(normalized);
+  let provider;
+  try {
+    provider = await Provider.create(data);
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw Object.assign(new Error("A provider with the same unique details already exists"), { status: 409 });
+    }
+    throw error;
+  }
   const created = await get(provider.providerId);
+  scheduleProviderSync(created, actor);
   await accountRegistrationService.dispatch(
     "provider_created",
     { provider: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
@@ -360,7 +446,7 @@ async function create(input, actor = "crm-admin") {
   return created;
 }
 
-async function update(providerId, input = {}) {
+async function update(providerId, input = {}, actor = "crm-admin") {
   const query = providerQuery(providerId);
   const current = await Provider.findOne(query).lean();
   if (!current) {
@@ -368,11 +454,13 @@ async function update(providerId, input = {}) {
   }
   assertProviderIdUnchanged(current, input);
 
-  const data = await applyProviderLocation(normalizeProviderInput(input, current), current);
+  const normalized = normalizeProviderInput(input, current);
+  await assertUniqueProviderMobile(normalized.normalizedMobile, current.providerId || current.id);
+  const data = await applyProviderLocation(normalized, current);
   await Provider.updateOne(query, { $set: data });
-  const provider = await Provider.findOne(query);
-  await syncApprovedLeads(provider);
-  return get(providerId);
+  const provider = await get(providerId);
+  scheduleProviderSync(provider, actor);
+  return provider;
 }
 
 async function syncApprovedLeads(providerDocument) {

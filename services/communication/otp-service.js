@@ -193,7 +193,7 @@ const list = async function (filters) {
   const query = {};
   if (filters?.status) query.status = enumValue(filters.status, ["sent", "verified", "expired", "blocked", "failed"], { label: "OTP status filter" });
   if (filters?.channel) query.channel = enumValue(filters.channel, ["whatsapp", "email"], { label: "OTP channel filter" });
-  const limit = Math.min(Math.max(Number(filters?.limit || 100), 1), 500);
+  const limit = numberValue(filters?.limit, { label: "OTP list limit", fallback: 100, min: 1, max: 500, integer: true });
   return OtpRequest.find(query)
     .select("-otpHash -salt")
     .sort({ createdAt: -1, _id: -1 })

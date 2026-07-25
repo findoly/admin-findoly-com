@@ -35,7 +35,7 @@
           reset() { this.q = ''; this.channel = ''; this.status = ''; this.search(); },
           next() { if (cursorNext(this.pagination)) this.load(); },
           previous() { if (cursorPrevious(this.pagination)) this.load(); },
-          async retry(row) { row.retrying = true; this.error = ''; try { await apiFetch('/api/communication/' + row.communicationId + '/retry', { method: 'POST', body: '{}' }); await this.load(); } catch (error) { this.error = error.message; } finally { row.retrying = false; } }
+          async retry(row) { if(row.retrying)return; row.retrying = true; this.error = ''; try { await apiFetch('/api/communication/' + row.communicationId + '/retry', { method: 'POST', body: '{}' }); await this.load(); } catch (error) { this.error = error.message; } finally { row.retrying = false; } }
         };
       }
     </script>

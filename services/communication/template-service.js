@@ -148,7 +148,7 @@ const list = async function (filters) {
     const search = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     query.$or = [{ name: search }, { displayName: search }, { body: search }, { subject: search }];
   }
-  const limit = Math.min(Math.max(Number(filters?.limit || 100), 1), 500);
+  const limit = numberValue(filters?.limit, { label: "Template list limit", fallback: 100, min: 1, max: 500, integer: true });
   return CommunicationTemplate.find(query).sort({ updatedAt: -1, _id: -1 }).limit(limit).lean();
 };
 
@@ -159,12 +159,23 @@ const get = async function (templateId) {
   return template;
 };
 
+const translateTemplateWriteError = function (error) {
+  if (error?.code === 11000) {
+    throw validationError("A template with this name, channel and language already exists", 409);
+  }
+  throw error;
+};
+
 const create = async function (input, actor) {
   const data = normalizeTemplateInput(input || {}, {});
   data.status = data.channel === "email" ? "active" : "draft";
   data.createdBy = actor || "admin";
   data.updatedBy = actor || "admin";
-  return CommunicationTemplate.create(data);
+  try {
+    return await CommunicationTemplate.create(data);
+  } catch (error) {
+    return translateTemplateWriteError(error);
+  }
 };
 
 const update = async function (templateId, input, actor) {
@@ -183,7 +194,11 @@ const update = async function (templateId, input, actor) {
       throw validationError("Approved WhatsApp template content cannot be edited; create a new template version");
     }
   }
-  await CommunicationTemplate.updateOne({ templateId: current.templateId }, { $set: data });
+  try {
+    await CommunicationTemplate.updateOne({ templateId: current.templateId }, { $set: data });
+  } catch (error) {
+    return translateTemplateWriteError(error);
+  }
   return get(current.templateId);
 };
 

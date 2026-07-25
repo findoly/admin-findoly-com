@@ -217,7 +217,7 @@ async function syncSaleConversion(
 
   const updatedLead = await Enquiry.findOne(query).lean();
   if (changedStatus && notify) {
-    await notificationService.trigger(
+    await notificationService.triggerSafe(
       "sale_conversion_updated",
       {
         lead: updatedLead,

@@ -29,7 +29,7 @@
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
-                <button class="btn btn-primary" @click="syncDistribution()" :disabled="lead.isActive === false || !['distributed', 'sale_converted'].includes(currentStatus) || lead.agentReferralValidation !== 'valid'" title="Move the validated lead to Distributed before publishing it">Publish marketplace</button>
+                <button class="btn btn-primary" @click="syncDistribution()" :disabled="distributionSaving || lead.isActive === false || !['distributed', 'sale_converted'].includes(currentStatus) || lead.agentReferralValidation !== 'valid'" title="Move the validated lead to Distributed before publishing it" x-text="distributionSaving ? 'Publishing…' : 'Publish marketplace'"></button>
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
@@ -297,6 +297,7 @@
                   referralSaving: false,
                   noteSaving: false,
                   stateSaving: false,
+                  distributionSaving: false,
                   journeySteps: ['new', 'verification', 'approved', 'distributed', 'sale_converted'],
                   get providerJourneyUrl() {
                     return '/enquiries/' + this.recordId + '/providers';
@@ -414,6 +415,7 @@
                     }
                   },
                   async changeStatus(action) {
+                    if (this.statusSaving) return;
                     if (this.providerControlled) {
                       this.notify('Journey actions are locked after distribution. Provider statuses control conversion.', 'error');
                       return;
@@ -442,6 +444,7 @@
                     }
                   },
                   async saveReferralValidation() {
+                    if (this.referralSaving) return;
                     if (!this.referralForm.status) {
                       this.notify('Select Valid or Invalid.', 'error');
                       return;
@@ -478,7 +481,7 @@
                     }
                   },
                   async addNote() {
-                    if (!this.note.trim()) return;
+                    if (this.noteSaving || !this.note.trim()) return;
                     this.noteSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/note', {
@@ -494,15 +497,20 @@
                     }
                   },
                   async syncDistribution() {
+                    if (this.distributionSaving) return;
+                    this.distributionSaving = true;
                     try {
                       await apiFetch('/api/enquiry/' + this.recordId + '/distribute', { method: 'POST', body: '{}' });
                       await this.load();
                       this.notify('Lead published to the provider marketplace.', 'success');
                     } catch (error) {
                       this.notify(error.message, 'error');
+                    } finally {
+                      this.distributionSaving = false;
                     }
                   },
                   async reactivateLead() {
+                    if (this.stateSaving) return;
                     if (!window.confirm('Reactivate this lead? It will return to the marketplace if it is still Distributed.')) return;
                     this.stateSaving = true;
                     try {

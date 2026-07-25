@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const path = require("path");
 const {
   textValue,
@@ -5,25 +6,6 @@ const {
   booleanValue,
   validationError,
 } = require("../../utils/validation");
-
-let awsModules;
-let s3Client;
-
-function loadAwsModules() {
-  if (awsModules) return awsModules;
-  try {
-    const client = require("@aws-sdk/client-s3");
-    const presigner = require("@aws-sdk/s3-request-presigner");
-    awsModules = { ...client, ...presigner };
-    return awsModules;
-  } catch (error) {
-    const missing = Object.assign(
-      new Error("Amazon S3 packages are not installed. Run npm install before using File Manager."),
-      { status: 503, cause: error },
-    );
-    throw missing;
-  }
-}
 
 function normalizedRoot(value, fallback) {
   const raw = String(value || fallback || "").trim().replace(/^\/+/, "").replace(/\\/g, "/");
@@ -39,23 +21,29 @@ function csvValues(value, fallback) {
     .filter(Boolean);
 }
 
+function credentials() {
+  return {
+    accessKeyId: String(process.env.AWS_ACCESS_KEY_ID || "").trim(),
+    secretAccessKey: String(process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
+    sessionToken: String(process.env.AWS_SESSION_TOKEN || "").trim(),
+  };
+}
+
 function config() {
   const publicPrefix = normalizedRoot(process.env.AWS_S3_PUBLIC_PREFIX, "public/");
   const privatePrefix = normalizedRoot(process.env.AWS_S3_PRIVATE_PREFIX, "private/");
   const roots = [...new Set([publicPrefix, privatePrefix].filter(Boolean))];
-  const maxUploadMb = Math.min(
-    Math.max(Number(process.env.S3_MAX_UPLOAD_MB || 20) || 20, 1),
-    500,
-  );
+  const maxUploadMb = Math.min(Math.max(Number(process.env.S3_MAX_UPLOAD_MB || 20) || 20, 1), 500);
   const cloudFrontDomain = String(
     process.env.AWS_CLOUDFRONT_DOMAIN || process.env.S3_PUBLIC_BASE_URL || "",
-  )
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/+$/, "");
+  ).trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const auth = credentials();
+  const region = String(process.env.AWS_REGION || "").trim();
+  const bucket = String(process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || "").trim();
   return {
-    region: String(process.env.AWS_REGION || "").trim(),
-    bucket: String(process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || "").trim(),
+    region,
+    bucket,
+    credentials: auth,
     publicPrefix,
     privatePrefix,
     roots,
@@ -70,9 +58,12 @@ function config() {
       "image/jpeg,image/png,image/webp,image/gif,image/svg+xml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/zip,application/x-zip-compressed,application/octet-stream",
     ),
     cloudFrontDomain,
-    uploadUrlExpiresSeconds: 300,
-    downloadUrlExpiresSeconds: 300,
-    configured: Boolean(process.env.AWS_REGION && (process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME)),
+    uploadUrlExpiresSeconds: Math.min(Math.max(Number(process.env.S3_UPLOAD_URL_EXPIRES_SECONDS || 300) || 300, 60), 3600),
+    downloadUrlExpiresSeconds: Math.min(Math.max(Number(process.env.S3_DOWNLOAD_URL_EXPIRES_SECONDS || 300) || 300, 60), 3600),
+    endpoint: String(process.env.AWS_S3_ENDPOINT || "").trim().replace(/\/+$/, ""),
+    forcePathStyle: String(process.env.AWS_S3_FORCE_PATH_STYLE || "").toLowerCase() === "true",
+    requestTimeoutMs: Math.min(Math.max(Number(process.env.AWS_S3_TIMEOUT_MS || 15000) || 15000, 1000), 60000),
+    configured: Boolean(region && bucket && auth.accessKeyId && auth.secretAccessKey),
   };
 }
 
@@ -90,6 +81,9 @@ function publicConfig() {
     cloudFrontDomain: value.cloudFrontDomain,
     uploadUrlExpiresSeconds: value.uploadUrlExpiresSeconds,
     downloadUrlExpiresSeconds: value.downloadUrlExpiresSeconds,
+    configurationMessage: value.configured
+      ? ""
+      : "Add AWS_REGION, AWS_S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to enable File Manager.",
   };
 }
 
@@ -97,25 +91,11 @@ function assertConfigured() {
   const value = config();
   if (!value.configured) {
     throw Object.assign(
-      new Error("Amazon S3 is not configured. Add AWS_REGION and AWS_S3_BUCKET to the server environment."),
-      { status: 503 },
+      new Error("Amazon S3 is not configured. Add the S3 region, bucket and restricted IAM credentials to the server environment."),
+      { status: 503, code: "S3_NOT_CONFIGURED", expose: true },
     );
   }
   return value;
-}
-
-function client() {
-  const value = assertConfigured();
-  if (!s3Client) {
-    const { S3Client } = loadAwsModules();
-    const options = { region: value.region };
-    if (process.env.AWS_S3_ENDPOINT) options.endpoint = process.env.AWS_S3_ENDPOINT;
-    if (String(process.env.AWS_S3_FORCE_PATH_STYLE || "").toLowerCase() === "true") {
-      options.forcePathStyle = true;
-    }
-    s3Client = new S3Client(options);
-  }
-  return s3Client;
 }
 
 function hasAllowedRoot(value, roots) {
@@ -141,11 +121,8 @@ function normalizePrefix(value, options = {}) {
 function safeName(value, label) {
   const name = textValue(value, { label, required: true, maxLength: 255 }).trim();
   if (
-    name === "." ||
-    name === ".." ||
-    name.startsWith(".") ||
-    /[\\/\0\r\n]/.test(name) ||
-    /[<>:"|?*]/.test(name)
+    name === "." || name === ".." || name.startsWith(".") ||
+    /[\\/\0\r\n]/.test(name) || /[<>:"|?*]/.test(name)
   ) {
     throw validationError(`${label} contains unsupported characters`);
   }
@@ -160,11 +137,14 @@ function folderPrefix(prefix, folderName) {
   return `${normalizePrefix(prefix)}${safeName(folderName, "Folder name")}/`;
 }
 
+function awsEncode(value) {
+  return encodeURIComponent(String(value)).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 function encodeKey(key) {
-  return String(key)
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
+  return String(key).split("/").map(awsEncode).join("/");
 }
 
 function publicUrl(key, settings = config()) {
@@ -205,18 +185,194 @@ function validateUpload(input = {}) {
   };
 }
 
-function notFound(error) {
-  return ["NotFound", "NoSuchKey", "NoSuchBucket"].includes(error?.name) || error?.$metadata?.httpStatusCode === 404;
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function hmac(key, value, encoding) {
+  return crypto.createHmac("sha256", key).update(value).digest(encoding);
+}
+
+function signingKey(secret, dateStamp, region) {
+  const dateKey = hmac(`AWS4${secret}`, dateStamp);
+  const regionKey = hmac(dateKey, region);
+  const serviceKey = hmac(regionKey, "s3");
+  return hmac(serviceKey, "aws4_request");
+}
+
+function timestamp(date = new Date()) {
+  const iso = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
+}
+
+function endpointFor(settings, key = "") {
+  const encoded = encodeKey(key);
+  if (settings.endpoint) {
+    const base = new URL(settings.endpoint);
+    if (settings.forcePathStyle) {
+      base.pathname = `${base.pathname.replace(/\/+$/, "")}/${awsEncode(settings.bucket)}${encoded ? `/${encoded}` : ""}`;
+    } else {
+      base.hostname = `${settings.bucket}.${base.hostname}`;
+      base.pathname = encoded ? `/${encoded}` : "/";
+    }
+    return base;
+  }
+  if (settings.forcePathStyle) {
+    return new URL(`https://s3.${settings.region}.amazonaws.com/${awsEncode(settings.bucket)}${encoded ? `/${encoded}` : ""}`);
+  }
+  return new URL(`https://${settings.bucket}.s3.${settings.region}.amazonaws.com${encoded ? `/${encoded}` : "/"}`);
+}
+
+function normalizedHeaders(headers = {}, host) {
+  const values = { host };
+  for (const [name, value] of Object.entries(headers)) {
+    const lower = String(name).trim().toLowerCase();
+    if (!lower || lower === "authorization" || lower === "host") continue;
+    values[lower] = String(value).trim().replace(/\s+/g, " ");
+  }
+  const names = Object.keys(values).sort();
+  return {
+    values,
+    names,
+    canonical: names.map((name) => `${name}:${values[name]}\n`).join(""),
+    signed: names.join(";"),
+  };
+}
+
+function canonicalQuery(searchParams) {
+  const entries = [...searchParams.entries()].map(([key, value]) => [awsEncode(key), awsEncode(value)]);
+  entries.sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+    leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+  );
+  return entries.map(([key, value]) => `${key}=${value}`).join("&");
+}
+
+function signedRequest(settings, method, key, options = {}) {
+  const url = endpointFor(settings, key);
+  for (const [name, value] of Object.entries(options.query || {})) {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.append(name, String(value));
+  }
+  const body = options.body === undefined || options.body === null ? "" : options.body;
+  const payloadHash = sha256(body);
+  const { amzDate, dateStamp } = timestamp();
+  const requestHeaders = {
+    ...(options.headers || {}),
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
+  };
+  if (settings.credentials.sessionToken) requestHeaders["x-amz-security-token"] = settings.credentials.sessionToken;
+  const headers = normalizedHeaders(requestHeaders, url.host);
+  const canonicalRequest = [
+    method.toUpperCase(),
+    url.pathname || "/",
+    canonicalQuery(url.searchParams),
+    headers.canonical,
+    headers.signed,
+    payloadHash,
+  ].join("\n");
+  const scope = `${dateStamp}/${settings.region}/s3/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
+  const signature = hmac(
+    signingKey(settings.credentials.secretAccessKey, dateStamp, settings.region),
+    stringToSign,
+    "hex",
+  );
+  requestHeaders.Authorization = `AWS4-HMAC-SHA256 Credential=${settings.credentials.accessKeyId}/${scope}, SignedHeaders=${headers.signed}, Signature=${signature}`;
+  return { url: url.toString(), headers: requestHeaders, body };
+}
+
+function presignedUrl(settings, method, key, options = {}) {
+  const url = endpointFor(settings, key);
+  for (const [name, value] of Object.entries(options.query || {})) {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.append(name, String(value));
+  }
+  const { amzDate, dateStamp } = timestamp();
+  const scope = `${dateStamp}/${settings.region}/s3/aws4_request`;
+  const requestHeaders = { ...(options.headers || {}) };
+  const headers = normalizedHeaders(requestHeaders, url.host);
+  url.searchParams.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
+  url.searchParams.set("X-Amz-Credential", `${settings.credentials.accessKeyId}/${scope}`);
+  url.searchParams.set("X-Amz-Date", amzDate);
+  url.searchParams.set("X-Amz-Expires", String(options.expiresIn));
+  url.searchParams.set("X-Amz-SignedHeaders", headers.signed);
+  if (settings.credentials.sessionToken) url.searchParams.set("X-Amz-Security-Token", settings.credentials.sessionToken);
+  const canonicalRequest = [
+    method.toUpperCase(),
+    url.pathname || "/",
+    canonicalQuery(url.searchParams),
+    headers.canonical,
+    headers.signed,
+    "UNSIGNED-PAYLOAD",
+  ].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
+  const signature = hmac(
+    signingKey(settings.credentials.secretAccessKey, dateStamp, settings.region),
+    stringToSign,
+    "hex",
+  );
+  url.searchParams.set("X-Amz-Signature", signature);
+  return url.toString();
+}
+
+function decodeXml(value) {
+  return String(value || "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+
+function xmlValue(xml, tag) {
+  const match = String(xml || "").match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+
+function xmlBlocks(xml, tag) {
+  return [...String(xml || "").matchAll(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "gi"))]
+    .map((match) => match[1]);
+}
+
+function s3Error(status, body) {
+  const code = xmlValue(body, "Code") || "S3_REQUEST_FAILED";
+  const message = xmlValue(body, "Message") || `Amazon S3 request failed with status ${status}`;
+  return Object.assign(new Error(message), {
+    status: status === 404 ? 404 : status === 403 ? 403 : status >= 400 && status < 500 ? 400 : 503,
+    code: code === "NoSuchKey" || code === "NotFound" ? code : "S3_REQUEST_FAILED",
+    upstreamCode: code,
+    expose: status < 500,
+  });
+}
+
+async function fetchS3(settings, method, key, options = {}) {
+  const request = signedRequest(settings, method, key, options);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), settings.requestTimeoutMs);
+  try {
+    const response = await fetch(request.url, {
+      method,
+      headers: request.headers,
+      body: ["GET", "HEAD"].includes(method.toUpperCase()) ? undefined : request.body,
+      signal: controller.signal,
+    });
+    const body = method.toUpperCase() === "HEAD" ? "" : await response.text().catch(() => "");
+    if (!response.ok) throw s3Error(response.status, body);
+    return { response, body };
+  } catch (error) {
+    if (error?.status) throw error;
+    throw Object.assign(
+      new Error(error?.name === "AbortError" ? "Amazon S3 did not respond in time" : "Unable to connect to Amazon S3"),
+      { status: 503, code: "S3_REQUEST_FAILED", expose: true, cause: error },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function exists(key) {
   const settings = assertConfigured();
-  const { HeadObjectCommand } = loadAwsModules();
   try {
-    await client().send(new HeadObjectCommand({ Bucket: settings.bucket, Key: key }));
+    await fetchS3(settings, "HEAD", key);
     return true;
   } catch (error) {
-    if (notFound(error)) return false;
+    if (error?.status === 404 || ["NoSuchKey", "NotFound"].includes(error?.upstreamCode)) return false;
     throw error;
   }
 }
@@ -249,39 +405,39 @@ async function list(input = {}) {
     label: "Continuation token",
     maxLength: 4000,
   });
-  const { ListObjectsV2Command } = loadAwsModules();
-  const result = await client().send(
-    new ListObjectsV2Command({
-      Bucket: settings.bucket,
-      Prefix: prefix,
-      Delimiter: "/",
-      MaxKeys: limit,
-      ContinuationToken: continuationToken || undefined,
-    }),
-  );
-  const folders = (result.CommonPrefixes || [])
-    .map((row) => row.Prefix || "")
+  const { body } = await fetchS3(settings, "GET", "", {
+    query: {
+      "list-type": "2",
+      delimiter: "/",
+      "max-keys": limit,
+      prefix,
+      ...(continuationToken ? { "continuation-token": continuationToken } : {}),
+    },
+  });
+  const folders = xmlBlocks(body, "CommonPrefixes")
+    .map((block) => xmlValue(block, "Prefix"))
     .filter(Boolean)
-    .map((folder) => ({
-      prefix: folder,
-      name: folder.slice(prefix.length).replace(/\/$/, ""),
-    }));
-  const files = (result.Contents || [])
-    .filter((row) => row.Key && row.Key !== prefix && !row.Key.endsWith("/"))
+    .map((folder) => ({ prefix: folder, name: folder.slice(prefix.length).replace(/\/$/, "") }));
+  const files = xmlBlocks(body, "Contents")
+    .map((block) => ({
+      key: xmlValue(block, "Key"),
+      sizeBytes: Number(xmlValue(block, "Size") || 0),
+      lastModified: xmlValue(block, "LastModified") || null,
+      etag: xmlValue(block, "ETag").replace(/^"|"$/g, ""),
+    }))
+    .filter((row) => row.key && row.key !== prefix && !row.key.endsWith("/"))
     .map((row) => ({
-      key: row.Key,
-      name: row.Key.slice(prefix.length),
-      sizeBytes: Number(row.Size || 0),
-      lastModified: row.LastModified || null,
-      etag: String(row.ETag || "").replace(/^"|"$/g, ""),
-      publicUrl: publicUrl(row.Key, settings),
-      isPublic: row.Key.startsWith(settings.publicPrefix),
+      ...row,
+      name: row.key.slice(prefix.length),
+      publicUrl: publicUrl(row.key, settings),
+      isPublic: row.key.startsWith(settings.publicPrefix),
     }));
+  const truncated = xmlValue(body, "IsTruncated").toLowerCase() === "true";
   return {
     prefix,
     folders,
     files,
-    nextToken: result.IsTruncated ? result.NextContinuationToken || "" : "",
+    nextToken: truncated ? xmlValue(body, "NextContinuationToken") : "",
     publicPrefix: settings.publicPrefix,
   };
 }
@@ -289,15 +445,10 @@ async function list(input = {}) {
 async function createFolder(input = {}) {
   const settings = assertConfigured();
   const key = folderPrefix(input.prefix, input.folderName);
-  const { PutObjectCommand } = loadAwsModules();
-  await client().send(
-    new PutObjectCommand({
-      Bucket: settings.bucket,
-      Key: key,
-      Body: "",
-      ContentType: "application/x-directory",
-    }),
-  );
+  await fetchS3(settings, "PUT", key, {
+    headers: { "Content-Type": "application/x-directory" },
+    body: "",
+  });
   return { key, prefix: key };
 }
 
@@ -306,27 +457,19 @@ async function createUploadUrl(input = {}) {
   if (!upload.replace && (await exists(upload.key))) {
     throw Object.assign(new Error("A file with this name already exists. Enable Replace existing file to overwrite it."), { status: 409 });
   }
-  const { PutObjectCommand, getSignedUrl } = loadAwsModules();
-  const commandInput = {
-    Bucket: upload.settings.bucket,
-    Key: upload.key,
-    ContentType: upload.contentType,
-  };
-  const encryption = String(process.env.AWS_S3_SERVER_SIDE_ENCRYPTION || "").trim();
-  if (encryption) commandInput.ServerSideEncryption = encryption;
-  const kmsKeyId = String(process.env.AWS_S3_KMS_KEY_ID || "").trim();
-  if (kmsKeyId) commandInput.SSEKMSKeyId = kmsKeyId;
-  const url = await getSignedUrl(client(), new PutObjectCommand(commandInput), {
-    expiresIn: upload.settings.uploadUrlExpiresSeconds,
-  });
   const headers = { "Content-Type": upload.contentType };
+  const encryption = String(process.env.AWS_S3_SERVER_SIDE_ENCRYPTION || "").trim();
   if (encryption) headers["x-amz-server-side-encryption"] = encryption;
+  const kmsKeyId = String(process.env.AWS_S3_KMS_KEY_ID || "").trim();
   if (kmsKeyId) headers["x-amz-server-side-encryption-aws-kms-key-id"] = kmsKeyId;
   return {
     key: upload.key,
     fileName: upload.fileName,
     method: "PUT",
-    url,
+    url: presignedUrl(upload.settings, "PUT", upload.key, {
+      headers,
+      expiresIn: upload.settings.uploadUrlExpiresSeconds,
+    }),
     headers,
     expiresIn: upload.settings.uploadUrlExpiresSeconds,
     publicUrl: publicUrl(upload.key, upload.settings),
@@ -340,31 +483,27 @@ async function createDownloadUrl(input = {}) {
   if (!key || key.endsWith("/") || key.startsWith("/") || key.split("/").some((part) => part === "..")) {
     throw validationError("File key is invalid");
   }
-  if (!hasAllowedRoot(key, settings.roots)) {
-    throw validationError("File is outside the approved S3 locations");
-  }
-  const { HeadObjectCommand, GetObjectCommand, getSignedUrl } = loadAwsModules();
+  if (!hasAllowedRoot(key, settings.roots)) throw validationError("File is outside the approved S3 locations");
   let metadata;
   try {
-    metadata = await client().send(new HeadObjectCommand({ Bucket: settings.bucket, Key: key }));
+    metadata = await fetchS3(settings, "HEAD", key);
   } catch (error) {
-    if (notFound(error)) throw Object.assign(new Error("File not found"), { status: 404 });
+    if (error?.status === 404) throw Object.assign(new Error("File not found"), { status: 404 });
     throw error;
   }
   const disposition = String(input.disposition || "attachment").toLowerCase() === "inline" ? "inline" : "attachment";
   const fileName = key.split("/").pop() || "download";
-  const command = new GetObjectCommand({
-    Bucket: settings.bucket,
-    Key: key,
-    ResponseContentDisposition: `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+  const url = presignedUrl(settings, "GET", key, {
+    query: { "response-content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}` },
+    expiresIn: settings.downloadUrlExpiresSeconds,
   });
   return {
     key,
-    url: await getSignedUrl(client(), command, { expiresIn: settings.downloadUrlExpiresSeconds }),
+    url,
     expiresIn: settings.downloadUrlExpiresSeconds,
-    contentType: metadata.ContentType || "application/octet-stream",
-    sizeBytes: Number(metadata.ContentLength || 0),
-    lastModified: metadata.LastModified || null,
+    contentType: metadata.response.headers.get("content-type") || "application/octet-stream",
+    sizeBytes: Number(metadata.response.headers.get("content-length") || 0),
+    lastModified: metadata.response.headers.get("last-modified") || null,
     publicUrl: publicUrl(key, settings),
   };
 }
@@ -382,4 +521,6 @@ module.exports = {
   createFolder,
   createUploadUrl,
   createDownloadUrl,
+  presignedUrl,
+  signedRequest,
 };

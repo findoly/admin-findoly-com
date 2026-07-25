@@ -100,17 +100,23 @@ async function create(input = {}, actor) {
   const name = textValue(input.name, { label: "Role name", required: true, maxLength: 120 });
   const permissions = normalizePermissions(input.permissions, []);
   if (!permissions.length) throw validationError("Select at least one permission");
-  const role = await Role.create({
-    name,
-    slug: slugify(input.slug || name),
-    description: textValue(input.description, { label: "Role description", maxLength: 1000 }),
-    permissions,
-    active: booleanValue(input.active, { label: "Role active status", fallback: true }),
-    isSystem: false,
-    isSuperAdmin: false,
-    createdBy: actorValue(actor),
-    updatedBy: actorValue(actor),
-  });
+  let role;
+  try {
+    role = await Role.create({
+      name,
+      slug: slugify(input.slug || name),
+      description: textValue(input.description, { label: "Role description", maxLength: 1000 }),
+      permissions,
+      active: booleanValue(input.active, { label: "Role active status", fallback: true }),
+      isSystem: false,
+      isSuperAdmin: false,
+      createdBy: actorValue(actor),
+      updatedBy: actorValue(actor),
+    });
+  } catch (error) {
+    if (error?.code === 11000) throw Object.assign(new Error("A role with this name or slug already exists"), { status: 409 });
+    throw error;
+  }
   return presentRole(role.toObject(), 0);
 }
 
@@ -130,20 +136,26 @@ async function update(roleId, input = {}, actor) {
   if (!active && current.employeeCount > 0) {
     throw Object.assign(new Error("Move employees to another role before deactivating this role"), { status: 409 });
   }
-  const updated = await Role.findOneAndUpdate(
-    { roleId: current.roleId },
-    {
-      $set: {
-        name,
-        slug: current.isSystem ? current.slug : slugify(input.slug || name),
-        description: textValue(input.description ?? current.description, { label: "Role description", maxLength: 1000 }),
-        permissions,
-        active,
-        updatedBy: actorValue(actor),
+  let updated;
+  try {
+    updated = await Role.findOneAndUpdate(
+      { roleId: current.roleId },
+      {
+        $set: {
+          name,
+          slug: current.isSystem ? current.slug : slugify(input.slug || name),
+          description: textValue(input.description ?? current.description, { label: "Role description", maxLength: 1000 }),
+          permissions,
+          active,
+          updatedBy: actorValue(actor),
+        },
       },
-    },
-    { new: true, runValidators: true },
-  ).lean();
+      { new: true, runValidators: true },
+    ).lean();
+  } catch (error) {
+    if (error?.code === 11000) throw Object.assign(new Error("A role with this name or slug already exists"), { status: 409 });
+    throw error;
+  }
   return presentRole(updated, current.employeeCount);
 }
 

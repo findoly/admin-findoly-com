@@ -208,6 +208,7 @@
             this.slackForm.channelName = selected?.name || '';
           },
           async sendSlack() {
+            if (this.slackSending) return;
             this.slackSending = true;
             this.slackError = '';
             this.slackSuccess = '';

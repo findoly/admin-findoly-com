@@ -207,22 +207,49 @@ async function get(invoiceId) {
   return invoice;
 }
 
+async function assertInvoiceNumberAvailable(invoiceNo, excludeInvoiceId = "") {
+  const query = { invoiceNo };
+  if (excludeInvoiceId) query.invoiceId = { $ne: excludeInvoiceId };
+  const exists = await Invoice.exists(query);
+  if (exists) throw validationError("Invoice number is already in use", 409);
+}
+
+function translateInvoiceWriteError(error) {
+  if (error?.code === 11000 && error?.keyPattern?.invoiceNo) {
+    throw validationError("Invoice number is already in use", 409);
+  }
+  throw error;
+}
+
 async function create(input = {}) {
-  return Invoice.create(normalizeInvoiceInput(input));
+  const data = normalizeInvoiceInput(input);
+  await assertInvoiceNumberAvailable(data.invoiceNo);
+  try {
+    return await Invoice.create(data);
+  } catch (error) {
+    return translateInvoiceWriteError(error);
+  }
 }
 
 async function update(invoiceId, input = {}) {
   const current = await get(invoiceId);
   assertInvoiceIdUnchanged(current, input);
-  const result = await Invoice.updateOne(
-    { invoiceId: current.invoiceId },
-    {
-      $set: {
-        ...normalizeInvoiceInput(input, current),
-        updatedAt: new Date(),
+  const data = normalizeInvoiceInput(input, current);
+  await assertInvoiceNumberAvailable(data.invoiceNo, current.invoiceId);
+  let result;
+  try {
+    result = await Invoice.updateOne(
+      { invoiceId: current.invoiceId },
+      {
+        $set: {
+          ...data,
+          updatedAt: new Date(),
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    return translateInvoiceWriteError(error);
+  }
   if (!result.matchedCount) {
     throw Object.assign(new Error("Invoice not found"), { status: 404 });
   }
@@ -239,5 +266,6 @@ module.exports = {
   normalizeInvoiceInput,
   assertInvoiceIdUnchanged,
   generateInvoiceNumber,
+  assertInvoiceNumberAvailable,
   INVOICE_STATUSES,
 };

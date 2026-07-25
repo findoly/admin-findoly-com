@@ -95,20 +95,28 @@ async function create(input = {}, actor) {
   await ensureDefaultRoles();
   const mobile = employeeMobile(input.mobile);
   const role = await activeRole(input.roleId);
-  const employee = await Employee.create({
-    name: textValue(input.name, { label: "Employee name", required: true, maxLength: 120 }),
-    mobile,
-    normalizedMobile: mobile,
-    email: emailValue(input.email, { label: "Employee email", required: false }),
-    employeeCode: textValue(input.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
-    designation: textValue(input.designation, { label: "Designation", maxLength: 120 }),
-    department: textValue(input.department, { label: "Department", maxLength: 120 }),
-    roleId: role.roleId,
-    status: enumValue(input.status, STATUSES, { label: "Employee status", fallback: "active" }),
-    notes: textValue(input.notes, { label: "Employee notes", maxLength: 5000 }),
-    createdBy: actorValue(actor),
-    updatedBy: actorValue(actor),
-  });
+  let employee;
+  try {
+    employee = await Employee.create({
+      name: textValue(input.name, { label: "Employee name", required: true, maxLength: 120 }),
+      mobile,
+      normalizedMobile: mobile,
+      email: emailValue(input.email, { label: "Employee email", required: false }),
+      employeeCode: textValue(input.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
+      designation: textValue(input.designation, { label: "Designation", maxLength: 120 }),
+      department: textValue(input.department, { label: "Department", maxLength: 120 }),
+      roleId: role.roleId,
+      status: enumValue(input.status, STATUSES, { label: "Employee status", fallback: "active" }),
+      notes: textValue(input.notes, { label: "Employee notes", maxLength: 5000 }),
+      createdBy: actorValue(actor),
+      updatedBy: actorValue(actor),
+    });
+  } catch (error) {
+    if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) {
+      throw Object.assign(new Error("An employee already uses this mobile number"), { status: 409 });
+    }
+    throw error;
+  }
   const created = presentEmployee(employee.toObject(), role);
   await accountRegistrationService.dispatch(
     "employee_created",
@@ -133,25 +141,33 @@ async function update(employeeId, input = {}, actor) {
     if (nextRole.roleId !== current.roleId) throw validationError("You cannot change your own role");
   }
   const mobile = employeeMobile(input.mobile ?? current.mobile);
-  const updated = await Employee.findOneAndUpdate(
-    { employeeId: current.employeeId },
-    {
-      $set: {
-        name: textValue(input.name ?? current.name, { label: "Employee name", required: true, maxLength: 120 }),
-        mobile,
-        normalizedMobile: mobile,
-        email: emailValue(input.email ?? current.email, { label: "Employee email", required: false }),
-        employeeCode: textValue(input.employeeCode ?? current.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
-        designation: textValue(input.designation ?? current.designation, { label: "Designation", maxLength: 120 }),
-        department: textValue(input.department ?? current.department, { label: "Department", maxLength: 120 }),
-        roleId: nextRole.roleId,
-        status: nextStatus,
-        notes: textValue(input.notes ?? current.notes, { label: "Employee notes", maxLength: 5000 }),
-        updatedBy: actorValue(actor),
+  let updated;
+  try {
+    updated = await Employee.findOneAndUpdate(
+      { employeeId: current.employeeId },
+      {
+        $set: {
+          name: textValue(input.name ?? current.name, { label: "Employee name", required: true, maxLength: 120 }),
+          mobile,
+          normalizedMobile: mobile,
+          email: emailValue(input.email ?? current.email, { label: "Employee email", required: false }),
+          employeeCode: textValue(input.employeeCode ?? current.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
+          designation: textValue(input.designation ?? current.designation, { label: "Designation", maxLength: 120 }),
+          department: textValue(input.department ?? current.department, { label: "Department", maxLength: 120 }),
+          roleId: nextRole.roleId,
+          status: nextStatus,
+          notes: textValue(input.notes ?? current.notes, { label: "Employee notes", maxLength: 5000 }),
+          updatedBy: actorValue(actor),
+        },
       },
-    },
-    { new: true, runValidators: true },
-  ).lean();
+      { new: true, runValidators: true },
+    ).lean();
+  } catch (error) {
+    if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) {
+      throw Object.assign(new Error("An employee already uses this mobile number"), { status: 409 });
+    }
+    throw error;
+  }
   return presentEmployee(updated, nextRole);
 }
 

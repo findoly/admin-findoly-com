@@ -97,6 +97,8 @@ The application services query only named ID fields. Legacy nested documents are
 
 ## Install and migrate
 
+Use Node.js 20 or newer. The locked AWS SES SDK requires Node.js 20+.
+
 ```bash
 cp .env.example .env
 npm install
@@ -202,6 +204,16 @@ POST /api/leads
 ## Validation
 
 ```bash
+# Dependency-free syntax, EJS, route, view and lock-file checks
+npm run qa:static
+
+# Critical regression tests that can run before external services are configured
+npm run qa:critical
+
+# Runs both commands above
+npm run qa:production
+
+# Run after npm install for the complete project test suite
 npm run check
 npm test
 ```

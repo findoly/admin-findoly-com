@@ -13,15 +13,16 @@
     "migrate:structure": "node scripts/migrate-structure.js",
     "migrate:lead-distribution": "node scripts/migrate-structure.js",
     "migrate:agent-payouts": "node scripts/migrate-agent-payouts.js",
-    "migrate:marketplace-location": "node scripts/backfill-marketplace-locations.js"
+    "migrate:marketplace-location": "node scripts/backfill-marketplace-locations.js",
+    "qa:static": "node scripts/qa-static.js",
+    "qa:critical": "node --test test/validation-utilities-expanded.test.js test/customer-portal-integration.test.js test/marketplace-publication-static.test.js test/provider-manual-credit-static.test.js test/registration-storage-static.test.js test/otp-proxy-routing.test.js test/production-readiness.test.js",
+    "qa:production": "npm run qa:static && npm run qa:critical"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1086.0",
     "@aws-sdk/client-sesv2": "^3.1086.0",
-    "@aws-sdk/s3-request-presigner": "^3.1086.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

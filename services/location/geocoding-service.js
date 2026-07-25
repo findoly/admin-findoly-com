@@ -25,7 +25,27 @@ async function geocodePincode(value, options = {}) {
   if (!pincode) return null;
 
   const cached = await PincodeLocation.findOne({ pincode }).lean();
-  if (cached) return cached;
+  if (cached) {
+    const hasCachedLatitude = cached.latitude !== null && cached.latitude !== undefined && String(cached.latitude).trim() !== "";
+    const hasCachedLongitude = cached.longitude !== null && cached.longitude !== undefined && String(cached.longitude).trim() !== "";
+    const cachedLatitude = Number(cached.latitude);
+    const cachedLongitude = Number(cached.longitude);
+    const cachedCountry = String(cached.country || "India").trim().toLowerCase();
+    if (
+      hasCachedLatitude &&
+      hasCachedLongitude &&
+      Number.isFinite(cachedLatitude) &&
+      cachedLatitude >= -90 &&
+      cachedLatitude <= 90 &&
+      Number.isFinite(cachedLongitude) &&
+      cachedLongitude >= -180 &&
+      cachedLongitude <= 180 &&
+      (!cachedCountry || cachedCountry === "india")
+    ) {
+      return { ...cached, latitude: cachedLatitude, longitude: cachedLongitude };
+    }
+    // Ignore corrupted or legacy cache rows and refresh them from the provider.
+  }
 
   const key = String(process.env.GOOGLE_MAPS_API_KEY || "").trim();
   if (!key) {
@@ -44,7 +64,9 @@ async function geocodePincode(value, options = {}) {
   let response;
   try {
     response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`, {
-      signal: AbortSignal.timeout(Number(process.env.GOOGLE_MAPS_TIMEOUT_MS || 8000)),
+      signal: AbortSignal.timeout(
+        Math.min(Math.max(Number(process.env.GOOGLE_MAPS_TIMEOUT_MS || 8000) || 8000, 1000), 60000),
+      ),
       headers: { accept: "application/json" },
     });
   } catch (error) {
@@ -63,7 +85,16 @@ async function geocodePincode(value, options = {}) {
     );
   }
 
-  const body = await response.json();
+  let body;
+  try {
+    body = await response.json();
+  } catch (_error) {
+    throw validationError(
+      "We could not verify this PIN code right now. Please try again shortly.",
+      503,
+      "GEOCODING_INVALID_RESPONSE",
+    );
+  }
   const result = body?.results?.[0];
   const latitude = Number(result?.geometry?.location?.lat);
   const longitude = Number(result?.geometry?.location?.lng);

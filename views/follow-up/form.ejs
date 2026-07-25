@@ -91,7 +91,7 @@
                   </div>
                 </div>
                 <div class="card-footer">
-                  <button class="btn btn-primary">Save</button>
+                  <button class="btn btn-primary" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
                 </div>
               </form>
             </div>
@@ -110,15 +110,21 @@
                     notes: "",
                   },
                   error: "",
+                  saving: false,
                   async init() {
-                    if (this.mode === "edit")
+                    if (this.mode === "edit") {
+                      const record = (await apiFetch("/api/follow-up/" + this.recordId)).data;
                       this.form = {
                         ...this.form,
-                        ...(await apiFetch("/api/follow-up/" + this.recordId))
-                          .data,
+                        ...record,
+                        dueAt: formatDateTimeLocal(record.dueAt),
                       };
+                    }
                   },
                   async save() {
+                    if (this.saving) return;
+                    this.error = "";
+                    this.saving = true;
                     try {
                       await apiFetch(
                         this.mode === "edit"
@@ -132,6 +138,8 @@
                       location.href = "/follow-ups";
                     } catch (e) {
                       this.error = e.message;
+                    } finally {
+                      this.saving = false;
                     }
                   },
                 };

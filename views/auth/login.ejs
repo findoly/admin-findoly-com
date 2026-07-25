@@ -91,6 +91,7 @@
           returnTo: safeReturnTo(new URLSearchParams(location.search).get('returnTo')),
           digits(value) { return String(value || '').replace(/\D/g, '').slice(-10); },
           async sendOtp(isResend = false) {
+            if (this.loading) return;
             this.error = '';
             this.message = '';
             if (!/^[6-9]\d{9}$/.test(this.form.mobile)) {
@@ -117,6 +118,7 @@
             }
           },
           async verifyOtp() {
+            if (this.loading) return;
             this.error = '';
             this.message = '';
             if (!/^\d{4,8}$/.test(this.form.otp)) {

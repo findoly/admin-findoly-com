@@ -19,7 +19,7 @@
         <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
         <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
         <div x-show="configLoaded && !config.configured" x-cloak class="alert alert-warning">
-          Amazon S3 is not configured. Add <code>AWS_REGION</code> and <code>AWS_S3_BUCKET</code> to the server environment. See <code>S3_FILE_MANAGER_SETUP.md</code>.
+          Amazon S3 is not configured. Add <code>AWS_REGION</code>, <code>AWS_S3_BUCKET</code>, and restricted IAM access keys to the server environment. See <code>S3_FILE_MANAGER_SETUP.md</code>.
         </div>
 
         <section class="card mb-3" x-show="config.configured">
@@ -146,6 +146,7 @@
           },
           async openFolder(prefix) { this.prefix = prefix || ''; this.search = ''; await this.load(false); },
           async createFolder() {
+            if (this.creatingFolder) return;
             this.creatingFolder = true; this.error = ''; this.message = '';
             try {
               await apiFetch('/api/storage/folders', { method:'POST', body:JSON.stringify({ prefix:this.prefix, folderName:this.folderName }) });
@@ -154,7 +155,7 @@
             finally { this.creatingFolder = false; }
           },
           async upload() {
-            if (!this.selectedFile) return;
+            if (this.uploading || !this.selectedFile) return;
             this.uploading = true; this.uploadProgress = 10; this.error = ''; this.message = '';
             try {
               const payload = {

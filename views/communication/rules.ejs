@@ -183,6 +183,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
           },
           async save() {
+            if (this.saving) return;
             this.saving = true;
             this.error = '';
             this.message = '';

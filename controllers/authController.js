@@ -14,12 +14,12 @@ const {
   releaseSendSlot,
 } = require("../services/access/otp-rate-limit-service");
 
-const OTP_SERVICE_BASE_URL = String(
-  process.env.CRM_OTP_BASE_URL || "https://api.findoly.com/otp",
-).replace(/\/+$/, "");
-const SEND_OTP_URL = process.env.CRM_OTP_SEND_URL || `${OTP_SERVICE_BASE_URL}/send-otp`;
-const VERIFY_OTP_URL = process.env.CRM_OTP_VERIFY_URL || `${OTP_SERVICE_BASE_URL}/verify-otp`;
-const REQUEST_TIMEOUT_MS = 12_000;
+const {
+  requestOtpApi,
+  OTP_SERVICE_BASE_URL,
+  SEND_OTP_URL,
+  VERIFY_OTP_URL,
+} = require("../services/access/otp-proxy-client");
 
 function employeeMobile(value, label = "Mobile number") {
   const mobile = validateMobile(value, { label });
@@ -27,45 +27,6 @@ function employeeMobile(value, label = "Mobile number") {
     throw Object.assign(new Error(`${label} must be a valid Indian mobile number`), { status: 400 });
   }
   return mobile;
-}
-
-async function requestOtpApi(url, payload) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok || body?.success === false || ["error", "failed", "fail"].includes(String(body?.status || "").toLowerCase())) {
-      const rawRetryAfter = body?.retryAfterSeconds || body?.retryAfter || response.headers.get("retry-after");
-      const retryAfterSeconds = Number.isFinite(Number(rawRetryAfter))
-        ? Math.max(1, Math.ceil(Number(rawRetryAfter)))
-        : 0;
-      let message = body?.message || body?.error || body?.data?.message || "OTP service request failed";
-      if (response.status === 429 && retryAfterSeconds > 0 && !/wait|second|minute/i.test(message)) {
-        message = `Too many OTP requests. Please wait ${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"} and try again.`;
-      }
-      const status = response.status === 429
-        ? 429
-        : response.status >= 400 && response.status < 500
-          ? 400
-          : 502;
-      throw Object.assign(new Error(message), { status, retryAfterSeconds });
-    }
-    return body;
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw Object.assign(new Error("OTP service did not respond in time"), { status: 504 });
-    }
-    if (error?.status) throw error;
-    throw Object.assign(new Error("Unable to connect to the OTP service"), { status: 502 });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function assertLoginAllowed(mobile) {
@@ -92,7 +53,8 @@ async function sendOtp(req, res, next) {
       },
     });
   } catch (error) {
-    if (rateLimitClaim && error?.code !== "CRM_OTP_SEND_RATE_LIMIT") {
+    const deliveryUncertain = [502, 504].includes(Number(error?.status)) && error?.requestMayHaveSucceeded;
+    if (rateLimitClaim && error?.code !== "CRM_OTP_SEND_RATE_LIMIT" && !deliveryUncertain) {
       await releaseSendSlot(mobile, rateLimitClaim.requestId).catch(() => {});
     }
     if (error?.code === "CRM_OTP_SEND_RATE_LIMIT") {
@@ -115,6 +77,21 @@ async function sendOtp(req, res, next) {
       });
     }
     if ([502, 504].includes(Number(error?.status))) {
+      const allowUnconfirmed = String(process.env.CRM_OTP_SEND_ALLOW_UNCONFIRMED || "true").toLowerCase() !== "false";
+      if (allowUnconfirmed && error?.requestMayHaveSucceeded) {
+        // Some OTP gateways deliver the message but close or time out before a
+        // usable acknowledgement reaches the CRM. Do not trap the employee on
+        // the mobile step; verification remains authoritative and secure.
+        return res.status(202).json({
+          success: true,
+          data: {
+            sessionId: "",
+            mobile,
+            deliveryUnconfirmed: true,
+            message: "OTP request submitted. Enter the code if it arrives; otherwise retry after the resend wait.",
+          },
+        });
+      }
       return res.status(503).json({
         success: false,
         code: "OTP_SERVICE_UNAVAILABLE",

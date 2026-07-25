@@ -146,7 +146,7 @@
             }
           },
           async saveReview() {
-            if (!this.distribution.providerId || !this.reviewForm.note.trim()) return;
+            if (this.reviewSaving || !this.distribution.providerId || !this.reviewForm.note.trim()) return;
             this.reviewSaving = true;
             this.error = '';
             this.success = '';

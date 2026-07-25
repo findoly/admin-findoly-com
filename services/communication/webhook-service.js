@@ -153,9 +153,15 @@ const processSes = async function (rawBody) {
   });
 };
 
+const constantTimeEqual = function (left, right) {
+  const a = Buffer.from(String(left || ""));
+  const b = Buffer.from(String(right || ""));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
 const processLambdaDelivery = async function (body, authHeader) {
   const expected = process.env.MESSAGE_LAMBDA_WEBHOOK_TOKEN || process.env.MESSAGE_LAMBDA_AUTH_TOKEN || "";
-  if (!expected || String(authHeader || "") !== `Bearer ${expected}`) {
+  if (!expected || !constantTimeEqual(String(authHeader || ""), `Bearer ${expected}`)) {
     throw validationError("Invalid message-delivery webhook token", 401);
   }
   const communicationId = identifierOrBlank(body.communicationId);

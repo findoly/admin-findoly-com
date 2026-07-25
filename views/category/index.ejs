@@ -156,6 +156,7 @@
                     this.slugTouched = false;
                   },
                   async save() {
+                    if (this.saving) return;
                     this.saving = true;
                     this.error = '';
                     this.success = '';

@@ -75,6 +75,9 @@ function normalizeInput(input = {}, current = {}) {
   const mobile = validateMobile(input.mobile ?? current.mobile ?? "", {
     label: "Customer mobile number",
   });
+  if (!/^[6-9]\d{9}$/.test(mobile)) {
+    throw validationError("Customer mobile number must be a valid Indian mobile number");
+  }
   const committedUnlocks = Math.max(
     1,
     Number(current.unlockedCount || 0) + Number(current.pendingUnlockCount || 0),
@@ -97,15 +100,17 @@ function normalizeInput(input = {}, current = {}) {
     }),
     city: textValue(input.city ?? current.city, {
       label: "City",
+      required: true,
       maxLength: 100,
     }),
     state: textValue(input.state ?? current.state, {
       label: "State",
+      required: true,
       maxLength: 100,
     }),
     pincode: pincodeValue(input.pincode ?? current.pincode, {
       label: "Pincode",
-      required: false,
+      required: true,
     }),
     category: textValue(input.category ?? current.category ?? categorySlug, {
       label: "Category name",
@@ -448,7 +453,7 @@ async function create(input = {}, actor = "admin") {
   }
 
   const createdLead = await get(enquiry.enquiryId);
-  await notificationService.trigger(
+  await notificationService.triggerSafe(
     "lead_created",
     {
       lead: createdLead,
@@ -789,7 +794,7 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
     on_hold: "lead_on_hold",
     distributed: "lead_distributed",
   };
-  await notificationService.trigger(
+  await notificationService.triggerSafe(
     eventByStatus[transition.toStatus] || "lead_status_changed",
     {
       lead: changedLead,

@@ -1,18 +1,21 @@
 const router = require("express").Router();
 const { apiAuth } = require("../middleware/auth");
 const enquiryController = require("../controllers/enquiryController");
+const { optionalIntakeToken, publicIntakeRateLimit, communicationOtpAccess, communicationEventAccess } = require("../middleware/public-api");
 router.use("/auth", require("./auth"));
-// Public intake aliases retained for website/agent integrations.
-router.post("/enquiries", enquiryController.createPublic);
-router.post("/requirements", enquiryController.createPublic);
-router.post("/leads", enquiryController.createPublic);
+// Public intake aliases retained for website/agent integrations. A token is
+// enforced when PUBLIC_INTAKE_API_TOKEN is configured; rate limiting is always
+// active to protect the database from accidental or abusive submission bursts.
+router.post("/enquiries", publicIntakeRateLimit, optionalIntakeToken, enquiryController.createPublic);
+router.post("/requirements", publicIntakeRateLimit, optionalIntakeToken, enquiryController.createPublic);
+router.post("/leads", publicIntakeRateLimit, optionalIntakeToken, enquiryController.createPublic);
 const communicationController = require("../controllers/communicationController");
-router.post("/communication/otp/send", communicationController.sendOtp);
-router.post("/communication/otp/verify", communicationController.verifyOtp);
-router.post("/communications/otp/send", communicationController.sendOtp);
-router.post("/communications/otp/verify", communicationController.verifyOtp);
-router.post("/communication/events/:event", communicationController.integrationEvent);
-router.post("/communications/events/:event", communicationController.integrationEvent);
+router.post("/communication/otp/send", communicationOtpAccess, communicationController.sendOtp);
+router.post("/communication/otp/verify", communicationOtpAccess, communicationController.verifyOtp);
+router.post("/communications/otp/send", communicationOtpAccess, communicationController.sendOtp);
+router.post("/communications/otp/verify", communicationOtpAccess, communicationController.verifyOtp);
+router.post("/communication/events/:event", communicationEventAccess, communicationController.integrationEvent);
+router.post("/communications/events/:event", communicationEventAccess, communicationController.integrationEvent);
 router.use("/customer-portal", require("./customer-portal"));
 router.use(apiAuth);
 router.use("/dashboard", require("./dashboard"));
@@ -21,6 +24,7 @@ router.use("/employees", require("./employee"));
 router.use("/role", require("./role"));
 router.use("/roles", require("./role"));
 router.use("/catalog", require("./catalog"));
+router.use("/location", require("./location"));
 router.use("/enquiry", require("./enquiry"));
 router.use("/enquiries", require("./enquiry"));
 router.use("/requirements", require("./enquiry"));

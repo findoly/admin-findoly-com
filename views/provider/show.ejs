@@ -252,6 +252,7 @@
                     return transaction.type === 'credit' ? '+' + value : '-' + value;
                   },
                   async addCredits() {
+                    if (this.addingCredits) return;
                     this.error = '';
                     this.success = '';
                     const amount = Number(this.creditForm.amountCredits || 0);
@@ -289,6 +290,7 @@
                     }
                   },
                   async sync() {
+                    if (this.syncing) return;
                     this.syncing = true;
                     this.error = '';
                     this.success = '';

@@ -4,6 +4,7 @@ const Enquiry = require("../../models/Enquiry");
 const enquiryService = require("../enquiry/enquiry-service");
 const catalogService = require("../catalog/catalog-service");
 const { validateMobile } = require("../../utils/mobile");
+const { numberValue, plainObjectValue, pincodeValue } = require("../../utils/validation");
 
 const CUSTOMER_VISIBLE_STATUS = Object.freeze({
   new: { key: "submitted", label: "Submitted", description: "Your enquiry has been received." },
@@ -121,7 +122,7 @@ async function createEnquiry(input = {}) {
       addressLine: text(input.addressLine, 500),
       city: text(input.city, 100),
       state: text(input.state, 100),
-      pincode: text(input.pincode, 6),
+      pincode: pincodeValue(input.pincode, { label: "Pincode", required: true }),
       category: category?.name || text(input.category, 120) || categorySlug,
       categorySlug,
       serviceType: text(input.serviceType, 120),
@@ -132,10 +133,14 @@ async function createEnquiry(input = {}) {
         ? input.priority
         : "normal",
       notes: text(input.notes, 5000),
-      additionalDetails:
-        input.additionalDetails && typeof input.additionalDetails === "object"
-          ? input.additionalDetails
-          : {},
+      additionalDetails: plainObjectValue(input.additionalDetails, {
+        label: "Additional details",
+        fallback: {},
+        maxKeys: 100,
+        maxDepth: 6,
+        maxArrayLength: 100,
+        maxBytes: 50_000,
+      }),
       sourceWebsite: "findoly.com",
       sourceChannel: "customer-website",
       sourceType: "direct-customer",
@@ -176,7 +181,7 @@ async function createEnquiry(input = {}) {
 
 async function listEnquiries(mobileInput, options = {}) {
   const normalizedMobile = mobile(mobileInput);
-  const limit = Math.min(50, Math.max(1, Number(options.limit || 25)));
+  const limit = numberValue(options.limit, { label: "Enquiry list limit", fallback: 25, min: 1, max: 50, integer: true });
   const rows = await Enquiry.find({ mobile: normalizedMobile })
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit)

@@ -57,7 +57,7 @@ async function update(req, res, next) {
   try {
     res.json({
       success: true,
-      data: await service.update(req.params.providerId, req.body),
+      data: await service.update(req.params.providerId, req.body, req.admin?.email || req.admin?.employeeId || "crm-admin"),
     });
   } catch (error) {
     next(error);

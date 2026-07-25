@@ -196,6 +196,9 @@ const getTemplate = async function (templateId, channel) {
   if (channel === "whatsapp" && template.status !== "approved") {
     throw validationError("WhatsApp messages can use only approved templates");
   }
+  if (channel === "email" && template.status !== "active") {
+    throw validationError("Email messages can use only active email templates");
+  }
   return template;
 };
 
@@ -488,29 +491,31 @@ const createInbound = async function (input) {
 };
 
 const dashboard = async function () {
-  const statusMap = new Map();
-  const channelMap = new Map();
-  const rows = Communication.find({})
-    .select({ channel: 1, status: 1 })
-    .lean()
-    .cursor();
-  for await (const row of rows) {
-    const channel = row.channel || "unknown";
-    const status = row.status || "unknown";
-    const statusKey = `${channel}:${status}`;
-    statusMap.set(statusKey, (statusMap.get(statusKey) || 0) + 1);
-    channelMap.set(channel, (channelMap.get(channel) || 0) + 1);
-  }
-  const statuses = Array.from(statusMap.entries()).map(function ([key, count]) {
-    const separator = key.indexOf(":");
-    return {
-      _id: { channel: key.slice(0, separator), status: key.slice(separator + 1) },
-      count,
-    };
-  });
-  const channelTotals = Array.from(channelMap.entries()).map(function ([channel, count]) {
-    return { _id: channel, count };
-  });
+  // Aggregate counts inside MongoDB instead of streaming every communication
+  // document into Node. This keeps the dashboard usable as the log grows.
+  const [statuses, channelTotals] = await Promise.all([
+    Communication.aggregate([
+      {
+        $group: {
+          _id: {
+            channel: { $ifNull: ["$channel", "unknown"] },
+            status: { $ifNull: ["$status", "unknown"] },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.channel": 1, "_id.status": 1 } },
+    ]),
+    Communication.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ["$channel", "unknown"] },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
   const recent = await Communication.find({})
     .sort({ createdAt: -1, _id: -1 })
     .limit(10)

@@ -10,7 +10,7 @@ Run this once after extracting or deploying the updated project:
 npm install
 ```
 
-This installs the added Amazon S3 SDK packages and updates the local dependency lock when registry access is available.
+This installs the CRM dependencies from the included lock file. The S3 File Manager uses Node.js built-in signing code, so it does not add a separate S3 SDK dependency.
 
 ## Required environment variables
 
@@ -19,12 +19,16 @@ AWS_REGION=ap-south-1
 AWS_S3_BUCKET=findoly-storage
 ```
 
-Use either an IAM role attached to the server or restricted IAM credentials:
+Add restricted IAM credentials to the server environment:
 
 ```env
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+# Required only for temporary AWS credentials
+AWS_SESSION_TOKEN=
 ```
+
+Do not commit these values to the project. The current lightweight S3 integration reads environment credentials directly; it does not fetch EC2/ECS role credentials automatically.
 
 Optional settings:
 

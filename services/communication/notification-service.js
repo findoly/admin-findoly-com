@@ -259,6 +259,15 @@ const trigger = async function (event, context, actor) {
   return output;
 };
 
+const triggerSafe = async function (event, context, actor) {
+  try {
+    return await trigger(event, context, actor);
+  } catch (error) {
+    console.error(`Communication event ${event} failed after the business action completed:`, error.message);
+    return [];
+  }
+};
+
 const testRule = async function (ruleId, context, actor) {
   const rule = await CommunicationRule.findOne({ ruleId }).lean();
   if (!rule) throw Object.assign(new Error("Communication rule not found"), { status: 404 });
@@ -266,4 +275,4 @@ const testRule = async function (ruleId, context, actor) {
   return sendRule(rule, context || {}, actor || "admin");
 };
 
-module.exports = { ensureDefaultRules, trigger, testRule, variablesFor, resolveRecipient, DEFAULT_RULES };
+module.exports = { ensureDefaultRules, trigger, triggerSafe, testRule, variablesFor, resolveRecipient, DEFAULT_RULES };

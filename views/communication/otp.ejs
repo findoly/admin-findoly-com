@@ -20,7 +20,7 @@
       </div><%- include('../partials/footer') %>
     </div></div></div>
     <script>
-      function otpPage(){return{rows:[],form:{channel:'whatsapp',recipient:'',purpose:'login'},sending:false,error:'',message:'',async load(){try{this.rows=(await apiFetch('/api/communication/otp?limit=200')).data||[];}catch(error){this.error=error.message;}},async sendOtp(){this.sending=true;this.error='';this.message='';try{const body=await apiFetch('/api/communication/otp/send',{method:'POST',body:JSON.stringify(this.form)});this.message='OTP sent. Request ID: '+body.data.otpId;await this.load();}catch(error){this.error=error.message;}finally{this.sending=false;}}};}
+      function otpPage(){return{rows:[],form:{channel:'whatsapp',recipient:'',purpose:'login'},sending:false,error:'',message:'',async load(){try{this.rows=(await apiFetch('/api/communication/otp?limit=200')).data||[];}catch(error){this.error=error.message;}},async sendOtp(){if(this.sending)return;this.sending=true;this.error='';this.message='';try{const body=await apiFetch('/api/communication/otp/send',{method:'POST',body:JSON.stringify(this.form)});this.message='OTP sent. Request ID: '+body.data.otpId;await this.load();}catch(error){this.error=error.message;}finally{this.sending=false;}}};}
     </script>
     <%- include('../partials/scripts') %>
   </body>

@@ -23,8 +23,8 @@
       function templateList() {
         return { rows: [], q: '', channel: '', status: '', error: '', message: '', syncing: false,
           async load() { this.error=''; const query = new URLSearchParams({q:this.q,channel:this.channel,status:this.status}); [...query].forEach(([key,value]) => { if(!value) query.delete(key); }); try { this.rows=(await apiFetch('/api/communication/templates?'+query.toString())).data||[]; } catch(error){ this.error=error.message; } },
-          async sync() { this.syncing=true; this.error=''; this.message=''; try { const body=await apiFetch('/api/communication/templates/sync',{method:'POST',body:'{}'}); this.message=`Synced ${body.data.remoteCount} Meta templates: imported ${body.data.imported || 0}, updated ${body.data.updated || 0}.`; await this.load(); } catch(error){ this.error=error.message; } finally { this.syncing=false; } },
-          async submit(row) { row.busy=true; this.error=''; this.message=''; try { await apiFetch('/api/communication/templates/'+row.templateId+'/submit',{method:'POST',body:'{}'}); this.message='Template submitted to Meta.'; await this.load(); } catch(error){ this.error=error.message; } finally { row.busy=false; } }
+          async sync() { if(this.syncing)return; this.syncing=true; this.error=''; this.message=''; try { const body=await apiFetch('/api/communication/templates/sync',{method:'POST',body:'{}'}); this.message=`Synced ${body.data.remoteCount} Meta templates: imported ${body.data.imported || 0}, updated ${body.data.updated || 0}.`; await this.load(); } catch(error){ this.error=error.message; } finally { this.syncing=false; } },
+          async submit(row) { if(row.busy)return; row.busy=true; this.error=''; this.message=''; try { await apiFetch('/api/communication/templates/'+row.templateId+'/submit',{method:'POST',body:'{}'}); this.message='Template submitted to Meta.'; await this.load(); } catch(error){ this.error=error.message; } finally { row.busy=false; } }
         };
       }
     </script>

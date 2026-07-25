@@ -25,9 +25,9 @@ function validateMobile(value, options = {}) {
   }
 
   const normalized = normalizeMobile(raw);
-  if (!/^\d{10}$/.test(normalized)) {
+  if (!/^[6-9]\d{9}$/.test(normalized)) {
     throw Object.assign(
-      new Error(`${label} must contain exactly 10 digits`),
+      new Error(`${label} must be a valid 10-digit Indian mobile number`),
       { status: 400 },
     );
   }

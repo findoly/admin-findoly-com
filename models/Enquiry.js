@@ -12,7 +12,7 @@ const enquirySchema = new mongoose.Schema(
     },
     recordType: { type: String, default: "requirement" },
     name: { type: String, default: "", trim: true, maxlength: 120 },
-    mobile: { type: String, default: "", trim: true, index: true, match: /^\d{10}$/ },
+    mobile: { type: String, default: "", trim: true, index: true, match: /^[6-9]\d{9}$/ },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, validate: { validator: (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value), message: "Customer email is invalid" } },
     addressLine: { type: String, default: "", trim: true },
     city: { type: String, default: "", trim: true, index: true },

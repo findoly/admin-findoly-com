@@ -255,11 +255,6 @@ const triggerEvent = async function (req, res, next) {
 
 const integrationEvent = async function (req, res, next) {
   try {
-    const expected = process.env.COMMUNICATION_EVENT_API_TOKEN || "";
-    const supplied = req.get("x-communication-token") || String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!expected || supplied !== expected) {
-      throw Object.assign(new Error("Invalid communication integration token"), { status: 401 });
-    }
     const context = { ...(req.body || {}) };
     const providerLeadStatus = providerStatusService.providerStatusFromEvent(
       req.params.event,

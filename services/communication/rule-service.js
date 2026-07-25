@@ -41,6 +41,9 @@ const validateTemplate = async function (templateId, channel, enabled) {
   if (channel === "whatsapp" && template.status !== "approved") {
     throw validationError("WhatsApp rule requires an approved template");
   }
+  if (channel === "email" && template.status !== "active") {
+    throw validationError("Email rule requires an active email template");
+  }
   return id;
 };
 
@@ -126,11 +129,22 @@ const get = async function (ruleId) {
   return rule;
 };
 
+const translateRuleWriteError = function (error) {
+  if (error?.code === 11000) {
+    throw validationError("A communication rule already exists for this event and recipient", 409);
+  }
+  throw error;
+};
+
 const create = async function (input, actor) {
   const data = await normalizeInput(input || {}, {});
   data.createdBy = actor || "admin";
   data.updatedBy = actor || "admin";
-  return CommunicationRule.create(data);
+  try {
+    return await CommunicationRule.create(data);
+  } catch (error) {
+    return translateRuleWriteError(error);
+  }
 };
 
 const update = async function (ruleId, input, actor) {
@@ -140,7 +154,11 @@ const update = async function (ruleId, input, actor) {
   }
   const data = await normalizeInput(input || {}, current);
   data.updatedBy = actor || "admin";
-  await CommunicationRule.updateOne({ ruleId: current.ruleId }, { $set: data });
+  try {
+    await CommunicationRule.updateOne({ ruleId: current.ruleId }, { $set: data });
+  } catch (error) {
+    return translateRuleWriteError(error);
+  }
   return get(current.ruleId);
 };
 

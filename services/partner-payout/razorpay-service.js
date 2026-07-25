@@ -15,14 +15,17 @@ function basicAuthHeader() {
 }
 
 async function createPayout(input = {}) {
-  const response = await fetch(`${BASE_URL}/payouts`, {
+  const timeoutMs = Math.min(Math.max(Number(process.env.RAZORPAY_HTTP_TIMEOUT_MS || 15000) || 15000, 1000), 60000);
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}/payouts`, {
     method: "POST",
     headers: {
       Authorization: basicAuthHeader(),
       "Content-Type": "application/json",
       "X-Payout-Idempotency": input.idempotencyKey,
     },
-    body: JSON.stringify({
+      body: JSON.stringify({
       account_number: requiredEnv("RAZORPAYX_ACCOUNT_NUMBER"),
       fund_account_id: input.fundAccountId,
       amount: input.amountPaise,
@@ -32,11 +35,22 @@ async function createPayout(input = {}) {
       queue_if_low_balance: false,
       reference_id: input.referenceId,
       narration: String(input.narration || "Findoly partner payout").slice(0, 30),
-      notes: input.notes || {},
-    }),
-  });
+        notes: input.notes || {},
+      }),
+      signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (error) {
+    throw Object.assign(
+      new Error(error?.name === "TimeoutError" || error?.name === "AbortError"
+        ? "Razorpay payout request timed out"
+        : "Unable to connect to Razorpay"),
+      { status: 503, code: "RAZORPAY_UNAVAILABLE", cause: error },
+    );
+  }
 
-  const body = await response.json().catch(() => ({}));
+  const raw = await response.text().catch(() => "");
+  let body = {};
+  try { body = raw ? JSON.parse(raw) : {}; } catch (_error) { body = { message: raw.slice(0, 1000) }; }
   if (!response.ok) {
     const description = body?.error?.description || body?.error?.reason || body?.message || "Razorpay payout request failed";
     const error = Object.assign(new Error(description), { status: 502, providerBody: body });

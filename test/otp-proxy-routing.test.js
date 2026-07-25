@@ -7,7 +7,7 @@ process.env.CRM_OTP_BASE_URL = "https://api.findoly.com/otp";
 delete process.env.CRM_OTP_SEND_URL;
 delete process.env.CRM_OTP_VERIFY_URL;
 
-const authController = require("../controllers/authController");
+const authController = require("../services/access/otp-proxy-client");
 
 test("server-side Findoly OTP endpoints use the OTP namespace", () => {
   assert.equal(authController.SEND_OTP_URL, "https://api.findoly.com/otp/send-otp");

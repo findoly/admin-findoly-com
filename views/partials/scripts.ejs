@@ -99,6 +99,13 @@
       : '—';
   }
 
+  function formatDateTimeLocal(value) {
+    const date = safeDate(value);
+    if (!date) return '';
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  }
+
   function humanize(value) {
     return String(value || '—').replace(/[_-]/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   }

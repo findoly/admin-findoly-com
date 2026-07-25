@@ -171,7 +171,7 @@
                   </div>
                 </div>
                 <div class="card-footer">
-                  <button class="btn btn-primary">Save invoice</button>
+                  <button class="btn btn-primary" :disabled="saving" x-text="saving ? 'Saving…' : 'Save invoice'"></button>
                 </div>
               </form>
             </div>
@@ -194,6 +194,7 @@
                     notes: "",
                   },
                   error: "",
+                  saving: false,
                   async init() {
                     if (this.mode === "edit")
                       this.form = {
@@ -203,6 +204,9 @@
                       };
                   },
                   async save() {
+                    if (this.saving) return;
+                    this.error = "";
+                    this.saving = true;
                     try {
                       if (!Array.isArray(this.form.items) || !this.form.items.length) {
                         throw new Error("Invoice must contain at least one item");
@@ -210,6 +214,19 @@
                       if (this.form.items.length > 100) {
                         throw new Error("Invoice cannot contain more than 100 items");
                       }
+                      this.form.items.forEach((item, index) => {
+                        if (!String(item.description || "").trim()) {
+                          throw new Error("Invoice item " + (index + 1) + " description is required");
+                        }
+                        const qty = Number(item.qty);
+                        const rate = Number(item.rate);
+                        if (!Number.isFinite(qty) || qty < 0.01 || qty > 1000000) {
+                          throw new Error("Invoice item " + (index + 1) + " quantity is invalid");
+                        }
+                        if (!Number.isFinite(rate) || rate < 0 || rate > 1000000000) {
+                          throw new Error("Invoice item " + (index + 1) + " rate is invalid");
+                        }
+                      });
                       if (this.form.issueDate && this.form.dueDate && this.form.dueDate < this.form.issueDate) {
                         throw new Error("Invoice due date cannot be before the issue date");
                       }
@@ -225,6 +242,8 @@
                       location.href = "/billing";
                     } catch (e) {
                       this.error = e.message;
+                    } finally {
+                      this.saving = false;
                     }
                   },
                 };

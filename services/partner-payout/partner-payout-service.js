@@ -77,18 +77,45 @@ function maturedEligibleQuery(agentId, now = new Date()) {
   };
 }
 
-function selectRequirements(rows, payableCount, conversionNeeded) {
-  const converted = rows.filter((row) => row.agentSaleConversion === "converted").sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  const chosen = converted.slice(0, conversionNeeded);
-  const chosenIds = new Set(chosen.map((row) => row.enquiryId));
-  for (const row of rows.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))) {
-    if (chosen.length >= payableCount) break;
-    if (!chosenIds.has(row.enquiryId)) {
-      chosen.push(row);
-      chosenIds.add(row.enquiryId);
-    }
-  }
-  return chosen.slice(0, payableCount);
+function maximumReferralsPerWithdrawal() {
+  const configured = Number(process.env.AGENT_WITHDRAWAL_MAX_REFERRALS || 1000) || 1000;
+  const bounded = Math.min(Math.max(Math.floor(configured), 10), 5000);
+  return Math.max(10, Math.floor(bounded / 10) * 10);
+}
+
+const ELIGIBILITY_SELECTION = Object.freeze({
+  _id: 0,
+  enquiryId: 1,
+  requirementTitle: 1,
+  name: 1,
+  mobile: 1,
+  category: 1,
+  status: 1,
+  agentReferralValidation: 1,
+  agentSaleConversion: 1,
+  partnerEligibilityDate: 1,
+  createdAt: 1,
+});
+
+async function selectRequirements(query, payableCount, conversionNeeded) {
+  if (payableCount <= 0) return [];
+  const converted = await Enquiry.find({ ...query, agentSaleConversion: "converted" })
+    .sort({ createdAt: 1, _id: 1 })
+    .select(ELIGIBILITY_SELECTION)
+    .limit(conversionNeeded)
+    .lean();
+  const chosenIds = converted.map((row) => row.enquiryId);
+  const remaining = Math.max(0, payableCount - converted.length);
+  if (!remaining) return converted.slice(0, payableCount);
+  const others = await Enquiry.find({
+    ...query,
+    ...(chosenIds.length ? { enquiryId: { $nin: chosenIds } } : {}),
+  })
+    .sort({ createdAt: 1, _id: 1 })
+    .select(ELIGIBILITY_SELECTION)
+    .limit(remaining)
+    .lean();
+  return [...converted, ...others].slice(0, payableCount);
 }
 
 async function calculateEligibility(agentId, now = new Date()) {
@@ -97,20 +124,25 @@ async function calculateEligibility(agentId, now = new Date()) {
     { agentId: agent.agentId, agentReferralValidation: "valid", partnerEligibilityDate: { $lte: now }, partnerPayoutStatus: "waiting_period", status: { $nin: INVALID_REQUIREMENT_STATUSES } },
     { $set: { partnerPayoutStatus: "unpaid", updatedAt: now } },
   );
-  const rows = await Enquiry.find(maturedEligibleQuery(agent.agentId, now))
-    .sort({ createdAt: 1, _id: 1 })
-    .select({ _id: 0, enquiryId: 1, requirementTitle: 1, name: 1, mobile: 1, category: 1, status: 1, agentReferralValidation: 1, agentSaleConversion: 1, partnerEligibilityDate: 1, createdAt: 1 })
-    .lean();
-  const validReferralCount = rows.length;
-  const convertedSaleCount = rows.filter((row) => row.agentSaleConversion === "converted").length;
-  const eligibleBlockCount = Math.min(Math.floor(validReferralCount / 10), Math.floor(convertedSaleCount / 2));
+  const query = maturedEligibleQuery(agent.agentId, now);
+  const [validReferralCount, convertedSaleCount] = await Promise.all([
+    Enquiry.countDocuments(query),
+    Enquiry.countDocuments({ ...query, agentSaleConversion: "converted" }),
+  ]);
+  const availableEligibleBlockCount = Math.min(
+    Math.floor(validReferralCount / 10),
+    Math.floor(convertedSaleCount / 2),
+  );
+  const maximumBlocks = maximumReferralsPerWithdrawal() / 10;
+  const eligibleBlockCount = Math.min(availableEligibleBlockCount, maximumBlocks);
   const payableReferralCount = eligibleBlockCount * 10;
   const payoutPerReferralPaise = Number(agent.payoutPerReferralPaise || 5000);
-  const chosen = selectRequirements(rows, payableReferralCount, eligibleBlockCount * 2);
+  const chosen = await selectRequirements(query, payableReferralCount, eligibleBlockCount * 2);
   return {
     agent,
     validReferralCount,
     convertedSaleCount,
+    availableEligibleBlockCount,
     eligibleBlockCount,
     payableReferralCount,
     payoutPerReferralPaise,
@@ -144,6 +176,7 @@ async function summaryForAgent(agentId) {
     eligibility: {
       validReferralCount: calculation.validReferralCount,
       convertedSaleCount: calculation.convertedSaleCount,
+      availableEligibleBlockCount: calculation.availableEligibleBlockCount,
       eligibleBlockCount: calculation.eligibleBlockCount,
       payableReferralCount: calculation.payableReferralCount,
       payoutPerReferralPaise: calculation.payoutPerReferralPaise,
@@ -320,10 +353,16 @@ async function processPayout(withdrawalId, note, actor = "crm-admin") {
   const attempt = Number(row.payoutAttemptCount || 0) + 1;
   const idempotencyKey = `${row.withdrawalId.slice(0, 32)}${String(attempt).padStart(2, "0")}`;
   const now = new Date();
-  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId, status: row.status }, {
+  const claim = await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId, status: row.status }, {
     $set: { status: "payout_processing", payoutAttemptCount: attempt, payoutIdempotencyKey: idempotencyKey, payoutInitiatedAt: now, payoutFailureReason: "", updatedBy: actor, updatedAt: now },
     $push: { approvalHistory: auditEntry("payout_started", row.status, "payout_processing", message, actor) },
   });
+  if (!claim.matchedCount) {
+    throw Object.assign(new Error("This withdrawal is already being processed or has changed. Refresh and try again."), {
+      status: 409,
+      code: "PAYOUT_ALREADY_PROCESSING",
+    });
+  }
 
   try {
     const payout = await razorpay.createPayout({
