@@ -3400,6 +3400,27 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .crm-topbar-icon:hover { background: var(--crm-user-header-hover-bg, #f8fafc); color: var(--crm-user-header-hover-text, var(--crm-shell-text)); }
 .crm-brand-link { display: inline-flex; align-items: center; color: inherit; text-decoration: none; }
 .crm-brand-link:hover { color: inherit; }
+.crm-brand-logo {
+  width: 7rem;
+  height: auto;
+  max-height: 36px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+.crm-sidebar-brand-logo {
+  width: 6.1rem;
+  height: auto;
+  max-height: 31px;
+  display: block;
+  object-fit: contain;
+}
+.crm-login-logo {
+  width: 9.4rem;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
 .crm-brand-mark {
   width: 36px !important;
   height: 36px !important;
@@ -3694,6 +3715,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 
 @media (max-width: 479.98px) {
   .crm-topbar .container-fluid { padding-inline: .65rem !important; }
+  .crm-brand-logo { width: 5.8rem; max-height: 30px; }
   .crm-brand-copy strong { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .crm-metric-grid { grid-template-columns: 1fr; }
   .crm-page-heading .page-title { font-size: 1.2rem !important; }
