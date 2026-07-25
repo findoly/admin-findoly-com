@@ -11,11 +11,11 @@ const frontendController = {
   enquiryShow: render("enquiry/show", "Requirement details"),
   enquiryProviderStatuses: render(
     "enquiry/provider-statuses",
-    "Lead provider statuses",
+    "Unlocked providers",
   ),
   enquiryProviderStatusShow: render(
     "enquiry/provider-status-show",
-    "Provider lead journey",
+    "Provider unlock details",
   ),
   providers: render("provider/index", "Providers"),
   agents: render("agent/index", "Agents"),
@@ -46,7 +46,7 @@ const frontendController = {
   providerSubscriptions: render("billing/provider-subscriptions", "Provider Subscriptions"),
   invoiceCreate: render("invoice/form", "Create invoice"),
   invoiceEdit: render("invoice/form", "Edit invoice"),
-  distributions: render("distribution/index", "Lead distribution"),
+  providerUnlocks: render("provider-unlock/index", "Provider unlocks"),
   reports: render("report/index", "Reports"),
   storage: render("storage/index", "File Manager"),
   employees: render("employee/index", "Employees"),

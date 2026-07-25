@@ -13,7 +13,7 @@ const webhookService = require("../services/communication/webhook-service");
 const whatsappService = require("../services/communication/whatsapp-service");
 const slackService = require("../services/communication/slack-service");
 const { configurationStatus } = require("../services/communication/communication-config");
-const providerStatusService = require("../services/distribution/provider-status-service");
+const providerStatusService = require("../services/provider-unlock/provider-status-service");
 
 const actor = function (req) {
   return req.admin?.email || "api";
@@ -282,15 +282,16 @@ const integrationEvent = async function (req, res, next) {
             context.providerId ||
             context.provider?.providerId ||
             context.provider?.id,
-          leadDistributionId:
-            context.leadDistributionId || context.distributionId,
+          providerLeadUnlockId:
+            context.providerLeadUnlockId,
         },
         "provider-integration",
       );
       context.lead = providerStatusUpdate.lead;
-      context.distribution = providerStatusUpdate.distribution;
-      context.outcome = providerStatusUpdate.distribution.providerSaleOutcome;
-      context.activityStatus = providerStatusUpdate.distribution.providerLeadStatus;
+      context.unlock = providerStatusUpdate.unlock;
+      context.providerLeadUnlockId = providerStatusUpdate.unlock.providerLeadUnlockId;
+      context.outcome = providerStatusUpdate.unlock.providerSaleOutcome;
+      context.activityStatus = providerStatusUpdate.unlock.providerLeadStatus;
     } else if (!context.lead && context.enquiryId) {
       const lead = await Enquiry.findOne({ enquiryId: context.enquiryId }).lean();
       if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });

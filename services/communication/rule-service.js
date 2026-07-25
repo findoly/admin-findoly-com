@@ -16,7 +16,6 @@ const EVENTS = Object.freeze([
   "lead_approved",
   "lead_rejected",
   "lead_on_hold",
-  "lead_distributed",
   "provider_confirmed",
   "provider_rejected",
   "provider_invalid",

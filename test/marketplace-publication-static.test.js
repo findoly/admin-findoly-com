@@ -43,7 +43,8 @@ test("CRM publishes once and controls the provider unlock limit", () => {
   const form = source("views/enquiry/form.ejs");
   const show = source("views/enquiry/show.ejs");
 
-  assert.match(service, /Provider-specific rows are no longer required for marketplace visibility/);
+  assert.match(service, /async function publishMarketplace/);
+  assert.match(service, /Approve the lead before publishing it to the marketplace/);
   assert.match(service, /marketplacePublishedAt/);
   assert.match(service, /maxProviderUnlocks/);
   assert.doesNotMatch(service, /Provider\.find\(/);

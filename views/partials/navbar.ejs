@@ -3,14 +3,14 @@
 %>
 <div class="navbar navbar-expand-lg navbar-static crm-topbar">
   <div class="container-fluid px-3 px-lg-4">
-    <button type="button" class="crm-mobile-menu d-lg-none me-2" @click="sidebarOpen = true" aria-label="Open navigation">
+    <button type="button" class="crm-mobile-menu d-lg-none me-2" @click="sidebarOpen = true" :aria-expanded="sidebarOpen.toString()" aria-controls="crmPrimaryNavigation" aria-label="Open navigation">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
 
     <div class="navbar-brand flex-1 flex-lg-0 me-lg-4">
       <a href="/dashboard" class="crm-brand-link" aria-label="Findoly CRM home">
         <img src="/images/findoly-logo.png" alt="Findoly" class="crm-brand-logo">
-        <span class="crm-brand-copy">
+        <span class="crm-brand-copy d-none d-xl-flex">
           <strong><%= appName %></strong>
           <small>Lead operations</small>
         </span>
@@ -18,7 +18,7 @@
     </div>
 
     <% if (canAccess('requirements.view')) { %>
-    <form class="crm-global-search d-none d-md-flex" action="/enquiries" method="get">
+    <form class="crm-global-search d-none d-xl-flex" action="/enquiries" method="get">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
       <input type="search" name="q" placeholder="Search leads, customers or mobile" aria-label="Search requirements">
       <kbd>⌘ K</kbd>
@@ -34,7 +34,7 @@
       <li class="nav-item dropdown crm-admin-dropdown-wrap">
         <button type="button" class="crm-admin-menu" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
           <span class="crm-admin-avatar" x-text="(admin.name || admin.mobile || 'E').charAt(0).toUpperCase()">A</span>
-          <span class="crm-admin-copy d-none d-sm-flex">
+          <span class="crm-admin-copy d-none d-xl-flex">
             <strong x-text="admin.name || 'Admin'">Admin</strong>
             <small x-text="admin.roleName || admin.mobile || 'Employee'">Administrator</small>
           </span>

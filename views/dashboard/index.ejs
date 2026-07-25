@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Overview</div>
                 <h1 class="page-title mb-1">Dashboard</h1>
-                <p class="crm-page-subtitle mb-0">Monitor incoming requirements, providers and distributed offers.</p>
+                <p class="crm-page-subtitle mb-0">Monitor incoming requirements, marketplace availability and provider unlocks.</p>
               </div>
               <a href="/enquiries/new" class="btn btn-primary crm-primary-action">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -38,14 +38,14 @@
                       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
                     </span>
                   </div>
-                  <div class="crm-metric-note"><b x-text="data.statusCounts?.new || 0">0</b> new leads awaiting review</div>
+                  <div class="crm-metric-note"><b x-text="metric(data.statusCounts?.new, data.caps?.statusCounts?.new)">0</b> new leads awaiting review</div>
                 </article>
 
                 <article class="crm-metric-card crm-metric-green">
                   <div class="crm-metric-top">
                     <div>
                       <span class="crm-metric-label">Active providers</span>
-                      <strong class="crm-metric-value" x-text="data.activeProviders || 0">0</strong>
+                      <strong class="crm-metric-value" x-text="metric(data.activeProviders, data.caps?.activeProviders)">0</strong>
                     </div>
                     <span class="crm-metric-icon">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M13 20a4.5 4.5 0 0 1 8 0"/></svg>
@@ -58,7 +58,7 @@
                   <div class="crm-metric-top">
                     <div>
                       <span class="crm-metric-label">Available offers</span>
-                      <strong class="crm-metric-value" x-text="data.offered || 0">0</strong>
+                      <strong class="crm-metric-value" x-text="metric(data.offered, data.caps?.offered)">0</strong>
                     </div>
                     <span class="crm-metric-icon">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>
@@ -71,7 +71,7 @@
                   <div class="crm-metric-top">
                     <div>
                       <span class="crm-metric-label">Open follow-ups</span>
-                      <strong class="crm-metric-value" x-text="data.openFollowUps || 0">0</strong>
+                      <strong class="crm-metric-value" x-text="metric(data.openFollowUps, data.caps?.openFollowUps)">0</strong>
                     </div>
                     <span class="crm-metric-icon">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -148,7 +148,7 @@
                   <div class="crm-quick-actions">
                     <a href="/enquiries/new"><span><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><div><strong>Create requirement</strong><small>Add a customer lead</small></div><b>›</b></a>
                     <a href="/providers/new"><span><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="3"/><path d="M4 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg></span><div><strong>Add provider</strong><small>Onboard a service partner</small></div><b>›</b></a>
-                    <a href="/distributions"><span><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg></span><div><strong>Review distribution</strong><small>Inspect provider offers</small></div><b>›</b></a>
+                    <a href="/provider-unlocks"><span><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg></span><div><strong>Review provider unlocks</strong><small>Inspect successful unlocks</small></div><b>›</b></a>
                     <a href="/reports"><span><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7M3 20h18"/></svg></span><div><strong>Open reports</strong><small>View operational totals</small></div><b>›</b></a>
                   </div>
                 </aside>
@@ -166,6 +166,10 @@
           data: {},
           loading: true,
           error: '',
+          metric(value, capped = false) {
+            const number = Number(value || 0);
+            return new Intl.NumberFormat('en-IN').format(number) + (capped ? '+' : '');
+          },
           async load() {
             this.loading = true;
             try {

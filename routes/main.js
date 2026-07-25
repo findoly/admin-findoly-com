@@ -42,7 +42,6 @@ router.use("/communications", require("./communication"));
 router.use("/provider-subscriptions", require("./provider-subscription"));
 router.use("/invoice", require("./invoice"));
 router.use("/invoices", require("./invoice"));
-router.use("/distribution", require("./distribution"));
-router.use("/distributions", require("./distribution"));
+router.use("/provider-unlocks", require("./provider-unlock"));
 router.use("/storage", require("./storage"));
 module.exports = router;

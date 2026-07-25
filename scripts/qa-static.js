@@ -38,12 +38,16 @@ function checkInlineScripts() {
   let count = 0;
   for (const view of views) {
     const text = fs.readFileSync(view, "utf8");
+    // Remove EJS expressions before parsing script tags. EJS closing markers
+    // contain `>`, which would otherwise truncate nonce/src attributes and
+    // make the remainder of the opening tag look like JavaScript.
+    const parseableText = text.replace(/<%[-_=#]?[\s\S]*?%>/g, "null");
     const pattern = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
     let match;
-    while ((match = pattern.exec(text))) {
-      const opening = text.slice(match.index, text.indexOf(">", match.index) + 1);
+    while ((match = pattern.exec(parseableText))) {
+      const opening = parseableText.slice(match.index, parseableText.indexOf(">", match.index) + 1);
       if (/\bsrc\s*=/i.test(opening)) continue;
-      const script = match[1].replace(/<%[-_=#]?[\s\S]*?%>/g, "null");
+      const script = match[1];
       const temporary = path.join(os.tmpdir(), `findoly-inline-${process.pid}-${count}.js`);
       fs.writeFileSync(temporary, script);
       const result = spawnSync(process.execPath, ["--check", temporary], { encoding: "utf8" });

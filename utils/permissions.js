@@ -11,7 +11,7 @@ const PERMISSION_GROUPS = Object.freeze([
       { key: "requirements.view", label: "View requirements" },
       { key: "requirements.create", label: "Create requirements" },
       { key: "requirements.edit", label: "Edit requirements" },
-      { key: "requirements.manage", label: "Change status, notes and distribution" },
+      { key: "requirements.manage", label: "Change status, notes and marketplace availability" },
     ],
   },
   {
@@ -50,9 +50,9 @@ const PERMISSION_GROUPS = Object.freeze([
     ],
   },
   {
-    key: "distributions",
-    label: "Distribution",
-    permissions: [{ key: "distributions.view", label: "View lead distribution" }],
+    key: "provider_unlocks",
+    label: "Provider unlocks",
+    permissions: [{ key: "provider_unlocks.view", label: "View provider lead unlocks" }],
   },
   {
     key: "followUps",
@@ -147,7 +147,7 @@ const DEFAULT_ROLES = Object.freeze([
       "agents.view",
       "partnerPayouts.view",
       "categories.view",
-      "distributions.view",
+      "provider_unlocks.view",
       "followUps.view",
       "followUps.create",
       "followUps.edit",

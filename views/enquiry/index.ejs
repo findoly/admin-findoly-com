@@ -72,7 +72,7 @@
                         <th>Customer</th>
                         <th>Category & location</th>
                         <th>Status</th>
-                        <th>Distribution</th>
+                        <th>Marketplace</th>
                         <th class="text-end">Price</th>
                         <th aria-label="Actions"></th>
                       </tr>
@@ -96,7 +96,7 @@
                             <span class="crm-status" :class="statusClass(lead.journeyStatus || lead.status)" x-text="humanize(lead.journeyStatus || lead.status)"></span>
                             <div class="text-muted fs-sm mt-1" x-text="lead.isActive === false ? 'Deactivated' : humanize(lead.priority || 'normal') + ' priority'"></div>
                           </td>
-                          <td><div class="crm-distribution-count"><strong x-text="lead.distributionCount || 0"></strong><span>offered</span></div><div class="text-muted fs-sm"><span x-text="lead.unlockedCount || 0"></span> unlocked</div></td>
+                          <td><div class="crm-marketplace-count"><strong x-text="lead.remainingUnlocks || 0"></strong><span>remaining</span></div><div class="text-muted fs-sm"><span x-text="lead.unlockedCount || 0"></span> unlocked</div></td>
                           <td class="text-end"><div class="fw-semibold" x-text="money(lead.leadPricePaise)"></div><div class="text-muted fs-sm">per unlock</div></td>
                           <td class="text-end crm-nowrap">
                             <a class="crm-row-action" :href="'/enquiries/' + recordId(lead, 'enquiryId')">View</a>
@@ -132,7 +132,7 @@
         return {
           rows: [],
           categories: [],
-          statuses: ['new','verification','approved','distributed','sale_converted','rejected'],
+          statuses: ['new','verification','approved','rejected'],
           filters: {
             q: params.get('q') || '',
             status: params.get('status') || '',

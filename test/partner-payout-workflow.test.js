@@ -17,7 +17,7 @@ test("leads have validation fields while agent leads retain payout fields", () =
   for (const field of ["agentReferralValidation", "leadValidationMethod", "agentSaleConversion", "partnerEligibilityDate", "partnerPayoutStatus", "partnerWithdrawalId", "partnerPaidAt"]) assert.ok(model.schema.path(field), field);
 });
 
-test("unvalidated leads are blocked from distribution and agent status changes require notes", () => {
+test("unvalidated leads are blocked from marketplace publication and agent status changes require notes", () => {
   const service = read("services/enquiry/enquiry-service.js");
   assert.match(service, /Only Valid leads can be published to providers/);
   assert.match(service, /status-change note is required for Agent Portal requirements/);

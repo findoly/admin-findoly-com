@@ -71,7 +71,7 @@ function isMarketplaceWithinAge(publishedAt, now = new Date()) {
 
 function isMarketplaceVisible(record = {}, now = new Date()) {
   if (record.contactUnlocked === true || record.status === "unlocked") return true;
-  const publishedAt = record.marketplacePublishedAt || record.distributedAt;
+  const publishedAt = record.marketplacePublishedAt;
   if (!isMarketplaceWithinAge(publishedAt, now)) return false;
   const calculatedVisibleAt = marketplaceVisibleAt(
     publishedAt,

@@ -2,25 +2,19 @@ const LEAD_JOURNEY = Object.freeze([
   "new",
   "verification",
   "approved",
-  "distributed",
 ]);
-
-const PROVIDER_CONTROLLED_STATUS = "sale_converted";
 
 const STATUS_ALIASES = Object.freeze({
   verification_pending: "verification",
   verified: "verification",
-  in_progress: "distributed",
-  completed: "distributed",
-  closed: "distributed",
 });
 
 const VALID_STATUS_INPUTS = Object.freeze([
   ...LEAD_JOURNEY,
   "rejected",
-  PROVIDER_CONTROLLED_STATUS,
   ...Object.keys(STATUS_ALIASES),
 ]);
+
 const VALID_ACTIONS = Object.freeze([
   "next",
   "previous",
@@ -31,7 +25,6 @@ const VALID_ACTIONS = Object.freeze([
 function canonicalLeadStatus(value) {
   const status = String(value || "new").trim().toLowerCase();
   if (status === "rejected") return "rejected";
-  if (status === PROVIDER_CONTROLLED_STATUS) return PROVIDER_CONTROLLED_STATUS;
   if (LEAD_JOURNEY.includes(status)) return status;
   return STATUS_ALIASES[status] || "new";
 }
@@ -49,12 +42,14 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
   const currentStatus = canonicalLeadStatus(currentValue);
   const action = String(input.action || "").trim().toLowerCase();
   const rawRequestedStatus = String(input.status || "").trim().toLowerCase();
+
   if (action && !VALID_ACTIONS.includes(action)) {
     throw statusError("Select next, previous, reject or restore");
   }
   if (rawRequestedStatus && !VALID_STATUS_INPUTS.includes(rawRequestedStatus)) {
     throw statusError("Select a valid lead status");
   }
+
   const requestedStatus = rawRequestedStatus
     ? canonicalLeadStatus(rawRequestedStatus)
     : "";
@@ -66,20 +61,8 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
   let targetStatus = currentStatus;
   let resolvedAction = action;
 
-  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(currentStatus)) {
-    throw statusError(
-      "Lead journey is provider-controlled after distribution and cannot be changed by an employee",
-    );
-  }
-
-  if (requestedStatus === PROVIDER_CONTROLLED_STATUS) {
-    throw statusError("Sale conversion can only be updated by an unlocked provider");
-  }
-
   if (action === "reject" || requestedStatus === "rejected") {
-    if (currentStatus === "rejected") {
-      throw statusError("Lead is already rejected");
-    }
+    if (currentStatus === "rejected") throw statusError("Lead is already rejected");
     if (!note) throw statusError("Rejection reason is required");
     targetStatus = "rejected";
     resolvedAction = "reject";
@@ -104,18 +87,14 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
       resolvedAction = "restore";
     } else {
       const index = LEAD_JOURNEY.indexOf(currentStatus);
-      if (index <= 0) {
-        throw statusError("Lead is already at the first journey stage");
-      }
+      if (index <= 0) throw statusError("Lead is already at the first journey stage");
       targetStatus = LEAD_JOURNEY[index - 1];
     }
   } else if (requestedStatus) {
     if (currentStatus === "rejected") {
       const restoreStatus = restoreTarget(metadata);
       if (requestedStatus !== restoreStatus) {
-        throw statusError(
-          "Restore the rejected lead before selecting another stage",
-        );
+        throw statusError("Restore the rejected lead before selecting another stage");
       }
       targetStatus = restoreStatus;
       resolvedAction = "restore";
@@ -123,9 +102,7 @@ function resolveLeadStatusTransition(currentValue, input = {}, metadata = {}) {
       const currentIndex = LEAD_JOURNEY.indexOf(currentStatus);
       const targetIndex = LEAD_JOURNEY.indexOf(requestedStatus);
       if (targetIndex < 0 || Math.abs(targetIndex - currentIndex) !== 1) {
-        throw statusError(
-          "Lead status can only move to the next or previous journey stage",
-        );
+        throw statusError("Lead status can only move to the next or previous journey stage");
       }
       targetStatus = requestedStatus;
       resolvedAction = targetIndex > currentIndex ? "next" : "previous";
@@ -149,5 +126,4 @@ module.exports = {
   VALID_ACTIONS,
   canonicalLeadStatus,
   resolveLeadStatusTransition,
-  PROVIDER_CONTROLLED_STATUS,
 };

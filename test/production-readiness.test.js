@@ -99,11 +99,8 @@ test("login OTP send returns accepted state when delivery acknowledgement is unc
   }
 });
 
-test("provider creation falls back to validated manual city/state and survives background sync failures", async () => {
+test("provider creation falls back to validated manual city/state without creating lead relationship rows", async () => {
   let saved = null;
-  const emptyCursor = {
-    async *[Symbol.asyncIterator]() {},
-  };
   const Provider = {
     async exists() { return false; },
     async create(data) {
@@ -119,16 +116,12 @@ test("provider creation falls back to validated manual city/state and survives b
   };
   const providerService = loadWithStubs("services/provider/provider-service.js", {
     "../../models/Provider": Provider,
-    "../../models/Enquiry": { find: () => ({ cursor: () => emptyCursor }) },
-    "../../models/LeadDistribution": {
-      async updateMany() { throw new Error("simulated post-create lead-sync outage"); },
-    },
+    "../../models/ProviderLeadUnlock": {},
     "../../models/WalletTransaction": {},
     "../../utils/pagination": {
       getPagination: () => ({ limit: 20, cursor: "" }),
       cursorPaginate: async () => ({ data: [], pagination: { limit: 20, returned: 0, hasNext: false, nextCursor: "" } }),
     },
-    "../enquiry/enquiry-service": { distribute: async () => {} },
     "../location/geocoding-service": {
       geocodePincode: async () => { throw Object.assign(new Error("maps unavailable"), { status: 503 }); },
     },
@@ -148,7 +141,7 @@ test("provider creation falls back to validated manual city/state and survives b
   assert.equal(created.serviceLocationSource, "manual_pincode");
   assert.equal(created.city, "Mumbai");
   assert.equal(created.state, "Maharashtra");
-  await new Promise((resolve) => setImmediate(resolve));
+  assert.doesNotMatch(source("services/provider/provider-service.js"), /LeadDistribution|scheduleProviderSync/);
 });
 
 test("registration notification failure never fails account creation flow", async () => {
@@ -269,7 +262,8 @@ test("S3 validator restricts paths, size and file types and creates short-lived 
 });
 
 test("production source contains the critical validation and concurrency protections", () => {
-  assert.match(source("services/provider/provider-service.js"), /scheduleProviderSync\(created, actor\)/);
+  assert.doesNotMatch(source("services/provider/provider-service.js"), /LeadDistribution|scheduleProviderSync/);
+  assert.match(source("services/provider/provider-service.js"), /ProviderLeadUnlock/);
   assert.match(source("services/provider/provider-service.js"), /serviceLocationSource: "manual_pincode"/);
   assert.match(source("services/partner-payout/partner-payout-service.js"), /PAYOUT_ALREADY_PROCESSING/);
   assert.match(source("services/partner-payout/razorpay-service.js"), /RAZORPAY_HTTP_TIMEOUT_MS/);

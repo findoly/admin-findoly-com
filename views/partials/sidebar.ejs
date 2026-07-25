@@ -1,10 +1,10 @@
 <%
   const canAccess = typeof can === 'function' ? can : () => true;
-  const showWorkspace = canAccess('dashboard.view') || canAccess('requirements.view') || canAccess('providers.view') || canAccess('agents.view') || canAccess('partnerPayouts.view') || canAccess('categories.view') || canAccess('distributions.view');
+  const showWorkspace = canAccess('dashboard.view') || canAccess('requirements.view') || canAccess('providers.view') || canAccess('agents.view') || canAccess('partnerPayouts.view') || canAccess('categories.view') || canAccess('provider_unlocks.view');
   const showOperations = canAccess('followUps.view') || canAccess('communications.view') || canAccess('billing.view') || canAccess('reports.view');
   const showAdministration = canAccess('storage.view') || canAccess('employees.view') || canAccess('roles.view');
 %>
-<div class="sidebar sidebar-main sidebar-expand-lg crm-sidebar" :class="{'crm-sidebar-open': sidebarOpen, 'crm-sidebar-collapsed': sidebarCollapsed}">
+<div id="crmPrimaryNavigation" class="sidebar sidebar-main sidebar-expand-lg crm-sidebar" :class="{'crm-sidebar-open': sidebarOpen, 'crm-sidebar-collapsed': sidebarCollapsed}" :aria-hidden="(!sidebarOpen && window.innerWidth < 992).toString()" x-effect="document.documentElement.classList.toggle('crm-mobile-drawer-open', sidebarOpen); document.body.classList.toggle('crm-mobile-drawer-open', sidebarOpen)" @keydown.escape.window="sidebarOpen=false">
   <div class="sidebar-content">
     <div class="crm-sidebar-mobile-head d-lg-none">
       <div class="d-flex align-items-center gap-2"><img src="/images/findoly-logo.png" alt="Findoly" class="crm-sidebar-brand-logo"><strong>CRM navigation</strong></div>
@@ -27,7 +27,7 @@
         <% if (canAccess('agents.view')) { %><li class="nav-item"><a href="/agents" title="Agents" class="nav-link" :class="{active:pathIs('/agents')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M3 20a5 5 0 0 1 10 0M16 7h5M18.5 4.5v5"/><path d="M15 20a4 4 0 0 1 6 0"/></svg><span>Agents</span></a></li><% } %>
         <% if (canAccess('partnerPayouts.view')) { %><li class="nav-item"><a href="/partner-withdrawals" title="Partner withdrawals" class="nav-link" :class="{active:pathIs('/partner-withdrawals')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v11H4z"/><path d="M4 10h16M8 15h4M16 14.5h.01"/></svg><span>Partner payouts</span></a></li><% } %>
         <% if (canAccess('categories.view')) { %><li class="nav-item"><a href="/categories" title="Categories" class="nav-link" :class="{active:pathIs('/categories')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg><span>Categories</span></a></li><% } %>
-        <% if (canAccess('distributions.view')) { %><li class="nav-item"><a href="/distributions" title="Distribution" class="nav-link" :class="{active:pathIs('/distributions')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg><span>Distribution</span></a></li><% } %>
+        <% if (canAccess('provider_unlocks.view')) { %><li class="nav-item"><a href="/provider-unlocks" title="Provider unlocks" class="nav-link" :class="{active:pathIs('/provider-unlocks')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>Provider unlocks</span></a></li><% } %>
 
         <% if (showOperations) { %><li class="nav-item-header"><span>Operations</span></li><% } %>
         <% if (canAccess('followUps.view')) { %><li class="nav-item"><a href="/follow-ups" title="Follow-ups" class="nav-link" :class="{active:pathIs('/follow-ups')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M4.5 5.5 3 8"/></svg><span>Follow-ups</span></a></li><% } %>
@@ -45,4 +45,4 @@
     <div class="crm-sidebar-foot"><div class="crm-sidebar-support"><span class="crm-sidebar-support-icon">?</span><div><strong>Need help?</strong><small>Check platform setup</small></div></div></div>
   </div>
 </div>
-<div class="crm-sidebar-overlay" x-show="sidebarOpen" x-cloak @click="sidebarOpen=false"></div>
+<div class="crm-sidebar-overlay" x-show="sidebarOpen" x-cloak x-transition.opacity @click="sidebarOpen=false" aria-hidden="true"></div>

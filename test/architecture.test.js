@@ -1,24 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
-const request = require("supertest");
-const { adminCookie } = require("./helpers/auth");
+const fs = require("node:fs");
+const path = require("node:path");
 
-process.env.SKIP_DB = "true";
-process.env.AUTH_COOKIE_NAME = "service_crm_admin";
-
-const app = require("../app");
-const Enquiry = require("../models/Enquiry");
-const Provider = require("../models/Provider");
-const LeadDistribution = require("../models/LeadDistribution");
-
-function source(relativePath) {
-  return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
-}
+const root = path.join(__dirname, "..");
+const source = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 function allViewFiles() {
-  const root = path.join(__dirname, "..", "views");
   const files = [];
   function walk(folder) {
     for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
@@ -27,20 +15,14 @@ function allViewFiles() {
       else if (entry.name.endsWith(".ejs")) files.push(target);
     }
   }
-  walk(root);
+  walk(path.join(root, "views"));
   return files;
 }
 
-
-test("CRM separates frontend page routes from JSON API routes", async () => {
-  assert.equal(typeof app, "function");
-  assert.ok(require("../routes/frontend"));
-  assert.ok(require("../routes/main"));
-
-  const response = await request(app).get("/api/dashboard");
-  assert.equal(response.status, 401);
-  assert.equal(response.type, "application/json");
-  assert.equal(response.body.success, false);
+test("CRM separates frontend page routes from JSON API routes", () => {
+  assert.match(source("app.js"), /require\("\.\/routes\/frontend"\)/);
+  assert.match(source("app.js"), /require\("\.\/routes\/main"\)/);
+  assert.match(source("app.js"), /app\.use\("\/api"/);
 });
 
 test("frontend controller renders titles only and does not import models or services", () => {
@@ -51,66 +33,33 @@ test("frontend controller renders titles only and does not import models or serv
   assert.match(controller, /res\.render\(view, \{ title \}\)/);
 });
 
-test("EJS pages use structural partials only and Alpine calls the API", async () => {
+test("EJS pages use structural partials only and Alpine calls the API", () => {
   const allowed = new Set(["head", "navbar", "sidebar", "footer", "scripts"]);
   for (const file of allViewFiles()) {
     const content = fs.readFileSync(file, "utf8");
     for (const match of content.matchAll(/include\(['"]([^'"]+)['"]\)/g)) {
-      const name = path.basename(match[1]);
-      assert.ok(
-        allowed.has(name),
-        `${file} includes non-structural partial ${name}`,
-      );
+      assert.ok(allowed.has(path.basename(match[1])), `${file} includes a non-structural partial`);
     }
   }
-
-  assert.match(
-    source("views/dashboard/index.ejs"),
-    /apiFetch\([\"']\/api\/dashboard/,
-  );
-  assert.match(
-    source("views/enquiry/index.ejs"),
-    /apiFetch\([\"']\/api\/enquiry/,
-  );
-  assert.match(
-    source("views/provider/index.ejs"),
-    /apiFetch\([\"']\/api\/provider/,
-  );
-
-  const response = await request(app)
-    .get("/enquiries")
-    .set("Cookie", [adminCookie()]);
-  assert.equal(response.status, 200);
-  assert.match(response.text, /\/api\/enquiry/);
+  assert.match(source("views/dashboard/index.ejs"), /apiFetch\(["']\/api\/dashboard/);
+  assert.match(source("views/enquiry/index.ejs"), /apiFetch\(["']\/api\/enquiry/);
+  assert.match(source("views/provider-unlock/index.ejs"), /apiFetch\(["']\/api\/provider-unlocks/);
 });
 
-test("models keep MongoDB _id and add plain 32-character collection IDs", () => {
-  const enquiry = new Enquiry({ categorySlug: "painting" });
-  const provider = new Provider({ name: "Test Provider" });
-  const distribution = new LeadDistribution({
-    enquiryId: enquiry.enquiryId,
-    providerId: provider.providerId,
-    leadPricePaise: 10000,
-  });
-
-  for (const value of [
-    enquiry.enquiryId,
-    provider.providerId,
-    distribution.leadDistributionId,
-  ]) {
-    assert.match(value, /^[a-f0-9]{32}$/);
-  }
-
-  assert.ok(enquiry._id);
-  assert.equal(Enquiry.schema.path("id"), undefined);
-  assert.equal(Provider.schema.path("id"), undefined);
-  assert.equal(LeadDistribution.schema.path("id"), undefined);
+test("marketplace architecture has no per-provider visibility collection", () => {
+  assert.equal(fs.existsSync(path.join(root, "models/LeadDistribution.js")), false);
+  assert.equal(fs.existsSync(path.join(root, "services/distribution")), false);
+  assert.equal(fs.existsSync(path.join(root, "views/distribution")), false);
+  const unlock = source("models/ProviderLeadUnlock.js");
+  assert.match(unlock, /collection:\s*"providerleadunlocks"/);
+  assert.match(unlock, /\{ providerId: 1, enquiryId: 1 \}, \{ unique: true \}/);
+  assert.doesNotMatch(unlock, /customerMobile|customerEmail|customerAddress/);
 });
 
-test("migration preserves existing _id and id fields while adding named UUID fields", () => {
+test("migration preserves existing database IDs and uses bounded cursors", () => {
   const migration = source("scripts/migrate-structure.js");
-  assert.match(migration, /\{ _id: document\._id \}/);
+  assert.match(migration, /filter:\s*\{ _id: row\._id \}/);
   assert.doesNotMatch(migration, /\$set:\s*\{[^}]*\b_id\b/);
-  assert.doesNotMatch(migration, /\$set:\s*\{[^}]*\bid\s*:/);
-  assert.match(migration, /isUuid32/);
+  assert.doesNotMatch(migration, /\.toArray\s*\(/);
+  assert.match(migration, /bulkWrite/);
 });

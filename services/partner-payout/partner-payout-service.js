@@ -1,12 +1,11 @@
 const Agent = require("../../models/Agent");
 const Enquiry = require("../../models/Enquiry");
-const LeadDistribution = require("../../models/LeadDistribution");
 const AgentWithdrawal = require("../../models/AgentWithdrawal");
 const uuid = require("../../utils/uuid");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { textValue, enumValue, identifierValue, queryTextValue, validationError } = require("../../utils/validation");
-const { canonicalLeadStatus, PROVIDER_CONTROLLED_STATUS } = require("../../utils/lead-journey");
+const { canonicalLeadStatus } = require("../../utils/lead-journey");
 const razorpay = require("./razorpay-service");
 
 const WAITING_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
@@ -480,9 +479,9 @@ async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admi
   const reason = status === "invalid" ? enumValue(input.reason, INVALID_REASONS, { label: "Invalid referral reason" }) : "";
   const row = await Enquiry.findOne({ enquiryId }).lean();
   if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (["distributed", PROVIDER_CONTROLLED_STATUS].includes(canonicalLeadStatus(row.status))) {
+  if (canonicalLeadStatus(row.status) === "approved") {
     throw Object.assign(
-      new Error("Lead validation is locked after distribution. Provider statuses now control sale conversion."),
+      new Error("Lead validation is locked after approval because the lead is already published to providers."),
       { status: 409 },
     );
   }
@@ -526,6 +525,8 @@ async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admi
     metadata.rejectionReason = note;
     metadata.lastStatusNote = note;
     set.status = "rejected";
+    set.marketplaceAvailable = false;
+    set.marketplaceStatus = "closed";
     set.statusUpdatedAt = now;
     set.statusUpdatedBy = actor;
     set.metadata = metadata;
@@ -548,12 +549,6 @@ async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admi
     { enquiryId },
     { $set: set, $push: { timeline: { $each: timeline } } },
   );
-  if (status !== "valid") {
-    await LeadDistribution.updateMany(
-      { enquiryId, contactUnlocked: { $ne: true } },
-      { $set: { status: "withdrawn", updatedAt: now } },
-    );
-  }
   return Enquiry.findOne({ enquiryId }).lean();
 }
 

@@ -21,9 +21,9 @@ async function get(req, res, next) {
   }
 }
 
-async function distributions(req, res, next) {
+async function unlocks(req, res, next) {
   try {
-    const result = await service.listDistributions(
+    const result = await service.listUnlocks(
       req.params.providerId,
       req.query,
     );
@@ -64,16 +64,6 @@ async function update(req, res, next) {
   }
 }
 
-async function sync(req, res, next) {
-  try {
-    const provider = await service.get(req.params.providerId);
-    await service.syncApprovedLeads(provider);
-    res.json({ success: true, message: "Provider leads synchronized" });
-  } catch (error) {
-    next(error);
-  }
-}
-
 
 async function reviewOutcome(req, res, next) {
   try {
@@ -81,7 +71,7 @@ async function reviewOutcome(req, res, next) {
       success: true,
       data: await service.reviewProviderOutcome(
         req.params.providerId,
-        req.params.leadDistributionId,
+        req.params.providerLeadUnlockId,
         req.body,
         req.admin?.email || "admin",
       ),
@@ -94,11 +84,10 @@ async function reviewOutcome(req, res, next) {
 module.exports = {
   list,
   get,
-  distributions,
+  unlocks,
   transactions,
   create,
   update,
-  sync,
   reviewOutcome,
 };
 

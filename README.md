@@ -15,7 +15,7 @@ A simple Express, EJS and Alpine.js CRM that shares MongoDB with the provider po
   -> MongoDB
 ```
 
-Frontend routes do not query MongoDB and do not pass lead, provider, distribution, follow-up, communication, invoice, or dashboard records into EJS. EJS receives only page-title metadata. Alpine reads route IDs and query filters from `window.location`.
+Frontend routes do not query MongoDB and do not pass lead, provider, provider-unlock, follow-up, communication, invoice, or dashboard records into EJS. EJS receives only page-title metadata. Alpine reads route IDs and query filters from `window.location`.
 
 Each page is a complete EJS document. Only these structural partials are shared:
 
@@ -54,7 +54,7 @@ Application queries use one named identifier per collection:
 | `categories` | `categoryId` |
 | `enquiries` | `enquiryId` |
 | `providers` | `providerId` |
-| `leaddistributions` | `leadDistributionId` |
+| `providerleadunlocks` | `providerLeadUnlockId` |
 | `wallettransactions` | `walletTransactionId` |
 | `paymentorders` | `paymentOrderId` |
 | `followups` | `followUpId` |
@@ -106,20 +106,15 @@ npm run migrate:structure
 npm start
 ```
 
-`migrate:structure`:
+`migrate:structure` is the pre-production cutover command. It:
 
-- preserves existing `_id` and `id`
-- adds 32-character named UUID fields
-- remaps relation fields to the new named identifiers
-- flattens legacy enquiry data
-- normalizes provider mobile numbers
-- rebuilds approved lead offers for eligible providers
+- preserves existing MongoDB `_id` and application IDs;
+- normalizes lead search fields and marketplace counters in bounded batches;
+- automatically publishes eligible approved leads without provider fan-out;
+- removes obsolete Lead Intent and distribution fields; and
+- drops the obsolete `leaddistributions` collection.
 
-The old command remains an alias:
-
-```bash
-npm run migrate:lead-distribution
-```
+This migration is intentionally incompatible with the old distribution design and should be run only after a backup.
 
 ## CRM employee login, roles and permissions
 
@@ -242,7 +237,7 @@ The CRM now includes minimal agent management at `/agents`:
 
 ## Partner referral payouts
 
-Every lead now requires CRM lead validation (`pending`, `valid`, or `invalid`) before an employee can move it through the journey or distribute it. Employees must record whether validation happened by phone call, WhatsApp, email, in person, or another method; choosing Other requires an explanation. Invalid leads are automatically rejected before distribution. Agent Portal partner withdrawals continue to use only valid matured referrals at least 14 days old, complete blocks of 10, and a minimum 20% sale conversion. Configure each agent's ₹50–₹200 rate and verified RazorpayX fund account in the CRM agent profile.
+Every lead now requires CRM lead validation (`pending`, `valid`, or `invalid`) before an employee can move it through the journey or publish it to the marketplace. Employees must record whether validation happened by phone call, WhatsApp, email, in person, or another method; choosing Other requires an explanation. Invalid leads are automatically rejected before marketplace publication. Agent Portal partner withdrawals continue to use only valid matured referrals at least 14 days old, complete blocks of 10, and a minimum 20% sale conversion. Configure each agent's ₹50–₹200 rate and verified RazorpayX fund account in the CRM agent profile.
 
 Set the RazorpayX values from `.env.example`, allowlist the CRM server IP in RazorpayX, and configure the payout webhook URL as `/api/webhooks/razorpay/payouts`. Run `npm run migrate:agent-payouts` once for existing Agent Portal requirements.
 
@@ -303,31 +298,23 @@ provider_feedback_updated
 
 Named status events such as `provider_confirmed`, `provider_rejected`, and `provider_contacted`, plus the generic `provider_status` and `provider_status_updated` names, remain supported for compatible integrations.
 
-Identify the unlocked provider record using either `leadDistributionId`, or the combination of `enquiryId` and `providerId`:
+Identify the unlocked provider record using `providerLeadUnlockId`, or by the unique combination of `enquiryId` and `providerId`:
 
 ```json
 {
-  "leadDistributionId": "DISTRIBUTION_REFERENCE",
+  "providerLeadUnlockId": "UNLOCK_REFERENCE",
   "enquiryId": "LEAD_REFERENCE",
   "providerId": "PROVIDER_REFERENCE",
-  "status": "confirmed",
+  "outcome": "confirmed",
+  "activityStatus": "contacted",
   "reason": "",
   "note": "Customer confirmed the purchase"
 }
 ```
 
-`status` is optional for a named event such as `provider_confirmed`, but required for a generic provider-status event. A reason or note is mandatory for `rejected`, `invalid`, and `not_interested`.
+Provider sale outcome is mandatory (`confirmed` or `not_confirmed`); activity status is optional. The lead remains at the CRM `approved` stage while denormalized fields track `providerConfirmedCount` and `providerSaleConversionStatus`. Employees do not manually overwrite provider conversion.
 
-Sale conversion is calculated from the **current status of every unlocked provider**:
-
-- one or more currently Confirmed providers changes `Distributed` to `Sale Converted`;
-- rejection, invalidation, or hold by another provider does not cancel an existing confirmation;
-- when the last Confirmed provider changes away from Confirmed, the lead automatically returns to `Distributed`;
-- employees cannot manually reject, move backward, or change sale conversion after distribution.
-
-Each automatic conversion or reversal is written to the lead timeline. The CRM also reconciles provider confirmation when a distributed lead is opened, but the integration event should still be called immediately so the CRM updates without waiting for a page view.
-
-Other communication events, including `sale_conversion_updated`, may still be used for notification rules but do not directly override the provider-calculated lead status.
+No reconciliation scan runs when a lead is opened. The provider action updates the compact unlock record and the enquiry counters in one transaction, then sends the CRM communication event after commit.
 
 ### Local-to-Lambda migration
 
@@ -391,40 +378,26 @@ Each rule stores the Slack channel ID used by `chat.postMessage` and the channel
 
 ## Provider portal synchronization
 
-The provider portal and CRM use the same MongoDB database and compatible `enquiries`, `leaddistributions`, and `providers` records. CRM employees assign lead intent (`high`, `medium`, `low`, or `not_assessed`) from the lead form. The provider marketplace displays that value together with competition and unlock information.
+The Provider Portal and CRM share compatible `enquiries`, `providerleadunlocks`, `providers`, `paymentorders`, and credit collections. CRM approval publishes the enquiry directly; provider eligibility does not create database records. One compact unlock record is created only after a provider unlocks.
 
-Provider browsers call only the provider portal host. The provider backend notifies CRM through:
+Provider browsers call only the Provider Portal host. The Provider backend notifies CRM through:
 
 ```text
 POST /api/communication/events/provider_lead_unlocked
 POST /api/communication/events/provider_feedback_updated
 ```
 
-Both services must share the same integration token:
+Both services must share `COMMUNICATION_EVENT_API_TOKEN`. Slack/email delivery failures are logged independently and never roll back a committed lead action. See `PROVIDER_CRM_SYNC_SETUP.md` for coordinated deployment and reservation-cleanup instructions.
 
-```env
-# CRM
-COMMUNICATION_EVENT_API_TOKEN=<shared-random-secret>
+## Scalable marketplace maintenance
 
-# Provider portal
-CRM_API_BASE_URL=https://admin.findoly.com
-CRM_COMMUNICATION_EVENT_PATH=/api/communication/events
-COMMUNICATION_EVENT_API_TOKEN=<same-shared-random-secret>
+Approved Valid leads are stored once in `enquiries`; provider-specific `providerleadunlocks` rows are created only after a successful unlock. Filtered CRM dashboard metrics use bounded counts and a short cache rather than repeated exact scans. Run the following CRM cleanup every five minutes to retire expired marketplace records in indexed batches:
+
+```bash
+npm run cleanup:marketplace-leads
 ```
 
-Provider sale outcome is mandatory (`confirmed` or `not_confirmed`). Activity status remains optional. Any current provider confirmation changes a Distributed lead to Sale Converted. When no provider remains confirmed, the lead returns to Distributed.
-
-Automatic communication routing is applied before optional customized rules:
-
-- every CRM and provider event emitted through the Communication Center is posted to the configured internal Slack channel;
-- the provider receives an email only for a successful lead unlock or successful status/outcome update;
-- Slack and email failures are logged independently and never roll back a successful lead action;
-- this integration does not call WhatsApp.
-
-Provider outcome updates still create rule-compatible events such as `provider_confirmed`, `provider_not_confirmed`, `provider_follow_up`, `provider_rejected`, and `provider_invalid` for any additional customized notifications.
-
-CRM users can review an unlocked provider outcome from the lead's provider journey. Verification results are manual: Pending review, Under review, Verified, Unable to verify, or Incorrect status. A warning, temporary suspension, or permanent block can be applied only after the outcome is marked Incorrect status and a review note is recorded.
-
+The Provider Portal must separately run `npm run cleanup:lead-reservations` every five minutes. MongoDB Atlas or another replica set is mandatory because credit unlocks, direct-payment reservations and outcome counters use transactions.
 
 ## Nearby provider marketplace deployment
 
@@ -434,4 +407,4 @@ Configure `GOOGLE_MAPS_API_KEY` in both CRM and provider portal. CRM geocodes le
 npm run migrate:marketplace-location
 ```
 
-The script keeps existing lead/provider records intact, caches PIN-code coordinates, and recalculates locked provider distributions.
+The script keeps existing lead/provider records intact and caches PIN-code coordinates used by bounded marketplace distance checks.

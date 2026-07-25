@@ -9,104 +9,45 @@
         <div class="content-inner">
           <div class="page-header page-header-light crm-page-header">
             <div class="page-header-content crm-page-heading">
-              <div>
-                <div class="crm-page-eyebrow">Lead management</div>
-                <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Review provider-specific distribution, unlock and lead status for one requirement.</p>
-              </div>
-              <a :href="'/enquiries/' + leadId" class="btn btn-light crm-primary-action" x-data="{ leadId: pathParts()[1] || '' }"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to lead</a>
+              <div><div class="crm-page-eyebrow">Lead management</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Only providers who successfully unlocked this approved lead are stored here.</p></div>
+              <a :href="'/enquiries/' + leadId" class="btn btn-light crm-primary-action" x-data="{ leadId: pathParts()[1] || '' }">Back to lead</a>
             </div>
           </div>
-
           <div class="content">
-            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
-            <main x-data="providerStatusList()" x-init="load()">
+            <main x-data="providerUnlockList()" x-init="load()">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <section class="card mb-3"><div class="card-body"><div class="row g-3">
+                <div class="col-md-3"><div class="text-muted fs-sm">Reference ID</div><div class="fw-semibold" x-text="lead.enquiryId || '—'"></div></div>
+                <div class="col-md-3"><div class="text-muted fs-sm">Requirement</div><div class="fw-semibold" x-text="lead.requirementTitle || lead.serviceType || '—'"></div></div>
+                <div class="col-md-2"><div class="text-muted fs-sm">Marketplace</div><div class="fw-semibold" x-text="humanize(lead.marketplaceStatus || 'draft')"></div></div>
+                <div class="col-md-2"><div class="text-muted fs-sm">Unlocked</div><div class="fw-semibold" x-text="lead.unlockedCount || 0"></div></div>
+                <div class="col-md-2"><div class="text-muted fs-sm">Remaining</div><div class="fw-semibold" x-text="lead.remainingUnlocks || 0"></div></div>
+              </div></div></section>
 
-              <section class="card mb-3">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-md-3"><div class="text-muted fs-sm">Reference ID</div><div class="fw-semibold" x-text="lead.enquiryId || '—'"></div></div>
-                    <div class="col-md-3"><div class="text-muted fs-sm">Requirement</div><div class="fw-semibold" x-text="lead.requirementTitle || lead.serviceType || '—'"></div></div>
-                    <div class="col-md-2"><div class="text-muted fs-sm">Category</div><div class="fw-semibold" x-text="lead.category || humanize(lead.categorySlug)"></div></div>
-                    <div class="col-md-2"><div class="text-muted fs-sm">CRM status</div><div class="fw-semibold" x-text="humanize(lead.journeyStatus || lead.status)"></div></div>
-                    <div class="col-md-2"><div class="text-muted fs-sm">Record state</div><div class="fw-semibold" x-text="lead.isActive === false ? 'Deactivated' : 'Active'"></div></div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="card crm-filter-card mb-3">
-                <form class="crm-filter-bar" @submit.prevent="search()">
-                  <label class="crm-search-control">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-                    <input type="search" x-model="filters.q" placeholder="Search provider, mobile, status or reason">
-                  </label>
-                  <select class="form-select" style="max-width: 190px" x-model="filters.unlocked" @change="search()">
-                    <option value="">All unlock states</option>
-                    <option value="true">Unlocked</option>
-                    <option value="false">Locked</option>
-                  </select>
-                  <select class="form-select" style="max-width: 190px" x-model="filters.offerStatus" @change="search()">
-                    <option value="">All offer states</option>
-                    <option value="offered">Offered</option>
-                    <option value="unlocked">Unlocked</option>
-                    <option value="withdrawn">Withdrawn</option>
-                  </select>
-                  <button class="btn btn-primary" type="submit">Search</button>
-                  <button class="btn btn-light" type="button" @click="reset()">Clear</button>
-                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
-                </form>
-              </section>
+              <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
+                <input class="form-control" style="max-width:240px" x-model="filters.providerId" placeholder="Provider ID">
+                <select class="form-select" style="max-width:190px" x-model="filters.status"><option value="">All activity statuses</option><option value="new">New</option><option value="contacted">Contacted</option><option value="follow_up">Follow up</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option><option value="invalid">Invalid</option><option value="not_interested">Not interested</option><option value="other">Other</option></select>
+                <select class="form-select" style="max-width:190px" x-model="filters.outcome"><option value="">All sale outcomes</option><option value="confirmed">Confirmed</option><option value="not_confirmed">Not confirmed</option></select>
+                <button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" @click="reset()">Clear</button>
+                <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
+              </form></section>
 
               <section class="card crm-data-card">
-                <div class="card-header crm-card-heading crm-list-heading">
-                  <div><h2 class="card-title mb-1">Providers for this lead</h2><p class="text-muted mb-0"><span x-text="rows.length"></span> providers on this page</p></div>
-                  <span class="crm-list-refresh" x-show="loading"><span></span>Refreshing</span>
-                </div>
-                <div class="table-responsive">
-                  <table class="table crm-table mb-0">
-                    <thead>
-                      <tr>
-                        <th>Provider</th>
-                        <th>Mobile</th>
-                        <th>Offer</th>
-                        <th>Unlock</th>
-                        <th>Sale outcome</th>
-                        <th>Activity</th>
-                        <th>Verification</th>
-                        <th>Distributed</th>
-                        <th>Last updated</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template x-if="loading"><tr><td colspan="10"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
-                      <template x-for="row in rows" :key="row.leadDistributionId">
-                        <tr>
-                          <td><div class="fw-semibold" x-text="row.providerName || row.providerBusinessName || row.providerId"></div><div class="text-muted fs-sm" x-text="row.providerBusinessName || row.providerId"></div></td>
-                          <td x-text="row.providerMobile ? '+91 ' + row.providerMobile : '—'"></td>
-                          <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span></td>
-                          <td x-text="row.contactUnlocked ? 'Unlocked' : 'Locked'"></td>
-                          <td><span class="crm-status" :class="row.providerSaleOutcome === 'confirmed' ? 'status-sale-converted' : 'status-pending'" x-text="row.providerSaleOutcome ? humanize(row.providerSaleOutcome) : 'Pending'"></span><div class="text-muted fs-sm" x-show="row.providerSaleOutcomeNote" x-text="row.providerSaleOutcomeNote"></div></td>
-                          <td><div x-text="row.providerLeadStatus ? humanize(row.providerLeadStatus) : '—'"></div><div class="text-muted fs-sm" x-show="row.providerLeadNote" x-text="row.providerLeadNote"></div></td>
-                          <td><span class="crm-status" :class="statusClass(row.outcomeVerificationStatus || 'pending')" x-text="row.outcomeVerificationStatus ? humanize(row.outcomeVerificationStatus) : 'Not reviewed'"></span></td>
-                          <td class="crm-nowrap" x-text="formatDate(row.distributedAt)"></td>
-                          <td class="crm-nowrap" x-text="formatDate(row.providerLeadStatusUpdatedAt || row.updatedAt)"></td>
-                          <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + leadId + '/providers/' + row.leadDistributionId">View</a></td>
-                        </tr>
-                      </template>
-                      <tr x-show="!loading && !rows.length"><td colspan="10"><div class="crm-empty-state"><strong>No providers found</strong><span>No provider offer matches the selected filters.</span></div></td></tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="crm-table-footer">
-                  <div class="text-muted">Page <strong x-text="pagination.page"></strong> · <span x-text="rows.length"></span> rows</div>
-                  <div class="crm-pagination">
-                    <button type="button" :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button>
-                    <span x-text="pagination.page"></span>
-                    <button type="button" :disabled="!pagination.hasNext || loading" @click="next()">Next</button>
-                  </div>
-                </div>
+                <div class="card-header crm-card-heading"><div><h2 class="card-title mb-1">Unlocked providers</h2><p class="text-muted mb-0"><span x-text="rows.length"></span> records on this page</p></div></div>
+                <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Provider</th><th>Unlock method</th><th>Credits</th><th>Sale outcome</th><th>Activity</th><th>Verification</th><th>Unlocked</th><th></th></tr></thead><tbody>
+                  <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                  <template x-for="row in rows" :key="row.providerLeadUnlockId"><tr>
+                    <td><div class="fw-semibold" x-text="row.providerBusinessName || row.providerName || row.providerId"></div><div class="text-muted fs-sm" x-text="row.providerId"></div></td>
+                    <td x-text="humanize(row.unlockMethod)"></td><td x-text="row.chargedCredits || 0"></td>
+                    <td><span class="crm-status" :class="row.providerSaleOutcome === 'confirmed' ? 'status-sale-converted' : 'status-pending'" x-text="row.providerSaleOutcome ? humanize(row.providerSaleOutcome) : 'Pending'"></span></td>
+                    <td x-text="row.providerLeadStatus ? humanize(row.providerLeadStatus) : 'Not updated'"></td>
+                    <td><span class="crm-status" :class="statusClass(row.outcomeVerificationStatus || 'pending')" x-text="row.outcomeVerificationStatus ? humanize(row.outcomeVerificationStatus) : 'Not reviewed'"></span></td>
+                    <td class="crm-nowrap" x-text="formatDate(row.unlockedAt)"></td>
+                    <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + leadId + '/providers/' + row.providerLeadUnlockId">View</a></td>
+                  </tr></template>
+                  <tr x-show="!loading && !rows.length"><td colspan="8"><div class="crm-empty-state"><strong>No provider unlocks</strong><span>No provider has unlocked this lead yet.</span></div></td></tr>
+                </tbody></table></div>
+                <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
               </section>
             </main>
           </div>
@@ -114,45 +55,14 @@
         </div>
       </div>
     </div>
-
     <script>
-      function providerStatusList() {
+      function providerUnlockList() {
         const parts = pathParts();
         return {
-          leadId: parts[1] || '',
-          lead: {},
-          rows: [],
-          filters: { q: '', unlocked: '', offerStatus: '' },
-          pagination: createCursorPagination(25),
-          loading: false,
-          error: '',
-          query() {
-            const query = new URLSearchParams({
-              ...this.filters,
-              limit: this.pagination.limit,
-              cursor: this.pagination.cursor
-            });
-            [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
-            return query.toString();
-          },
-          async load() {
-            this.loading = true;
-            this.error = '';
-            try {
-              const body = await apiFetch('/api/enquiry/' + this.leadId + '/providers?' + this.query());
-              this.lead = body.lead || {};
-              this.rows = body.data || [];
-              applyCursorPagination(this.pagination, body.pagination || {});
-            } catch (error) {
-              this.error = error.message;
-            } finally {
-              this.loading = false;
-            }
-          },
-          search() { resetCursorPagination(this.pagination); this.load(); },
-          reset() { this.filters = { q: '', unlocked: '', offerStatus: '' }; this.search(); },
-          next() { if (cursorNext(this.pagination)) this.load(); },
-          previous() { if (cursorPrevious(this.pagination)) this.load(); }
+          leadId: parts[1] || '', lead: {}, rows: [], filters: { providerId: '', status: '', outcome: '' }, pagination: createCursorPagination(25), loading: false, error: '',
+          query() { const query = new URLSearchParams({ ...this.filters, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...query].forEach(([key,value]) => { if (!value) query.delete(key); }); return query.toString(); },
+          async load() { this.loading = true; this.error = ''; try { const body = await apiFetch('/api/enquiry/' + this.leadId + '/providers?' + this.query()); this.lead = body.lead || {}; this.rows = body.data || []; applyCursorPagination(this.pagination, body.pagination || {}); } catch (error) { this.error = error.message; } finally { this.loading = false; } },
+          search() { resetCursorPagination(this.pagination); this.load(); }, reset() { this.filters = { providerId: '', status: '', outcome: '' }; this.search(); }, next() { if (cursorNext(this.pagination)) this.load(); }, previous() { if (cursorPrevious(this.pagination)) this.load(); }
         };
       }
     </script>

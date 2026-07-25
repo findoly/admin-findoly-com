@@ -12,10 +12,12 @@ const enquirySchema = new mongoose.Schema(
     },
     recordType: { type: String, default: "requirement" },
     name: { type: String, default: "", trim: true, maxlength: 120 },
+    nameKey: { type: String, default: "", trim: true, maxlength: 120, index: true },
     mobile: { type: String, default: "", trim: true, index: true, match: /^[6-9]\d{9}$/ },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, validate: { validator: (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value), message: "Customer email is invalid" } },
     addressLine: { type: String, default: "", trim: true },
     city: { type: String, default: "", trim: true, index: true },
+    cityKey: { type: String, default: "", trim: true, maxlength: 100, index: true },
     state: { type: String, default: "", trim: true },
     pincode: { type: String, default: "", trim: true, validate: { validator: (value) => !value || /^[1-9]\d{5}$/.test(value), message: "Pincode must contain exactly 6 digits" } },
     locationLatitude: { type: Number, default: null },
@@ -27,7 +29,11 @@ const enquirySchema = new mongoose.Schema(
     locationCountry: { type: String, default: "India" },
     locationVerifiedAt: { type: Date, default: null },
     locationSource: { type: String, default: "" },
+    marketplaceStatus: { type: String, enum: ["draft", "published", "paused", "closed", "expired"], default: "draft", index: true },
+    marketplaceAvailable: { type: Boolean, default: false, index: true },
+    marketplaceClosureReason: { type: String, enum: ["", "unlock_limit", "status_change", "invalid", "deactivated", "expired"], default: "" },
     marketplacePublishedAt: { type: Date, default: null, index: true },
+    marketplaceExpiresAt: { type: Date, default: null, index: true },
     category: { type: String, default: "", trim: true },
     categorySlug: { type: String, required: true, trim: true, index: true, maxlength: 80, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ },
     serviceType: { type: String, default: "", trim: true },
@@ -51,8 +57,8 @@ const enquirySchema = new mongoose.Schema(
       },
     },
     requirementTitle: { type: String, default: "", trim: true, maxlength: 200 },
+    requirementTitleKey: { type: String, default: "", trim: true, maxlength: 200, index: true },
     priority: { type: String, default: "normal", index: true, enum: ["low", "normal", "high", "urgent"] },
-    leadIntent: { type: String, enum: ["not_assessed", "low", "medium", "high"], default: "not_assessed", index: true },
     status: { type: String, default: "new", index: true },
     statusUpdatedAt: { type: Date, default: null },
     statusUpdatedBy: { type: String, default: "" },
@@ -73,11 +79,10 @@ const enquirySchema = new mongoose.Schema(
     },
     metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     timeline: { type: [mongoose.Schema.Types.Mixed], default: [] },
-    distributionCount: { type: Number, default: 0 },
     unlockedCount: { type: Number, default: 0, min: 0 },
-    pendingUnlockCount: { type: Number, default: 0, min: 0 },
+    reservedUnlockCount: { type: Number, default: 0, min: 0 },
+    remainingUnlocks: { type: Number, default: 5, min: 0 },
     maxProviderUnlocks: { type: Number, default: 5, min: 1, max: 1000 },
-    distributedAt: { type: Date, default: null },
     providerConfirmedCount: { type: Number, default: 0, min: 0 },
     providerSaleConversionStatus: {
       type: String,
@@ -86,10 +91,7 @@ const enquirySchema = new mongoose.Schema(
       index: true,
     },
     providerSaleConversionUpdatedAt: { type: Date, default: null },
-    providerSaleConversionProviderId: { type: String, default: "", index: true },
-    providerSaleConversionProviderName: { type: String, default: "" },
     providerSaleConvertedAt: { type: Date, default: null },
-    providerSaleConvertedBy: { type: String, default: "" },
     agentId: { type: String, default: "", index: true },
     referralId: { type: String, default: "", index: true, uppercase: true },
     agentName: { type: String, default: "" },
@@ -129,7 +131,9 @@ const enquirySchema = new mongoose.Schema(
 );
 
 enquirySchema.index({ status: 1, categorySlug: 1, createdAt: -1 });
-enquirySchema.index({ status: 1, categorySlug: 1, marketplacePublishedAt: -1 });
+enquirySchema.index({ marketplaceAvailable: 1, categorySlug: 1, marketplacePublishedAt: -1, _id: -1 });
+enquirySchema.index({ marketplaceAvailable: 1, categorySlug: 1, priority: 1, marketplacePublishedAt: -1, _id: -1 });
+enquirySchema.index({ marketplaceStatus: 1, marketplaceExpiresAt: 1, _id: 1 });
 enquirySchema.index({ agentId: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ referralId: 1, createdAt: -1 });
 enquirySchema.index({ agentId: 1, agentReferralValidation: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, createdAt: 1 });

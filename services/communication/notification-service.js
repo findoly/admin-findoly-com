@@ -10,7 +10,6 @@ const DEFAULT_RULES = Object.freeze([
   ["Lead approved", "lead_approved", "Customer notification when a lead is approved", "customer"],
   ["Lead rejected", "lead_rejected", "Customer notification when a lead is rejected", "customer"],
   ["Lead on hold", "lead_on_hold", "Customer notification when a lead is placed on hold", "customer"],
-  ["Lead distributed", "lead_distributed", "Customer notification when a lead is distributed", "customer"],
   ["Provider confirmed", "provider_confirmed", "Customer or internal notification when a provider confirms the lead", "customer"],
   ["Provider not confirmed", "provider_not_confirmed", "Customer or internal notification when a provider marks the sale not confirmed", "customer"],
   ["Provider contacted", "provider_contacted", "Notification when a provider records customer contact", "customer"],

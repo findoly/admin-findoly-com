@@ -15,7 +15,7 @@ const Category = require("../models/Category");
 const FollowUp = require("../models/FollowUp");
 const Communication = require("../models/Communication");
 const Invoice = require("../models/Invoice");
-const LeadDistribution = require("../models/LeadDistribution");
+const ProviderLeadUnlock = require("../models/ProviderLeadUnlock");
 const WalletTransaction = require("../models/WalletTransaction");
 
 test("health endpoint is public and reports CRM service", async () => {
@@ -162,8 +162,7 @@ const protectedApiRoutes = [
   "/api/communications",
   "/api/invoice",
   "/api/invoices",
-  "/api/distribution",
-  "/api/distributions",
+  "/api/provider-unlocks",
   "/api/employees",
   "/api/roles",
 ];
@@ -191,7 +190,7 @@ const protectedPages = [
   "/communications/new",
   "/billing",
   "/billing/new",
-  "/distributions",
+  "/provider-unlocks",
   "/reports",
   "/employees",
   "/roles",
@@ -211,7 +210,7 @@ const renderPages = [
   "/enquiries/REQ-1",
   "/enquiries/REQ-1/edit",
   "/enquiries/REQ-1/providers",
-  "/enquiries/REQ-1/providers/DIST-1",
+  "/enquiries/REQ-1/providers/UNLOCK-1",
   "/providers",
   "/providers/new",
   "/providers/PROVIDER-1",
@@ -226,7 +225,7 @@ const renderPages = [
   "/billing",
   "/billing/new",
   "/billing/I1/edit",
-  "/distributions",
+  "/provider-unlocks",
   "/reports",
   "/employees",
   "/employees/new",
@@ -256,7 +255,7 @@ test("unknown frontend route renders HTML 404", async () => {
 const modelCases = [
   ["Enquiry keeps the shared enquiries collection", () => assert.equal(Enquiry.collection.collectionName, "enquiries")],
   ["Provider keeps the shared providers collection", () => assert.equal(Provider.collection.collectionName, "providers")],
-  ["LeadDistribution keeps the shared leaddistributions collection", () => assert.equal(LeadDistribution.collection.collectionName, "leaddistributions")],
+  ["ProviderLeadUnlock keeps the shared providerleadunlocks collection", () => assert.equal(ProviderLeadUnlock.collection.collectionName, "providerleadunlocks")],
   ["WalletTransaction keeps the shared wallettransactions collection", () => assert.equal(WalletTransaction.collection.collectionName, "wallettransactions")],
   ["lead reference ID is immutable and unique", () => {
     assert.equal(Enquiry.schema.path("enquiryId").options.immutable, true);
@@ -267,16 +266,16 @@ const modelCases = [
   ["follow-up ID is immutable", () => assert.equal(FollowUp.schema.path("followUpId").options.immutable, true)],
   ["communication ID is immutable", () => assert.equal(Communication.schema.path("communicationId").options.immutable, true)],
   ["invoice ID is immutable", () => assert.equal(Invoice.schema.path("invoiceId").options.immutable, true)],
-  ["distribution relationship identifiers are immutable", () => {
-    assert.equal(LeadDistribution.schema.path("leadDistributionId").options.immutable, true);
-    assert.equal(LeadDistribution.schema.path("enquiryId").options.immutable, true);
-    assert.equal(LeadDistribution.schema.path("providerId").options.immutable, true);
+  ["provider unlock relationship identifiers are immutable", () => {
+    assert.equal(ProviderLeadUnlock.schema.path("providerLeadUnlockId").options.immutable, true);
+    assert.equal(ProviderLeadUnlock.schema.path("enquiryId").options.immutable, true);
+    assert.equal(ProviderLeadUnlock.schema.path("providerId").options.immutable, true);
   }],
   ["lead active-state fields are additive", () => {
     for (const field of ["isActive", "deactivatedAt", "deactivatedBy", "deactivationReason"]) assert.ok(Enquiry.schema.path(field));
   }],
-  ["lead model allows provider-compatible extra legacy fields", () => assert.equal(Enquiry.schema.options.strict, false)],
-  ["distribution model allows provider-compatible extra status history fields", () => assert.equal(LeadDistribution.schema.options.strict, false)],
+  ["lead model allows shared portal fields", () => assert.equal(Enquiry.schema.options.strict, false)],
+  ["provider unlock model rejects undeclared fields", () => assert.equal(ProviderLeadUnlock.schema.options.strict, true)],
 ];
 for (const [name, fn] of modelCases) test(name, fn);
 

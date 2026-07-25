@@ -1,6 +1,6 @@
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const Enquiry = require("../../models/Enquiry");
-const LeadDistribution = require("../../models/LeadDistribution");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const Provider = require("../../models/Provider");
 const communicationService = require("./communication-service");
 
@@ -85,12 +85,12 @@ function queryByPublicId(value, field) {
   return { $or: [{ [field]: id }, { id }] };
 }
 
-function providerName(provider = {}, distribution = {}, context = {}) {
+function providerName(provider = {}, unlock = {}, context = {}) {
   return clean(
     provider.businessName ||
       provider.name ||
-      distribution.providerBusinessName ||
-      distribution.providerName ||
+      unlock.providerBusinessName ||
+      unlock.providerName ||
       context.providerName ||
       "Provider",
   );
@@ -108,15 +108,15 @@ function formatDate(value) {
   return date.toISOString();
 }
 
-function eventTimestamp(context = {}, distribution = {}, lead = {}) {
+function eventTimestamp(context = {}, unlock = {}, lead = {}) {
   return (
     context.eventAt ||
     context.updatedAt ||
     context.unlockedAt ||
     context.idempotencySuffix ||
-    distribution.providerSaleOutcomeUpdatedAt ||
-    distribution.providerLeadStatusUpdatedAt ||
-    distribution.unlockedAt ||
+    unlock.providerSaleOutcomeUpdatedAt ||
+    unlock.providerLeadStatusUpdatedAt ||
+    unlock.unlockedAt ||
     lead.statusUpdatedAt ||
     lead.updatedAt ||
     new Date().toISOString()
@@ -125,21 +125,21 @@ function eventTimestamp(context = {}, distribution = {}, lead = {}) {
 
 async function hydrateContext(event, context = {}) {
   const hydrated = { ...context };
-  let distribution = context.distribution || null;
+  let unlock = context.unlock || null;
   let lead = context.lead || null;
   let provider = context.provider || null;
 
-  if (!distribution) {
-    const leadDistributionId = clean(context.leadDistributionId || context.distributionId);
-    if (leadDistributionId) {
-      distribution = await LeadDistribution.findOne(
-        queryByPublicId(leadDistributionId, "leadDistributionId"),
+  if (!unlock) {
+    const providerLeadUnlockId = clean(context.providerLeadUnlockId);
+    if (providerLeadUnlockId) {
+      unlock = await ProviderLeadUnlock.findOne(
+        queryByPublicId(providerLeadUnlockId, "providerLeadUnlockId"),
       ).lean();
     } else {
       const enquiryId = clean(context.enquiryId || lead?.enquiryId || lead?.id);
       const providerId = clean(context.providerId || provider?.providerId || provider?.id);
       if (enquiryId && providerId) {
-        distribution = await LeadDistribution.findOne({ enquiryId, providerId }).lean();
+        unlock = await ProviderLeadUnlock.findOne({ enquiryId, providerId }).lean();
       }
     }
   }
@@ -148,7 +148,7 @@ async function hydrateContext(event, context = {}) {
     context.enquiryId ||
       lead?.enquiryId ||
       lead?.id ||
-      distribution?.enquiryId,
+      unlock?.enquiryId,
   );
   if (!lead && enquiryId) {
     lead = await Enquiry.findOne(queryByPublicId(enquiryId, "enquiryId")).lean();
@@ -158,7 +158,7 @@ async function hydrateContext(event, context = {}) {
     context.providerId ||
       provider?.providerId ||
       provider?.id ||
-      distribution?.providerId,
+      unlock?.providerId,
   );
   if (providerId) {
     // Always prefer the CRM provider record for the recipient email address.
@@ -166,83 +166,81 @@ async function hydrateContext(event, context = {}) {
   }
 
   hydrated.event = clean(event).toLowerCase().replace(/[\s-]+/g, "_");
-  hydrated.distribution = distribution || {};
+  hydrated.unlock = unlock || {};
   hydrated.lead = lead || {};
   hydrated.provider = provider || {};
   hydrated.enquiryId = enquiryId;
   hydrated.providerId = providerId;
-  hydrated.leadDistributionId = clean(
-    context.leadDistributionId ||
-      context.distributionId ||
-      distribution?.leadDistributionId ||
-      distribution?.id,
+  hydrated.providerLeadUnlockId = clean(
+    context.providerLeadUnlockId ||
+      unlock?.providerLeadUnlockId ||
+      unlock?.id,
   );
-  hydrated.eventAt = formatDate(eventTimestamp(context, distribution || {}, lead || {}));
+  hydrated.eventAt = formatDate(eventTimestamp(context, unlock || {}, lead || {}));
   return hydrated;
 }
 
 function variablesFor(context) {
   const lead = context.lead || {};
-  const distribution = context.distribution || {};
+  const unlock = context.unlock || {};
   const provider = context.provider || {};
   const title = clean(
     lead.requirementTitle ||
       lead.leadTitle ||
       lead.serviceType ||
-      distribution.leadTitle ||
-      distribution.serviceType ||
+      unlock.leadTitle ||
+      unlock.serviceType ||
       "Service requirement",
   );
   const category = clean(
     lead.category ||
       lead.categorySlug ||
-      distribution.category ||
-      distribution.categorySlug ||
+      unlock.category ||
+      unlock.categorySlug ||
       "Not specified",
   );
   const location = [
-    clean(distribution.city || lead.city),
-    clean(distribution.state || lead.state),
+    clean(unlock.city || lead.city),
+    clean(unlock.state || lead.state),
   ].filter(Boolean).join(", ") || "Not specified";
   const outcome = clean(
     context.outcome ||
       context.providerSaleOutcome ||
-      distribution.providerSaleOutcome ||
+      unlock.providerSaleOutcome ||
       "Not set",
   ).replace(/_/g, " ");
   const activityStatus = clean(
     context.activityStatus ||
       context.status ||
       context.providerLeadStatus ||
-      distribution.providerLeadStatus ||
+      unlock.providerLeadStatus ||
       "Not set",
   ).replace(/_/g, " ");
-  const reason = clean(context.reason || distribution.providerLeadReason || "Not provided");
+  const reason = clean(context.reason || unlock.providerLeadReason || "Not provided");
   const note = clean(
     context.note ||
       context.outcomeNote ||
       context.providerSaleOutcomeNote ||
-      distribution.providerLeadNote ||
-      distribution.providerSaleOutcomeNote ||
+      unlock.providerLeadNote ||
+      unlock.providerSaleOutcomeNote ||
       "Not provided",
   );
   const creditsUsed = Number(
     context.creditsUsed ??
       context.effectiveLeadCostCredits ??
-      distribution.effectiveLeadCostCredits ??
-      distribution.leadCostCredits ??
+      unlock.chargedCredits ??
       0,
   );
 
   return {
-    provider_name: providerName(provider, distribution, context),
-    lead_id: clean(context.enquiryId || lead.enquiryId || lead.id || distribution.enquiryId || "Not available"),
-    lead_distribution_id: clean(context.leadDistributionId || distribution.leadDistributionId || distribution.id || ""),
+    provider_name: providerName(provider, unlock, context),
+    lead_id: clean(context.enquiryId || lead.enquiryId || lead.id || unlock.enquiryId || "Not available"),
+    provider_lead_unlock_id: clean(context.providerLeadUnlockId || unlock.providerLeadUnlockId || unlock.id || ""),
     requirement_title: title,
     category,
     location,
     credits_used: Number.isFinite(creditsUsed) ? String(creditsUsed) : "0",
-    unlock_method: clean(context.unlockMethod || distribution.unlockMethod || "credits").replace(/_/g, " "),
+    unlock_method: clean(context.unlockMethod || unlock.unlockMethod || "credits").replace(/_/g, " "),
     outcome,
     activity_status: activityStatus,
     reason,
@@ -256,7 +254,7 @@ function slackMessage(event, context, variables) {
     `*${eventLabel(event)}*`,
     `Lead: ${variables.lead_id}`,
   ];
-  if (variables.lead_distribution_id) lines.push(`Distribution: ${variables.lead_distribution_id}`);
+  if (variables.provider_lead_unlock_id) lines.push(`Unlock: ${variables.provider_lead_unlock_id}`);
   if (context.providerId || variables.provider_name !== "Provider") {
     lines.push(`Provider: ${variables.provider_name}${context.providerId ? ` (${context.providerId})` : ""}`);
   }
@@ -318,7 +316,7 @@ async function sendSlack(event, context, variables, actor) {
   if (!truthy(process.env.SYSTEM_EVENT_SLACK_ENABLED, true)) {
     return { channel: "slack", skipped: true, reason: "System Slack events are disabled" };
   }
-  const reference = context.leadDistributionId || context.enquiryId || context.providerId || "crm";
+  const reference = context.providerLeadUnlockId || context.enquiryId || context.providerId || "crm";
   return communicationService.send(
     {
       channel: "slack",
@@ -335,7 +333,7 @@ async function sendSlack(event, context, variables, actor) {
       idempotencyKey: `system-event:slack:${token(event)}:${token(reference)}:${token(context.eventAt)}`,
       metadata: {
         event,
-        leadDistributionId: context.leadDistributionId || "",
+        providerLeadUnlockId: context.providerLeadUnlockId || "",
         source: context.source || "crm",
       },
     },
@@ -355,7 +353,7 @@ async function sendProviderEmail(event, context, variables, actor) {
     return { channel: "email", skipped: true, reason: "Provider email is not available in CRM" };
   }
   const template = await ensureEmailTemplate(event);
-  const reference = context.leadDistributionId || context.enquiryId || context.providerId || "provider";
+  const reference = context.providerLeadUnlockId || context.enquiryId || context.providerId || "provider";
   return communicationService.send(
     {
       channel: "email",
@@ -371,7 +369,7 @@ async function sendProviderEmail(event, context, variables, actor) {
       idempotencyKey: `system-event:email:${token(event)}:${token(reference)}:${token(context.eventAt)}`,
       metadata: {
         event,
-        leadDistributionId: context.leadDistributionId || "",
+        providerLeadUnlockId: context.providerLeadUnlockId || "",
         source: context.source || "provider-portal",
       },
     },

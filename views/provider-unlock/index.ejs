@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Provider marketplace</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Inspect only leads that providers actually unlocked. Marketplace visibility creates no provider-specific rows.</p></div></div></div>
+        <div class="content">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <main x-data="providerUnlockList()" x-init="load()">
+            <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+            <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
+              <input class="form-control" style="max-width:240px" x-model="filters.enquiryId" placeholder="Lead Reference ID">
+              <input class="form-control" style="max-width:240px" x-model="filters.providerId" placeholder="Provider ID">
+              <select class="form-select" style="max-width:180px" x-model="filters.unlockMethod"><option value="">All methods</option><option value="credits">Credits</option><option value="direct_payment">Direct payment</option><option value="admin">Admin</option></select>
+              <select class="form-select" style="max-width:180px" x-model="filters.outcome"><option value="">All outcomes</option><option value="confirmed">Confirmed</option><option value="not_confirmed">Not confirmed</option></select>
+              <input class="form-control" style="max-width:150px" type="date" x-model="filters.startDate" aria-label="From date">
+              <input class="form-control" style="max-width:150px" type="date" x-model="filters.endDate" aria-label="To date">
+              <select class="form-select" style="max-width:150px" x-model="filters.sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select>
+              <button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" @click="reset()">Clear</button>
+              <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+            </form></section>
+            <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Provider unlock records</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> records on this page</p></div></div>
+              <div class="table-responsive"><table class="table mb-0"><thead><tr><th>Lead</th><th>Provider</th><th>Category</th><th>Method</th><th>Outcome</th><th>Credits</th><th>Unlocked</th></tr></thead><tbody>
+                <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                <template x-for="row in rows" :key="row.providerLeadUnlockId"><tr>
+                  <td><a :href="'/enquiries/'+row.enquiryId" x-text="row.leadTitle||row.enquiryId"></a></td>
+                  <td><a :href="'/providers/'+row.providerId" x-text="row.providerBusinessName||row.providerName||row.providerId"></a></td>
+                  <td x-text="humanize(row.categorySlug)"></td><td x-text="humanize(row.unlockMethod)"></td><td x-text="row.providerSaleOutcome ? humanize(row.providerSaleOutcome) : 'Pending'"></td><td x-text="Number(row.chargedCredits||0)+' credits'"></td><td x-text="formatDate(row.unlockedAt)"></td>
+                </tr></template>
+                <tr x-show="!loading && !rows.length"><td colspan="7" class="text-center text-muted py-4">No provider unlocks found</td></tr>
+              </tbody></table></div>
+              <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+            </section>
+          </main>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <script nonce="<%= cspNonce %>">
+      function providerUnlockList() {
+        return {
+          rows: [], loading: false, error: '', filters: { enquiryId: '', providerId: '', unlockMethod: '', outcome: '', startDate: '', endDate: '', sortOrder: 'newest' },
+          pagination: createCursorPagination(20),
+          query(cursor='') { const q = new URLSearchParams(); Object.entries(this.filters).forEach(([k,v]) => { if (v) q.set(k,v); }); q.set('dateField','unlockedAt'); q.set('limit',this.pagination.limit); if (cursor) q.set('cursor',cursor); return q.toString(); },
+          async load(cursor='') { this.loading=true; this.error=''; try { const body=await apiFetch('/api/provider-unlocks?'+this.query(cursor)); this.rows=body.data||[]; applyCursorPagination(this.pagination, body.pagination||{}); } catch(error) { this.error=error.message; } finally { this.loading=false; } },
+          search() { resetCursorPagination(this.pagination); this.load(); },
+          next() { const cursor=this.pagination.nextCursor; if (!cursor) return; advanceCursorPagination(this.pagination,cursor); this.load(cursor); },
+          previous() { const cursor=retreatCursorPagination(this.pagination); this.load(cursor); },
+          reset() { this.filters={ enquiryId:'', providerId:'', unlockMethod:'', outcome:'', startDate:'', endDate:'', sortOrder:'newest' }; this.search(); }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

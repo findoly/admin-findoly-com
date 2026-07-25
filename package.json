@@ -1,7 +1,7 @@
 {
   "name": "service-crm-admin",
   "version": "1.0.0",
-  "description": "Simple Alpine.js CRM with dedicated frontend and API routes, denormalized MongoDB schemas and one-to-many lead distribution.",
+  "description": "Findoly CRM with direct marketplace publication and compact provider unlock records.",
   "private": true,
   "type": "commonjs",
   "scripts": {
@@ -11,13 +11,13 @@
     "test": "node --test",
     "seed": "node scripts/seed.js",
     "migrate:structure": "node scripts/migrate-structure.js",
-    "migrate:lead-distribution": "node scripts/migrate-structure.js",
     "migrate:agent-payouts": "node scripts/migrate-agent-payouts.js",
     "migrate:marketplace-location": "node scripts/backfill-marketplace-locations.js",
     "qa:static": "node scripts/qa-static.js",
     "qa:critical": "node --test test/validation-utilities-expanded.test.js test/customer-portal-integration.test.js test/marketplace-publication-static.test.js test/provider-manual-credit-static.test.js test/registration-storage-static.test.js test/otp-proxy-routing.test.js test/production-readiness.test.js test/service-type-subscription-validation.test.js test/ui-responsive-static.test.js",
     "qa:production": "npm run qa:static && npm run qa:critical",
-    "ensure:indexes": "node scripts/ensure-indexes.js"
+    "ensure:indexes": "node scripts/ensure-indexes.js",
+    "cleanup:marketplace-leads": "node scripts/expire-marketplace-leads.js"
   },
   "engines": {
     "node": ">=20"

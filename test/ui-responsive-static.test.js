@@ -13,7 +13,7 @@ const responsiveFilterViews = [
   "views/billing/provider-subscriptions.ejs",
   "views/communication/logs.ejs",
   "views/communication/templates.ejs",
-  "views/distribution/index.ejs",
+  "views/provider-unlock/index.ejs",
   "views/employee/index.ejs",
   "views/enquiry/index.ejs",
   "views/enquiry/provider-statuses.ejs",
@@ -32,6 +32,33 @@ test("employee profile dropdown is viewport-safe and statically anchored", () =>
   assert.match(css, /\.crm-admin-dropdown\s*\{[^}]*max-width:\s*calc\(100vw - 1rem\)/s);
   assert.match(css, /\.crm-admin-dropdown\s*\{[^}]*right:\s*0\s*!important/s);
   assert.match(css, /\.crm-admin-dropdown\s*\{[^}]*transform:\s*none\s*!important/s);
+});
+
+
+
+test("real shell keeps a single-row header and a full-viewport mobile drawer", () => {
+  const head = read("views/partials/head.ejs");
+  const navbar = read("views/partials/navbar.ejs");
+  const sidebar = read("views/partials/sidebar.ejs");
+  const css = read("public/css/app.css");
+
+  assert.match(head, /app\.css\?v=20260726-responsive-shell/);
+  assert.match(navbar, /crm-brand-copy d-none d-xl-flex/);
+  assert.match(navbar, /crm-global-search d-none d-xl-flex/);
+  assert.match(navbar, /crm-admin-copy d-none d-xl-flex/);
+  assert.match(navbar, /aria-controls="crmPrimaryNavigation"/);
+  assert.match(sidebar, /id="crmPrimaryNavigation"/);
+  assert.match(sidebar, /crm-mobile-drawer-open/);
+  assert.match(sidebar, /@keydown\.escape\.window="sidebarOpen=false"/);
+
+  assert.match(css, /CRM real-shell responsive repair/);
+  assert.match(css, /\.crm-topbar,\s*\.crm-topbar \.container-fluid\s*\{[^}]*height:\s*64px[^}]*max-height:\s*64px/s);
+  assert.match(css, /\.crm-topbar \.container-fluid\s*\{[^}]*flex-wrap:\s*nowrap\s*!important/s);
+  assert.match(css, /\.crm-sidebar\s*\{[^}]*inset:\s*0 auto 0 0\s*!important[^}]*height:\s*100dvh/s);
+  assert.match(css, /\.crm-sidebar-overlay\s*\{[^}]*inset:\s*0\s*!important[^}]*z-index:\s*1055/s);
+  assert.match(css, /\.crm-sidebar-mobile-head\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/s);
+  assert.doesNotMatch(css, /\.crm-sidebar\s*\{[^}]*top:\s*64px/s);
+  assert.doesNotMatch(css, /\.crm-sidebar-overlay\s*\{[^}]*inset:\s*64px/s);
 });
 
 test("shared filter bars are responsive on phone, tablet and laptop", () => {

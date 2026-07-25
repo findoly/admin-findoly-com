@@ -29,7 +29,6 @@
 
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
-                <button class="btn btn-primary" @click="syncDistribution()" :disabled="distributionSaving || lead.isActive === false || !['distributed', 'sale_converted'].includes(currentStatus) || lead.agentReferralValidation !== 'valid'" title="Move the validated lead to Distributed before publishing it" x-text="distributionSaving ? 'Publishing…' : 'Publish marketplace'"></button>
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
@@ -59,8 +58,8 @@
                       </div>
 
                       <div x-show="providerControlled" x-cloak class="crm-action-lock">
-                        <strong>Lead validation locked after distribution</strong>
-                        <span>Provider statuses now control conversion. Employees cannot change validation or reject this lead.</span>
+                        <strong>Lead validation locked after approval</strong>
+                        <span>This lead is already published to providers. Provider outcomes control sale conversion.</span>
                       </div>
 
                       <div x-show="!providerControlled" x-cloak>
@@ -124,7 +123,7 @@
 
                       <div x-show="providerControlled" x-cloak class="crm-action-lock">
                         <strong>Employee journey actions are locked</strong>
-                        <span>A distributed lead cannot move backward or be rejected. Provider confirmation controls Sale Converted and its reversal.</span>
+                        <span>An approved lead is automatically published and cannot move backward. Provider confirmation controls the separate sale-conversion result.</span>
                       </div>
                       <div x-show="!validationReady && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
                         <strong>Complete lead validation first</strong>
@@ -142,18 +141,18 @@
                       </div>
                     </article>
 
-                    <article class="crm-lead-action-card crm-conversion-action" :class="{'is-complete': currentStatus === 'sale_converted'}">
+                    <article class="crm-lead-action-card crm-conversion-action" :class="{'is-complete': lead.providerSaleConversionStatus === 'converted'}">
                       <div class="crm-action-heading">
                         <span class="crm-action-step">3</span>
                         <div>
                           <h3>Sale conversion</h3>
                           <p>Read-only and calculated from unlocked providers.</p>
                         </div>
-                        <span class="crm-status ms-auto" :class="currentStatus === 'sale_converted' ? 'status-sale-converted' : 'status-pending'" x-text="saleConversionLabel"></span>
+                        <span class="crm-status ms-auto" :class="lead.providerSaleConversionStatus === 'converted' ? 'status-sale-converted' : 'status-pending'" x-text="saleConversionLabel"></span>
                       </div>
                       <div class="crm-conversion-summary">
-                        <strong x-text="providerControlled ? (lead.providerConfirmedCount || 0) : '—'"></strong>
-                        <span x-text="providerControlled ? 'providers currently Confirmed' : 'Available after distribution'"></span>
+                        <strong x-text="lead.unlockedCount ? (lead.providerConfirmedCount || 0) : '—'"></strong>
+                        <span x-text="lead.unlockedCount ? 'providers currently Confirmed' : 'Available after the first unlock'"></span>
                       </div>
                       <p class="mb-2" x-text="saleConversionMessage"></p>
                       <a class="btn btn-light w-100" :href="providerJourneyUrl">Review provider statuses</a>
@@ -265,7 +264,7 @@
                       <div class="crm-provider-stat-grid mb-3">
                         <div><span>Unlock limit</span><strong x-text="lead.maxProviderUnlocks || 5"></strong></div>
                         <div><span>Unlocked</span><strong x-text="lead.unlockedCount || 0"></strong></div>
-                        <div><span>Remaining</span><strong x-text="Math.max(0, (lead.maxProviderUnlocks || 5) - (lead.unlockedCount || 0))"></strong></div>
+                        <div><span>Remaining</span><strong x-text="lead.remainingUnlocks || 0"></strong></div>
                         <div><span>Confirmed</span><strong x-text="lead.providerConfirmedCount || 0"></strong></div>
                       </div>
                       <a class="btn btn-primary w-100" :href="providerJourneyUrl">View provider status table</a>
@@ -297,8 +296,7 @@
                   referralSaving: false,
                   noteSaving: false,
                   stateSaving: false,
-                  distributionSaving: false,
-                  journeySteps: ['new', 'verification', 'approved', 'distributed', 'sale_converted'],
+                  journeySteps: ['new', 'verification', 'approved'],
                   get providerJourneyUrl() {
                     return '/enquiries/' + this.recordId + '/providers';
                   },
@@ -309,7 +307,7 @@
                     return this.currentStatus === 'rejected';
                   },
                   get providerControlled() {
-                    return ['distributed', 'sale_converted'].includes(this.currentStatus);
+                    return this.currentStatus === 'approved';
                   },
                   get validationReady() {
                     return this.lead.agentReferralValidation === 'valid';
@@ -318,11 +316,11 @@
                     return this.isRejected ? (this.lead.metadata?.rejectedFromStatus || 'new') : this.currentStatus;
                   },
                   get canPrevious() {
-                    return !this.providerControlled && this.validationReady && (this.isRejected || this.journeySteps.slice(0, 4).indexOf(this.journeyBaseStatus) > 0);
+                    return !this.providerControlled && this.validationReady && (this.isRejected || this.journeySteps.indexOf(this.journeyBaseStatus) > 0);
                   },
                   get canNext() {
                     if (this.providerControlled || !this.validationReady || this.isRejected) return false;
-                    const employeeSteps = this.journeySteps.slice(0, 4);
+                    const employeeSteps = this.journeySteps;
                     const index = employeeSteps.indexOf(this.journeyBaseStatus);
                     return index >= 0 && index < employeeSteps.length - 1;
                   },
@@ -330,19 +328,19 @@
                     return !this.providerControlled && this.validationReady && !this.isRejected;
                   },
                   get saleConversionLabel() {
-                    if (this.currentStatus === 'sale_converted') return 'Sale converted';
-                    if (this.currentStatus === 'distributed') return 'Awaiting confirmation';
-                    return 'Not started';
+                    if (this.lead.providerSaleConversionStatus === 'converted') return 'Sale converted';
+                    if (this.lead.unlockedCount) return 'Awaiting confirmation';
+                    return 'No provider unlocks';
                   },
                   get saleConversionMessage() {
-                    if (this.currentStatus === 'sale_converted') {
-                      const count = Number(this.lead.providerConfirmedCount || 0);
-                      return count + ' unlocked provider' + (count === 1 ? ' is' : 's are') + ' currently Confirmed. The lead remains converted while at least one confirmation exists.';
+                    const count = Number(this.lead.providerConfirmedCount || 0);
+                    if (this.lead.providerSaleConversionStatus === 'converted') {
+                      return count + ' unlocked provider' + (count === 1 ? ' is' : 's are') + ' currently Confirmed.';
                     }
-                    if (this.currentStatus === 'distributed') {
-                      return 'The CRM will change this lead to Sale Converted automatically when any unlocked provider marks it Confirmed.';
+                    if (this.lead.unlockedCount) {
+                      return 'The sale-conversion result changes automatically when an unlocked provider marks the lead Confirmed.';
                     }
-                    return 'Sale conversion starts only after the lead reaches Distributed.';
+                    return 'Sale conversion begins after a provider unlocks the approved marketplace lead.';
                   },
                   get summary() {
                     return [
@@ -360,7 +358,7 @@
                       { label: 'City', value: this.lead.city },
                       { label: 'Price', value: money(this.lead.leadPricePaise) },
                       { label: 'Status', value: humanize(this.currentStatus) },
-                      { label: 'Marketplace', value: this.lead.marketplacePublishedAt ? 'Published' : 'Not published' },
+                      { label: 'Marketplace', value: this.lead.marketplaceAvailable ? 'Published' : humanize(this.lead.marketplaceStatus || 'draft') },
                       { label: 'Unlock capacity', value: (this.lead.unlockedCount || 0) + ' of ' + (this.lead.maxProviderUnlocks || 5) },
                       { label: 'Confirmed', value: (this.lead.providerConfirmedCount || 0) + ' providers' }
                     ];
@@ -378,7 +376,7 @@
                       'is-complete': stepIndex < currentIndex,
                       'is-current': stepIndex === currentIndex && !this.isRejected,
                       'is-rejected-stage': stepIndex === currentIndex && this.isRejected,
-                      'is-provider-stage': step === 'sale_converted'
+                      'is-provider-stage': false
                     };
                   },
                   timelineTitle(event) {
@@ -418,7 +416,7 @@
                   async changeStatus(action) {
                     if (this.statusSaving) return;
                     if (this.providerControlled) {
-                      this.notify('Journey actions are locked after distribution. Provider statuses control conversion.', 'error');
+                      this.notify('Journey actions are locked after approval because the lead is already published.', 'error');
                       return;
                     }
                     if (!this.validationReady) {
@@ -497,22 +495,9 @@
                       this.noteSaving = false;
                     }
                   },
-                  async syncDistribution() {
-                    if (this.distributionSaving) return;
-                    this.distributionSaving = true;
-                    try {
-                      await apiFetch('/api/enquiry/' + this.recordId + '/distribute', { method: 'POST', body: '{}' });
-                      await this.load();
-                      this.notify('Lead published to the provider marketplace.', 'success');
-                    } catch (error) {
-                      this.notify(error.message, 'error');
-                    } finally {
-                      this.distributionSaving = false;
-                    }
-                  },
                   async reactivateLead() {
                     if (this.stateSaving) return;
-                    if (!window.confirm('Reactivate this lead? It will return to the marketplace if it is still Distributed.')) return;
+                    if (!window.confirm('Reactivate this lead? Approved leads return to the marketplace when capacity remains.')) return;
                     this.stateSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/reactivate', { method: 'POST', body: '{}' })).data;

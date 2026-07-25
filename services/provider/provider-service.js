@@ -1,6 +1,5 @@
 const Provider = require("../../models/Provider");
-const Enquiry = require("../../models/Enquiry");
-const LeadDistribution = require("../../models/LeadDistribution");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const WalletTransaction = require("../../models/WalletTransaction");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
@@ -18,7 +17,6 @@ const {
   validationError,
   pincodeValue,
 } = require("../../utils/validation");
-const enquiryService = require("../enquiry/enquiry-service");
 const { geocodePincode } = require("../location/geocoding-service");
 const accountRegistrationService = require("../communication/account-registration-service");
 
@@ -34,12 +32,6 @@ const ONBOARDING_STAGES = Object.freeze([
   "training_pending",
   "ready",
   "paused",
-]);
-const OFFER_STATUSES = Object.freeze([
-  "offered",
-  "unlocked",
-  "withdrawn",
-  "expired",
 ]);
 const OUTCOME_VERIFICATION_STATUSES = Object.freeze([
   "pending_review",
@@ -239,32 +231,25 @@ async function get(providerId) {
   return presentProvider(provider);
 }
 
-async function listDistributions(providerId, filters = {}) {
+async function listUnlocks(providerId, filters = {}) {
   const provider = await get(providerId);
   const { limit, cursor } = getPagination(filters);
   const query = { providerId: provider.providerId };
-  if (filters.status) {
-    query.status = enumValue(filters.status, OFFER_STATUSES, {
-      label: "Offer status filter",
+  if (filters.outcome) {
+    query.providerSaleOutcome = enumValue(filters.outcome, ["confirmed", "not_confirmed"], {
+      label: "Provider outcome filter",
     });
-  }
-  if (filters.unlocked !== undefined && filters.unlocked !== "") {
-    const unlocked = booleanValue(filters.unlocked, {
-      label: "Unlocked filter",
-    });
-    query.contactUnlocked = unlocked ? true : { $ne: true };
   }
 
-  return cursorPaginate(LeadDistribution, {
+  const result = await cursorPaginate(ProviderLeadUnlock, {
     query,
-    sort: { distributedAt: -1, _id: -1 },
+    sort: { unlockedAt: -1, _id: -1 },
     limit,
     cursor,
     select: {
-      leadDistributionId: 1,
+      providerLeadUnlockId: 1,
       enquiryId: 1,
       leadTitle: 1,
-      status: 1,
       providerSaleOutcome: 1,
       providerSaleOutcomeNote: 1,
       providerSaleOutcomeUpdatedAt: 1,
@@ -275,12 +260,16 @@ async function listDistributions(providerId, filters = {}) {
       providerLeadStatus: 1,
       providerLeadReason: 1,
       providerLeadNote: 1,
-      contactUnlocked: 1,
-      leadPricePaise: 1,
-      distributedAt: 1,
+      chargedCredits: 1,
+      unlockMethod: 1,
+      unlockedAt: 1,
       updatedAt: 1,
     },
   });
+  return {
+    ...result,
+    data: result.data,
+  };
 }
 
 async function listTransactions(providerId, filters = {}) {
@@ -411,20 +400,6 @@ async function assertUniqueProviderMobile(mobile, excludingProviderId = "") {
   }
 }
 
-async function safeSyncApprovedLeads(provider, actor) {
-  try {
-    await syncApprovedLeads(provider);
-  } catch (error) {
-    console.error(`Provider lead sync failed for ${provider?.providerId || "unknown"} (${actor || "crm-admin"}):`, error.message);
-  }
-}
-
-function scheduleProviderSync(provider, actor) {
-  setImmediate(() => {
-    safeSyncApprovedLeads(provider, actor).catch(() => {});
-  });
-}
-
 async function create(input, actor = "crm-admin") {
   const normalized = normalizeProviderInput(input);
   await assertUniqueProviderMobile(normalized.normalizedMobile);
@@ -439,7 +414,6 @@ async function create(input, actor = "crm-admin") {
     throw error;
   }
   const created = await get(provider.providerId);
-  scheduleProviderSync(created, actor);
   await accountRegistrationService.dispatch(
     "provider_created",
     { provider: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
@@ -461,58 +435,17 @@ async function update(providerId, input = {}, actor = "crm-admin") {
   const data = await applyProviderLocation(normalized, current);
   await Provider.updateOne(query, { $set: data });
   const provider = await get(providerId);
-  scheduleProviderSync(provider, actor);
   return provider;
 }
 
-async function syncApprovedLeads(providerDocument) {
-  if (!providerDocument) {
-    throw Object.assign(new Error("Provider not found"), { status: 404 });
-  }
-  const rawProvider = providerDocument.toObject
-    ? providerDocument.toObject()
-    : providerDocument;
-  const provider = presentProvider(rawProvider);
-  const eligible =
-    provider.status === "active" && provider.portalAccessEnabled !== false;
-
-  if (!eligible) {
-    await LeadDistribution.updateMany(
-      { providerId: provider.providerId, contactUnlocked: { $ne: true } },
-      { $set: { status: "withdrawn", updatedAt: new Date() } },
-    );
-    return;
-  }
-
-  const enquiries = Enquiry.find({
-    status: { $in: ["approved", "distributed", "sale_converted"] },
-    isActive: { $ne: false },
-    categorySlug: { $in: provider.categorySlugs || [] },
-  }).cursor();
-
-  for await (const enquiry of enquiries) {
-    await enquiryService.distribute(enquiry, "provider-sync");
-  }
-
-  await LeadDistribution.updateMany(
-    {
-      providerId: provider.providerId,
-      categorySlug: { $nin: provider.categorySlugs || [] },
-      contactUnlocked: { $ne: true },
-    },
-    { $set: { status: "withdrawn", updatedAt: new Date() } },
-  );
-}
-
-async function reviewProviderOutcome(providerId, leadDistributionId, input = {}, actor = "admin") {
+async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {}, actor = "admin") {
   const provider = await get(providerId);
-  const distributionId = identifierValue(leadDistributionId, { label: "Lead distribution ID" });
-  const distribution = await LeadDistribution.findOne({
+  const unlockId = identifierValue(providerLeadUnlockId, { label: "Provider lead unlock ID" });
+  const unlock = await ProviderLeadUnlock.findOne({
     providerId: provider.providerId,
-    leadDistributionId: distributionId,
-    contactUnlocked: true,
+    providerLeadUnlockId: unlockId,
   }).lean();
-  if (!distribution) {
+  if (!unlock) {
     throw Object.assign(new Error("Unlocked provider lead not found"), { status: 404 });
   }
 
@@ -534,8 +467,8 @@ async function reviewProviderOutcome(providerId, leadDistributionId, input = {},
   }
 
   const now = new Date();
-  await LeadDistribution.updateOne(
-    { leadDistributionId: distributionId, providerId: provider.providerId },
+  await ProviderLeadUnlock.updateOne(
+    { providerLeadUnlockId: unlockId, providerId: provider.providerId },
     {
       $set: {
         outcomeVerificationStatus: verificationStatus,
@@ -570,7 +503,7 @@ async function reviewProviderOutcome(providerId, leadDistributionId, input = {},
 
   return {
     provider: await get(provider.providerId),
-    distribution: await LeadDistribution.findOne({ leadDistributionId: distributionId }).lean(),
+    unlock: await ProviderLeadUnlock.findOne({ providerLeadUnlockId: unlockId }).lean(),
     reviewAction,
   };
 }
@@ -578,17 +511,15 @@ async function reviewProviderOutcome(providerId, leadDistributionId, input = {},
 module.exports = {
   list,
   get,
-  listDistributions,
+  listUnlocks,
   listTransactions,
   create,
   update,
-  syncApprovedLeads,
   presentProvider,
   normalizeProviderInput,
   assertProviderIdUnchanged,
   PROVIDER_STATUSES,
   ONBOARDING_STAGES,
-  OFFER_STATUSES,
   OUTCOME_VERIFICATION_STATUSES,
   PROVIDER_REVIEW_ACTIONS,
   reviewProviderOutcome,

@@ -30,10 +30,9 @@ test("lead journey only allows next, previous and rejection transitions", () => 
     "new",
     "verification",
     "approved",
-    "distributed",
   ]);
   assert.equal(canonicalLeadStatus("verification_pending"), "verification");
-  assert.equal(canonicalLeadStatus("sale_converted"), "sale_converted");
+  assert.equal(canonicalLeadStatus("sale_converted"), "new");
   assert.equal(
     resolveLeadStatusTransition("new", { action: "next" }).toStatus,
     "verification",
@@ -63,26 +62,28 @@ test("lead journey only allows next, previous and rejection transitions", () => 
   );
 });
 
-test("provider journey combines offered, unlocked and provider status events", () => {
+test("provider journey combines unlock, provider status and provider outcome events", () => {
   const events = providerJourney({
     providerId: "provider-1",
-    distributedBy: "admin@example.com",
-    distributedAt: new Date("2026-07-12T05:00:00.000Z"),
-    contactUnlocked: true,
     unlockedAt: new Date("2026-07-12T05:10:00.000Z"),
     providerLeadStatus: "confirmed",
     providerLeadReason: "service_booked",
     providerLeadNote: "Booked for Monday",
     providerLeadStatusUpdatedAt: new Date("2026-07-12T05:20:00.000Z"),
     providerLeadStatusUpdatedBy: "provider-1",
+    providerSaleOutcome: "confirmed",
+    providerSaleOutcomeNote: "Customer confirmed the booking",
+    providerSaleOutcomeUpdatedAt: new Date("2026-07-12T05:30:00.000Z"),
+    providerSaleOutcomeUpdatedBy: "provider-1",
   });
 
   assert.deepEqual(
     events.map((event) => event.type),
-    ["distributed", "unlocked", "provider_status"],
+    ["unlocked", "provider_status", "provider_outcome"],
   );
-  assert.equal(events[2].status, "confirmed");
-  assert.equal(events[2].note, "Booked for Monday");
+  assert.equal(events[1].status, "confirmed");
+  assert.equal(events[1].note, "Booked for Monday");
+  assert.equal(events[2].outcome, "confirmed");
 });
 
 test("CRM views expose managed categories, multi-select categories and journey controls", () => {

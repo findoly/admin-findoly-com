@@ -17,7 +17,7 @@ test("provider event variables use CRM provider identity and lead details", func
     eventAt: "2026-07-20T10:00:00.000Z",
     provider: { providerId: "provider-1", name: "Dhiraj", businessName: "Findoly Services", email: "provider@example.com" },
     lead: { enquiryId: "lead-1", requirementTitle: "Paint a front door", category: "Painting" },
-    distribution: { leadDistributionId: "distribution-1", city: "Mumbai", state: "Maharashtra", effectiveLeadCostCredits: 12 },
+    unlock: { providerLeadUnlockId: "unlock-1", city: "Mumbai", state: "Maharashtra", chargedCredits: 12 },
     unlockMethod: "credits",
   });
   assert.equal(variables.provider_name, "Findoly Services");
@@ -31,14 +31,14 @@ test("internal Slack event summary excludes customer contact fields", function (
   const context = {
     providerId: "provider-1",
     enquiryId: "lead-1",
-    leadDistributionId: "distribution-1",
+    providerLeadUnlockId: "unlock-1",
     eventAt: "2026-07-20T10:00:00.000Z",
     lead: { customerMobile: "9999999999", customerEmail: "customer@example.com" },
   };
   const variables = {
     provider_name: "Findoly Services",
     lead_id: "lead-1",
-    lead_distribution_id: "distribution-1",
+    provider_lead_unlock_id: "unlock-1",
     requirement_title: "Paint a front door",
     category: "Painting",
     credits_used: "12",

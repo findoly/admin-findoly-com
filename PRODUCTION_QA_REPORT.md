@@ -76,7 +76,7 @@ A provider saved through manual location fallback has no verified latitude/longi
 - Lead metadata and additional-details objects reject unsafe Mongo-style keys and excessive depth/size.
 - Lead status, referral validation, notes, distribution and reactivation actions have duplicate-submit guards.
 - Communication failures after a successful lead mutation are non-blocking.
-- Distribution still requires verified coordinates because radius matching cannot safely use manual/unverified coordinates.
+- Precise distance matching requires verified coordinates; leads with manual PIN-code data remain available only through the configured open-network stage.
 - Multi-record lead and distribution lists use bounded cursor pagination.
 
 ### Billing and follow-ups
@@ -143,7 +143,7 @@ A provider saved through manual location fallback has no verified latitude/longi
 | Categories | Passed | Create/edit duplicate slug/name handling |
 | Leads/requirements | Passed | Create/edit, referral validation, status journey, publish, deactivate/reactivate |
 | Provider statuses | Passed | Confirm/reject/on-hold/invalid, reason/note, sale conversion |
-| Distribution | Passed | Radius matching and pagination with real coordinates |
+| Marketplace | Passed | Radius matching and pagination with real coordinates |
 | Follow-ups | Passed | Create/edit/date validation and filters |
 | Billing | Passed | Create/edit, duplicate invoice, calculations and statuses |
 | Provider credits | Passed | Idempotency and balance transaction using staging DB transaction support |

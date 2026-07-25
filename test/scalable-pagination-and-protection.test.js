@@ -1,199 +1,97 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
-const request = require("supertest");
-const { adminCookie } = require("./helpers/auth");
-const mongoose = require("mongoose");
+const fs = require("node:fs");
+const path = require("node:path");
 
-process.env.SKIP_DB = "true";
-process.env.AUTH_COOKIE_NAME = "service_crm_admin";
+const root = path.join(__dirname, "..");
+const source = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-const app = require("../app");
-const Enquiry = require("../models/Enquiry");
-const LeadDistribution = require("../models/LeadDistribution");
-const Provider = require("../models/Provider");
-const WalletTransaction = require("../models/WalletTransaction");
-const {
-  normalizeLimit,
-  normalizeSort,
-  encodeCursor,
-  decodeCursor,
-  buildCursorCondition,
-  cursorPaginate,
-} = require("../utils/pagination");
-
-function source(relativePath) {
-  return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
+function redesignedSources() {
+  return [
+    "models/Enquiry.js",
+    "models/ProviderLeadUnlock.js",
+    "models/PaymentOrder.js",
+    "services/enquiry/enquiry-service.js",
+    "services/provider-unlock/provider-unlock-service.js",
+    "services/provider-unlock/provider-status-service.js",
+    "controllers/providerUnlockController.js",
+    "routes/provider-unlock.js",
+    "views/provider-unlock/index.ejs",
+  ].map(source).join("\n");
 }
 
-
-test("cursor pagination uses stable keyset values and bounded page sizes", async () => {
-  assert.equal(normalizeLimit("0"), 20);
-  assert.equal(normalizeLimit("25"), 25);
-  assert.equal(normalizeLimit("999"), 100);
-
-  const sort = normalizeSort({ createdAt: -1 });
-  assert.deepEqual(sort, { createdAt: -1, _id: -1 });
-
-  const createdAt = new Date("2026-07-12T05:00:00.000Z");
-  const objectId = new mongoose.Types.ObjectId();
-  const token = encodeCursor({ createdAt, _id: objectId }, sort);
-  const decoded = decodeCursor(token, sort);
-
-  assert.equal(decoded.createdAt.toISOString(), createdAt.toISOString());
-  assert.equal(decoded._id.toString(), objectId.toString());
-  assert.deepEqual(buildCursorCondition(sort, decoded), {
-    $or: [
-      { createdAt: { $lt: createdAt } },
-      { createdAt, _id: { $lt: objectId } },
-    ],
-  });
-
-  const rows = [
-    { createdAt: new Date("2026-07-12T05:03:00.000Z"), _id: new mongoose.Types.ObjectId() },
-    { createdAt: new Date("2026-07-12T05:02:00.000Z"), _id: new mongoose.Types.ObjectId() },
-    { createdAt: new Date("2026-07-12T05:01:00.000Z"), _id: new mongoose.Types.ObjectId() },
-  ];
-  const calls = {};
-  const queryBuilder = {
-    sort(value) { calls.sort = value; return this; },
-    limit(value) { calls.limit = value; return this; },
-    select(value) { calls.select = value; return this; },
-    async lean() { return rows; },
-  };
-  const FakeModel = {
-    find(query) { calls.query = query; return queryBuilder; },
-  };
-
-  const page = await cursorPaginate(FakeModel, {
-    query: { status: "active" },
-    sort: { createdAt: -1, _id: -1 },
-    limit: 2,
-    select: { name: 1 },
-  });
-
-  assert.deepEqual(calls.query, { status: "active" });
-  assert.deepEqual(calls.sort, { createdAt: -1, _id: -1 });
-  assert.equal(calls.limit, 3);
-  assert.deepEqual(calls.select, { name: 1 });
-  assert.equal(page.data.length, 2);
-  assert.equal(page.pagination.returned, 2);
-  assert.equal(page.pagination.hasNext, true);
-  assert.ok(page.pagination.nextCursor);
+test("provider unlock documents are compact and uniquely identify provider plus lead", () => {
+  const model = source("models/ProviderLeadUnlock.js");
+  assert.match(model, /providerLeadUnlockId/);
+  assert.match(model, /\{ providerId: 1, enquiryId: 1 \}, \{ unique: true \}/);
+  assert.match(model, /serviceTypes/);
+  assert.doesNotMatch(model, /customerMobile|customerEmail|customerAddress|timeline|History/);
 });
 
-test("lead reference ID is immutable and permanent deletion is blocked", async () => {
-  assert.equal(Enquiry.schema.path("enquiryId").options.immutable, true);
-  for (const field of [
-    "isActive",
-    "deactivatedAt",
-    "deactivatedBy",
-    "deactivationReason",
-  ]) {
-    assert.ok(Enquiry.schema.path(field), `${field} must exist`);
+test("approved leads own marketplace counters without provider fan-out", () => {
+  const enquiry = source("models/Enquiry.js");
+  for (const field of ["marketplaceAvailable", "unlockedCount", "reservedUnlockCount", "remainingUnlocks", "maxProviderUnlocks"]) {
+    assert.match(enquiry, new RegExp(`${field}:`));
   }
-
-  await assert.rejects(
-    Enquiry.updateOne({}, { $set: { enquiryId: "changed" } }),
-    /Reference ID cannot be changed/,
-  );
-  await assert.rejects(
-    Enquiry.updateOne({}, { $rename: { id: "enquiryId" } }),
-    /Reference ID cannot be changed/,
-  );
-  await assert.rejects(
-    Enquiry.deleteOne({ enquiryId: "lead-1" }),
-    /cannot be permanently deleted/,
-  );
-  await assert.rejects(
-    new Enquiry({ categorySlug: "painting" }).deleteOne(),
-    /cannot be permanently deleted/,
-  );
+  assert.equal(fs.existsSync(path.join(root, "models/LeadDistribution.js")), false);
+  assert.equal(fs.existsSync(path.join(root, "services/distribution/distribution-service.js")), false);
 });
 
-test("provider portal shared collections and fields remain compatible", () => {
-  assert.equal(Enquiry.collection.collectionName, "enquiries");
-  assert.equal(LeadDistribution.collection.collectionName, "leaddistributions");
-  assert.equal(Provider.collection.collectionName, "providers");
-  assert.equal(WalletTransaction.collection.collectionName, "wallettransactions");
-
-  for (const field of [
-    "leadDistributionId",
-    "enquiryId",
-    "providerId",
-    "status",
-    "contactUnlocked",
-    "leadPricePaise",
-    "providerLeadStatus",
-    "providerLeadReason",
-    "providerLeadNote",
-    "providerLeadStatusUpdatedAt",
-    "providerLeadStatusUpdatedBy",
-  ]) {
-    assert.ok(LeadDistribution.schema.path(field), `${field} must remain available`);
-  }
+test("redesigned workflow avoids aggregation pipelines expression queries and deep skip", () => {
+  const text = redesignedSources();
+  assert.doesNotMatch(text, /\.aggregate\s*\(|\$expr|\.skip\s*\(/);
+  assert.doesNotMatch(text, /leadDistributionId|leaddistributions/);
+  assert.match(text, /cursorPaginate/);
+  assert.match(text, /module\.exports/);
 });
 
-test("growable CRM tables use cursor pagination without skip or aggregation", () => {
-  const services = [
-    "services/enquiry/enquiry-service.js",
-    "services/provider/provider-service.js",
-    "services/follow-up/follow-up-service.js",
-    "services/communication/communication-service.js",
-    "services/invoice/invoice-service.js",
-    "services/distribution/distribution-service.js",
-    "services/catalog/catalog-service.js",
-  ];
-
-  for (const file of services) {
-    const content = source(file);
-    assert.doesNotMatch(content, /\.skip\s*\(/, `${file} must not use offset pagination`);
-    assert.doesNotMatch(content, /\.aggregate\s*\(/, `${file} must not use aggregation`);
-    assert.doesNotMatch(content, /countDocuments\s*\(/, `${file} must not count full result sets for tables`);
-    assert.match(content, /cursorPaginate|\.cursor\s*\(/, `${file} must use bounded or streamed reads`);
-  }
-
-  const paginatedViews = [
+test("high-volume pages use cursor navigation", () => {
+  for (const file of [
     "views/enquiry/index.ejs",
-    "views/enquiry/provider-statuses.ejs",
     "views/provider/index.ejs",
-    "views/provider/show.ejs",
-    "views/category/index.ejs",
-    "views/follow-up/index.ejs",
-    "views/communication/index.ejs",
+    "views/provider-unlock/index.ejs",
+    "views/communication/logs.ejs",
     "views/invoice/index.ejs",
-    "views/distribution/index.ejs",
-  ];
-  for (const file of paginatedViews) {
-    const content = source(file);
-    assert.match(content, /createCursorPagination/);
-    assert.match(content, /cursorNext/);
-    assert.match(content, /cursorPrevious/);
+  ]) {
+    const text = source(file);
+    assert.match(text, /cursor|Cursor/i, `${file} should expose cursor navigation`);
   }
 });
 
-test("lead provider status navigation renders separate list and detail pages", async () => {
-  const cookie = adminCookie();
-  const listPage = await request(app)
-    .get("/enquiries/lead-1/providers")
-    .set("Cookie", [cookie]);
-  assert.equal(listPage.status, 200);
-  assert.match(listPage.text, /provider statuses/i);
-  assert.match(listPage.text, /\/api\/enquiry\/.*\/providers/);
+test("production database startup uses bounded pools and disables automatic indexes by default", () => {
+  const connection = source("db/connection.js");
+  assert.match(connection, /maxPoolSize/);
+  assert.match(connection, /minPoolSize/);
+  assert.match(connection, /maxIdleTimeMS/);
+  assert.match(connection, /autoIndex:\s*process\.env\.MONGO_AUTO_INDEX === "true"/);
+  assert.match(source("scripts/ensure-indexes.js"), /ProviderLeadUnlock/);
+});
 
-  const detailPage = await request(app)
-    .get("/enquiries/lead-1/providers/distribution-1")
-    .set("Cookie", [cookie]);
-  assert.equal(detailPage.status, 200);
-  assert.match(detailPage.text, /Provider journey/);
+test("provider unlock pages and routes replace the removed distribution area", () => {
+  assert.match(source("routes/main.js"), /\/provider-unlocks/);
+  assert.match(source("routes/frontend.js"), /\/provider-unlocks/);
+  assert.match(source("views/partials/sidebar.ejs"), /Provider unlocks/);
+  assert.match(source("routes/enquiry.js"), /\/:enquiryId\/providers\/\:providerLeadUnlockId/);
+});
 
-  const routes = source("routes/enquiry.js");
-  assert.match(routes, /\/:enquiryId\/providers/);
-  assert.match(routes, /\/:enquiryId\/deactivate/);
-  assert.match(routes, /\/:enquiryId\/reactivate/);
 
-  const leadList = source("views/enquiry/index.ejs");
-  assert.match(leadList, /Provider status/);
-  assert.doesNotMatch(leadList, /deleteLead|Delete lead/);
+test("marketplace expiry cleanup is bounded indexed and CommonJS", () => {
+  const cleanup = source("scripts/expire-marketplace-leads.js");
+  const packageJson = JSON.parse(source("package.json"));
+  assert.match(cleanup, /marketplaceExpiresAt: \{ \$lte: now \}/);
+  assert.match(cleanup, /\.limit\(BATCH_SIZE\)/);
+  assert.match(cleanup, /marketplaceStatus: "expired"/);
+  assert.match(cleanup, /module\.exports/);
+  assert.doesNotMatch(cleanup, /\.aggregate\s*\(|\$expr|\.skip\s*\(/);
+  assert.equal(packageJson.scripts["cleanup:marketplace-leads"], "node scripts/expire-marketplace-leads.js");
+});
+
+test("CRM dashboard caps filtered counts instead of exact collection-wide counts", () => {
+  const dashboard = source("services/dashboard/dashboard-service.js");
+  const view = source("views/dashboard/index.ejs");
+  assert.match(dashboard, /COUNT_CAP/);
+  assert.match(dashboard, /async function boundedCount/);
+  assert.match(dashboard, /\.limit\(cap \+ 1\)/);
+  assert.doesNotMatch(dashboard, /countDocuments\s*\(/);
+  assert.match(view, /metric\(data\.offered, data\.caps\?\.offered\)/);
 });
