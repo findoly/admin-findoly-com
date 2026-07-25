@@ -50,9 +50,9 @@
 
                 <div class="col-xl-8">
                   <div class="card" :class="loading && 'crm-loading'">
-                    <div class="card-header">
-                      <div class="d-flex flex-wrap align-items-end gap-2">
-                        <div class="me-auto"><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
+                    <div class="card-header crm-category-filter-header">
+                      <div class="crm-filter-bar crm-filter-bar-embedded">
+                        <div class="crm-filter-heading"><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
                         <input class="form-control" style="max-width:200px" type="search" x-model="q" maxlength="100" placeholder="Search categories" />
                         <input class="form-control" style="max-width:150px" type="date" x-model="startDate" aria-label="From date" />
                         <input class="form-control" style="max-width:150px" type="date" x-model="endDate" aria-label="To date" />

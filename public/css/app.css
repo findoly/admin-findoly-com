@@ -4128,3 +4128,579 @@ html.crm-sidebar-no-transition .content-wrapper {
 @media (max-width:1199.98px){.crm-lead-action-grid,.crm-lead-action-grid.without-validation{grid-template-columns:1fr 1fr}.crm-conversion-action{grid-column:1/-1}}
 @media (max-width:767.98px){.crm-toast-region{top:.75rem;left:.75rem;right:.75rem;width:auto}.crm-lead-action-grid,.crm-lead-action-grid.without-validation{grid-template-columns:1fr}.crm-conversion-action{grid-column:auto}.crm-lead-action-card{padding:.85rem}.crm-provider-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){.crm-toast,.crm-toast.is-leaving{animation:none}}
+
+/* ========================================================================== 
+   CRM responsive consistency repair — mobile, tablet and laptop
+   ========================================================================== */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.page-content,
+.content-wrapper,
+.content-inner,
+.content,
+.crm-page-heading,
+.crm-card-heading,
+.card,
+.card-body,
+.card-header,
+.table-responsive,
+.row > * {
+  min-width: 0;
+}
+
+/* Topbar and employee menu stay inside the viewport at every breakpoint. */
+.crm-topbar .container-fluid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.crm-topbar .navbar-brand {
+  min-width: 0;
+  margin-right: 0;
+}
+
+.crm-brand-link,
+.crm-brand-copy,
+.crm-topbar .nav,
+.crm-admin-dropdown-wrap {
+  min-width: 0;
+}
+
+.crm-topbar .nav {
+  flex: 0 0 auto;
+}
+
+.crm-admin-dropdown-wrap {
+  position: relative;
+}
+
+.crm-admin-menu {
+  max-width: min(15rem, calc(100vw - 8.5rem));
+}
+
+.crm-admin-dropdown {
+  left: auto !important;
+  right: 0 !important;
+  width: min(18rem, calc(100vw - 1rem));
+  min-width: 0;
+  max-width: calc(100vw - 1rem);
+  margin-top: .5rem !important;
+  overflow: hidden;
+  transform: none !important;
+}
+
+.crm-admin-dropdown .border-bottom,
+.crm-admin-dropdown .dropdown-item,
+.crm-admin-dropdown .fw-semibold,
+.crm-admin-dropdown .text-muted {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.crm-admin-dropdown .dropdown-item {
+  width: 100%;
+}
+
+/* Shared filter layout. Inline widths in legacy views no longer force overflow. */
+.crm-filter-card {
+  overflow: visible;
+}
+
+.crm-filter-card form,
+.crm-filter-card .crm-filter-bar {
+  width: 100%;
+  min-width: 0;
+}
+
+.crm-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .625rem;
+  padding: .75rem;
+}
+
+.crm-filter-bar-embedded {
+  padding: 0;
+}
+
+.crm-filter-bar > *,
+.crm-filter-bar > .form-control,
+.crm-filter-bar > .form-select,
+.crm-filter-bar > label,
+.crm-filter-bar > button,
+.crm-filter-bar > a {
+  min-width: 0;
+}
+
+.crm-filter-bar > .form-control,
+.crm-filter-bar > .form-select {
+  flex: 1 1 9.5rem;
+  width: auto !important;
+  min-width: 9.5rem;
+  max-width: 13rem !important;
+}
+
+.crm-filter-bar > input[type="date"] {
+  flex-basis: 9.5rem;
+}
+
+.crm-search-control {
+  flex: 2 1 18rem;
+  width: auto;
+  min-width: min(16rem, 100%);
+  max-width: none;
+}
+
+.crm-inline-select,
+.crm-compact-select {
+  flex: 1 1 10.5rem;
+  width: auto;
+  min-width: 10.5rem;
+  max-width: 14rem;
+}
+
+.crm-inline-select select,
+.crm-compact-select select {
+  min-width: 0;
+  width: 100%;
+}
+
+.crm-filter-bar .crm-page-size,
+.crm-filter-bar .crm-filter-page-size {
+  flex: 0 0 auto;
+  margin-left: auto !important;
+}
+
+.crm-filter-bar .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.crm-filter-heading {
+  flex: 1 1 15rem;
+  min-width: 12rem;
+  padding-right: .5rem;
+}
+
+.crm-category-filter-header {
+  padding: .85rem 1rem;
+}
+
+.crm-category-filter-header .crm-filter-bar > .form-control,
+.crm-category-filter-header .crm-filter-bar > .form-select {
+  flex-basis: 8.75rem;
+}
+
+/* Current-folder controls use the same responsive rhythm as filters. */
+.crm-storage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.crm-storage-toolbar > * {
+  min-width: 0;
+}
+
+.crm-storage-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  min-width: min(100%, 18rem);
+}
+
+.crm-storage-toolbar-actions .form-control {
+  flex: 1 1 14rem;
+  width: auto;
+  min-width: 0;
+}
+
+/* Headers, cards and action rows wrap without clipping. */
+.crm-page-heading,
+.crm-card-heading {
+  flex-wrap: wrap;
+}
+
+.crm-page-heading > :first-child,
+.crm-card-heading > :first-child {
+  min-width: 0;
+  flex: 1 1 18rem;
+}
+
+.crm-page-heading > .d-flex,
+.crm-card-heading > .d-flex {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.crm-page-subtitle,
+.crm-record-title,
+.crm-record-id,
+.card-title,
+.card p,
+.alert,
+.form-text,
+.text-muted {
+  overflow-wrap: anywhere;
+}
+
+/* Keep horizontal scrolling inside data tables, never on the page shell. */
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive > .table {
+  margin-bottom: 0;
+}
+
+.crm-table-actions,
+td .d-flex,
+th .d-flex {
+  max-width: 100%;
+}
+
+.crm-table-footer {
+  flex-wrap: wrap;
+}
+
+.crm-pagination {
+  max-width: 100%;
+}
+
+.crm-pagination button,
+.crm-pagination span {
+  white-space: nowrap;
+}
+
+/* Forms, modals and dropdowns remain usable on narrow screens. */
+.modal-dialog {
+  max-width: calc(100vw - 1rem);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.dropdown-menu {
+  max-width: calc(100vw - 1rem);
+}
+
+.crm-appearance-panel {
+  width: min(30rem, 100vw);
+  max-width: 100vw;
+}
+
+.crm-appearance-panel-header,
+.crm-appearance-panel-footer {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1199.98px) {
+  .crm-global-search {
+    width: min(31vw, 25rem);
+    min-width: 13rem;
+  }
+
+  .crm-filter-bar > .form-control,
+  .crm-filter-bar > .form-select,
+  .crm-inline-select,
+  .crm-compact-select {
+    flex-grow: 1;
+    max-width: none !important;
+  }
+
+  .crm-filter-bar .crm-page-size,
+  .crm-filter-bar .crm-filter-page-size {
+    margin-left: 0 !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .crm-sidebar {
+    width: min(19rem, 88vw) !important;
+    max-width: 88vw;
+    flex-basis: min(19rem, 88vw) !important;
+  }
+
+  .crm-sidebar-overlay {
+    inset: 64px 0 0;
+  }
+
+  body.crm-sidebar-open,
+  body:has(.crm-sidebar.crm-sidebar-open) {
+    overflow: hidden;
+  }
+
+  .crm-global-search {
+    min-width: 11rem;
+  }
+
+  .crm-filter-bar > .form-control,
+  .crm-filter-bar > .form-select,
+  .crm-inline-select,
+  .crm-compact-select {
+    flex: 1 1 calc(33.333% - .625rem);
+    min-width: 10rem;
+  }
+
+  .crm-search-control {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .crm-page-heading {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .crm-topbar .container-fluid {
+    padding-inline: .75rem !important;
+  }
+
+  .crm-topbar .navbar-brand {
+    flex: 1 1 auto !important;
+    overflow: hidden;
+  }
+
+  .crm-brand-copy,
+  .crm-admin-copy {
+    display: none !important;
+  }
+
+  .crm-brand-logo {
+    width: 6.15rem;
+    max-width: 100%;
+  }
+
+  .crm-admin-menu {
+    width: auto;
+    max-width: none;
+    min-height: 40px;
+    gap: .25rem;
+    padding: .2rem .3rem;
+  }
+
+  .crm-admin-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .crm-admin-dropdown {
+    position: absolute !important;
+    right: 0 !important;
+    left: auto !important;
+    width: min(18rem, calc(100vw - 1rem));
+  }
+
+  .crm-page-heading {
+    align-items: stretch;
+    padding: .9rem .85rem !important;
+  }
+
+  .crm-page-heading > :first-child,
+  .crm-page-heading > .d-flex {
+    flex-basis: 100%;
+  }
+
+  .crm-page-subtitle {
+    max-width: 100%;
+  }
+
+  .crm-primary-action {
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding-inline: .8rem;
+    font-size: .78rem;
+  }
+
+  .crm-primary-action svg {
+    flex: 0 0 auto;
+  }
+
+  .crm-card-heading {
+    align-items: flex-start;
+    padding: .85rem;
+  }
+
+  .crm-filter-bar,
+  .crm-filter-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: .5rem;
+    padding: .65rem;
+  }
+
+  .crm-filter-bar > .form-control,
+  .crm-filter-bar > .form-select,
+  .crm-filter-bar > label,
+  .crm-inline-select,
+  .crm-compact-select,
+  .crm-search-control {
+    flex: 1 1 100%;
+    width: 100% !important;
+    min-width: 0;
+    max-width: none !important;
+  }
+
+  .crm-filter-bar > .btn,
+  .crm-filter-bar > a.btn {
+    flex: 1 1 calc(50% - .25rem);
+    min-width: min(8rem, 100%);
+  }
+
+  .crm-filter-bar .crm-page-size,
+  .crm-filter-bar .crm-filter-page-size {
+    flex: 1 1 100%;
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0 !important;
+  }
+
+  .crm-filter-drawer,
+  .crm-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .crm-category-filter-header {
+    padding: .75rem;
+  }
+
+  .crm-filter-heading {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .crm-storage-toolbar,
+  .crm-storage-toolbar-actions {
+    align-items: stretch;
+  }
+
+  .crm-storage-toolbar > *,
+  .crm-storage-toolbar-actions,
+  .crm-storage-toolbar-actions .form-control,
+  .crm-storage-toolbar-actions .btn {
+    width: 100%;
+  }
+
+  .crm-storage-toolbar-actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .crm-table-footer {
+    align-items: stretch;
+    gap: .65rem;
+  }
+
+  .crm-pagination {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .crm-pagination button,
+  .crm-pagination span {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-inline: .45rem;
+  }
+
+  .crm-row-action + .crm-row-action {
+    margin-left: 0;
+    margin-top: .3rem;
+  }
+
+  .crm-empty-state {
+    min-height: 170px;
+    padding: 1.25rem .85rem;
+  }
+
+  .card-footer.d-flex,
+  .card-header.d-flex {
+    flex-wrap: wrap;
+  }
+
+  .card-footer .ms-auto,
+  .card-header .ms-auto {
+    margin-left: 0 !important;
+  }
+
+  .crm-appearance-panel-header,
+  .crm-appearance-panel-body,
+  .crm-appearance-panel-footer {
+    padding-left: .9rem;
+    padding-right: .9rem;
+  }
+
+  .crm-appearance-panel-footer .btn {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .crm-mobile-menu,
+  .crm-topbar-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .crm-topbar .nav {
+    gap: .35rem !important;
+  }
+
+  .crm-brand-logo {
+    width: 5.35rem;
+  }
+
+  .crm-page-heading .page-title {
+    line-height: 1.2;
+  }
+
+  .crm-page-heading > .d-flex .btn,
+  .crm-primary-action {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .crm-filter-bar > .btn,
+  .crm-filter-bar > a.btn {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .content {
+    padding: .65rem !important;
+  }
+
+  .card,
+  .content .card {
+    border-radius: min(var(--crm-user-card-radius, var(--crm-shell-radius)), 12px) !important;
+  }
+
+  .crm-table thead th,
+  .crm-table tbody td,
+  .table thead th,
+  .table tbody td {
+    padding-left: .6rem !important;
+    padding-right: .6rem !important;
+  }
+}

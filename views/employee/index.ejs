@@ -18,12 +18,19 @@
         <main class="content" x-data="employeeList()" x-init="init()">
           <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
           <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-          <section class="card mb-3"><div class="card-body crm-filter-toolbar"><div class="row g-2">
-            <div class="col-lg-5"><input class="form-control" placeholder="Search name, mobile, code or department" x-model="filters.q" @keydown.enter.prevent="search()"></div>
-            <div class="col-lg-2"><select class="form-select" x-model="filters.status" @change="search()"><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select></div>
-            <div class="col-lg-3"><select class="form-select" x-model="filters.roleId" @change="search()"><option value="">All roles</option><template x-for="role in roles" :key="role.roleId"><option :value="role.roleId" x-text="role.name"></option></template></select></div>
-            <div class="col-lg-2 d-flex gap-2"><button class="btn btn-primary flex-fill" @click="search()">Search</button><button class="btn btn-light" @click="reset()">Reset</button></div>
-          </div><div class="row g-2 mt-1"><div class="col-lg-2"><select class="form-select" x-model="filters.dateField"><option value="createdAt">Created date</option><option value="updatedAt">Updated date</option><option value="lastLoginAt">Last login</option></select></div><div class="col-lg-2"><input class="form-control" type="date" x-model="filters.startDate" aria-label="From date"></div><div class="col-lg-2"><input class="form-control" type="date" x-model="filters.endDate" aria-label="To date"></div><div class="col-lg-2"><select class="form-select" x-model="filters.sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div></div></div></section>
+          <section class="card crm-filter-card mb-3">
+            <form class="crm-filter-bar" @submit.prevent="search()">
+              <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" placeholder="Search name, mobile, code or department" x-model="filters.q"></label>
+              <label class="crm-inline-select"><span>Status</span><select x-model="filters.status"><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select></label>
+              <label class="crm-inline-select"><span>Role</span><select x-model="filters.roleId"><option value="">All roles</option><template x-for="role in roles" :key="role.roleId"><option :value="role.roleId" x-text="role.name"></option></template></select></label>
+              <label class="crm-inline-select"><span>Date</span><select x-model="filters.dateField"><option value="createdAt">Created date</option><option value="updatedAt">Updated date</option><option value="lastLoginAt">Last login</option></select></label>
+              <input class="form-control" type="date" x-model="filters.startDate" aria-label="From date">
+              <input class="form-control" type="date" x-model="filters.endDate" aria-label="To date">
+              <label class="crm-inline-select"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+              <button class="btn btn-primary" type="submit">Search</button>
+              <button class="btn btn-light" type="button" @click="reset()">Clear</button>
+            </form>
+          </section>
           <section class="card" :class="loading && 'crm-loading'">
             <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Employee</th><th>Contact</th><th>Role</th><th>Team</th><th>Status</th><th>Last login</th><th class="text-end">Action</th></tr></thead><tbody>
               <template x-for="employee in rows" :key="employee.employeeId"><tr>
