@@ -2,6 +2,7 @@ const Employee = require("../../models/Employee");
 const Role = require("../../models/Role");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   emailValue,
@@ -68,9 +69,10 @@ async function list(filters = {}) {
       { department: search },
     ];
   }
+  applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date", lastLoginAt: "Last login" } });
   const result = await cursorPaginate(Employee, {
     query,
-    sort: { createdAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["createdAt", "updatedAt", "lastLoginAt"] }),
     limit,
     cursor,
   });

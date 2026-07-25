@@ -4,6 +4,7 @@ const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { textValue, emailValue, enumValue, booleanValue, numberValue, tokenValue, queryTextValue, identifierValue, validationError, pincodeValue } = require("../../utils/validation");
 const accountRegistrationService = require("../communication/account-registration-service");
 
@@ -85,7 +86,8 @@ async function list(filters = {}) {
   if (filters.categorySlug) query.categorySlug = tokenValue(filters.categorySlug, { label: "Category filter", maxLength: 80 });
   const q = queryTextValue(filters.q, { label: "Agent search", maxLength: 100 });
   if (q) { const search = new RegExp(escapeRegex(q), "i"); query.$or = [{ agentId: search }, { referralId: search }, { name: search }, { businessName: search }, { mobile: search }, { email: search }, { city: search }]; }
-  const result = await cursorPaginate(Agent, { query, sort: { createdAt: -1, _id: -1 }, limit, cursor });
+  applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date" } });
+  const result = await cursorPaginate(Agent, { query, sort: dateSort(filters, { fields: ["createdAt", "updatedAt"] }), limit, cursor });
   return { ...result, data: result.data.map(presentAgent) };
 }
 

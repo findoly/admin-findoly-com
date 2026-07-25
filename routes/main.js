@@ -39,6 +39,7 @@ router.use("/follow-up", require("./follow-up"));
 router.use("/follow-ups", require("./follow-up"));
 router.use("/communication", require("./communication"));
 router.use("/communications", require("./communication"));
+router.use("/provider-subscriptions", require("./provider-subscription"));
 router.use("/invoice", require("./invoice"));
 router.use("/invoices", require("./invoice"));
 router.use("/distribution", require("./distribution"));

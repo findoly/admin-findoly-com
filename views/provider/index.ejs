@@ -31,8 +31,12 @@
                     <input type="search" x-model="filters.q" placeholder="Search provider, business, mobile or city" aria-label="Search providers">
                   </label>
                   <label class="crm-inline-select"><span>Status</span><select x-model="filters.status"><option value="">All providers</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></label>
+                  <label class="crm-inline-select"><span>Date</span><select x-model="filters.dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option></select></label>
+                  <input class="form-control" style="max-width:150px" type="date" x-model="filters.startDate" aria-label="From date">
+                  <input class="form-control" style="max-width:150px" type="date" x-model="filters.endDate" aria-label="To date">
+                  <label class="crm-inline-select"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
                   <button type="submit" class="btn btn-primary">Search</button>
-                  <button type="button" class="btn btn-light" x-show="filters.q || filters.status" @click="reset()">Clear</button>
+                  <button type="button" class="btn btn-light" x-show="filters.q || filters.status || filters.startDate || filters.endDate || filters.sortOrder === 'oldest'" @click="reset()">Clear</button>
                   <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
                 </form>
               </section>
@@ -81,7 +85,7 @@
       function providerList() {
         return {
           rows: [],
-          filters: { q: '', status: '' },
+          filters: { q: '', status: '', dateField: 'createdAt', startDate: '', endDate: '', sortOrder: 'newest' },
           pagination: createCursorPagination(20),
           loading: false,
           error: '',
@@ -104,7 +108,7 @@
             }
           },
           search() { resetCursorPagination(this.pagination); this.load(); },
-          reset() { this.filters = { q: '', status: '' }; this.search(); },
+          reset() { this.filters = { q: '', status: '', dateField: 'createdAt', startDate: '', endDate: '', sortOrder: 'newest' }; this.search(); },
           next() { if (cursorNext(this.pagination)) this.load(); },
           previous() { if (cursorPrevious(this.pagination)) this.load(); }
         };

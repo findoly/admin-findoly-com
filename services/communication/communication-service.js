@@ -5,6 +5,7 @@ const { normalizeChannelId } = require("./slack-service");
 const { renderText, normalizeVariables } = require("./template-renderer");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   emailValue,
@@ -159,9 +160,10 @@ const list = async function (filters) {
       { providerMessageId: search },
     ];
   }
+  applyDateRange(query, source, { fields: { createdAt: "Created date", updatedAt: "Updated date", sentAt: "Sent date" } });
   return cursorPaginate(Communication, {
     query,
-    sort: { createdAt: -1, _id: -1 },
+    sort: dateSort(source, { fields: ["createdAt", "updatedAt", "sentAt"] }),
     limit,
     cursor,
   });

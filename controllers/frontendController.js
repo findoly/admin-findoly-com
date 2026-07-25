@@ -43,6 +43,7 @@ const frontendController = {
   communicationCreate: render("communication/form", "Log communication"),
   communicationEdit: render("communication/form", "Edit communication"),
   invoices: render("invoice/index", "Invoices"),
+  providerSubscriptions: render("billing/provider-subscriptions", "Provider Subscriptions"),
   invoiceCreate: render("invoice/form", "Create invoice"),
   invoiceEdit: render("invoice/form", "Edit invoice"),
   distributions: render("distribution/index", "Lead distribution"),

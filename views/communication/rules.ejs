@@ -109,7 +109,7 @@
             provider_created: ['provider_name','provider_id','business_name','email','phone','status','onboarding_stage','service_categories','service_location','city','state','login_url','support_email','registration_date'],
             agent_created: ['agent_name','agent_id','referral_id','business_name','agent_type','email','phone','category_name','city','state','assigned_location','login_url','support_email','registration_date'],
             employee_created: ['employee_name','employee_id','employee_code','email','phone','designation','department','role_name','login_url','support_email','registration_date'],
-            default: ['customer_name','lead_id','requirement_title','lead_status','category','provider_name','note'],
+            default: ['customer_name','lead_id','requirement_title','service_type','service_types','priority','lead_status','category','provider_name','note'],
           },
           get eventVariables() {
             return this.variableSets[this.form.event] || this.variableSets.default;

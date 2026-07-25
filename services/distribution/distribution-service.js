@@ -1,5 +1,6 @@
 const LeadDistribution = require("../../models/LeadDistribution");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   identifierValue,
   enumValue,
@@ -38,9 +39,10 @@ async function list(filters = {}) {
     });
   }
 
+  applyDateRange(query, filters, { fields: { distributedAt: "Distributed date", unlockedAt: "Unlocked date", updatedAt: "Updated date" }, defaultField: "distributedAt" });
   return cursorPaginate(LeadDistribution, {
     query,
-    sort: { distributedAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["distributedAt", "unlockedAt", "updatedAt"], defaultField: "distributedAt" }),
     limit,
     cursor,
   });

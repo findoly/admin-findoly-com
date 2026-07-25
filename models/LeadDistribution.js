@@ -20,6 +20,25 @@ const leadDistributionSchema = new mongoose.Schema(
     contactUnlocked: { type: Boolean, default: false, index: true },
     leadTitle: { type: String, default: "" },
     serviceType: { type: String, default: "" },
+    serviceTypes: {
+      type: [
+        new mongoose.Schema(
+          {
+            serviceTypeId: { type: String, required: true },
+            name: { type: String, required: true, trim: true, maxlength: 120 },
+            slug: { type: String, required: true, trim: true, maxlength: 80 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+      validate: {
+        validator(value) {
+          return value === undefined || (Array.isArray(value) && value.length <= 5);
+        },
+        message: "A lead may contain no more than 5 Service Types",
+      },
+    },
     category: { type: String, default: "" },
     city: { type: String, default: "" },
     state: { type: String, default: "" },

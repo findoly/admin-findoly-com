@@ -48,8 +48,8 @@
                     <label><span>Source</span><select x-model="filters.sourceChannel"><option value="">All sources</option><option value="admin">CRM admin</option><option value="agent">Agent Portal</option></select></label>
                     <label><span>Referral ID</span><input type="text" maxlength="6" x-model="filters.referralId" @input="filters.referralId = String(filters.referralId || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)" placeholder="A7K2P9"></label>
                     <label><span>Lead validation</span><select x-model="filters.agentReferralValidation"><option value="">All validation states</option><option value="pending">Pending</option><option value="valid">Valid</option><option value="invalid">Invalid</option></select></label>
-                    <label><span>From date</span><input type="date" x-model="filters.startDate"></label>
-                    <label><span>To date</span><input type="date" x-model="filters.endDate"></label>
+                    <label><span>Date field</span><select x-model="filters.dateField"><option value="createdAt">Created date</option><option value="updatedAt">Updated date</option><option value="statusUpdatedAt">Status updated</option><option value="marketplacePublishedAt">Marketplace published</option></select></label><label><span>From date</span><input type="date" x-model="filters.startDate"></label>
+                    <label><span>To date</span><input type="date" x-model="filters.endDate"></label><label><span>Sort by date</span><select x-model="filters.sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
                     <button type="submit" class="btn btn-primary align-self-end">Apply filters</button>
                   </div>
                 </form>
@@ -91,7 +91,7 @@
                             <div class="crm-mobile-meta d-lg-none" x-text="leadName(lead) + ' · ' + leadMobile(lead)"></div>
                           </td>
                           <td class="crm-hide-mobile"><div class="fw-semibold" x-text="leadName(lead)"></div><div class="text-muted fs-sm" x-text="leadMobile(lead)"></div></td>
-                          <td><div class="fw-semibold" x-text="leadCategory(lead)"></div><div class="text-muted fs-sm" x-text="[leadCity(lead), leadState(lead)].filter(Boolean).join(', ')"></div></td>
+                          <td><div class="fw-semibold" x-text="leadCategory(lead)"></div><div class="text-muted fs-sm" x-show="lead.serviceTypes && lead.serviceTypes.length" x-text="lead.serviceTypes.map((item) => item.name || item).filter(Boolean).join(', ')"></div><div class="text-muted fs-sm" x-text="[leadCity(lead), leadState(lead)].filter(Boolean).join(', ')"></div></td>
                           <td>
                             <span class="crm-status" :class="statusClass(lead.journeyStatus || lead.status)" x-text="humanize(lead.journeyStatus || lead.status)"></span>
                             <div class="text-muted fs-sm mt-1" x-text="lead.isActive === false ? 'Deactivated' : humanize(lead.priority || 'normal') + ' priority'"></div>
@@ -138,6 +138,8 @@
             status: params.get('status') || '',
             active: params.get('active') || '',
             categorySlug: params.get('categorySlug') || '',
+            dateField: params.get('dateField') || 'createdAt',
+            sortOrder: params.get('sortOrder') || 'newest',
             startDate: params.get('startDate') || '',
             endDate: params.get('endDate') || '',
             sourceChannel: params.get('sourceChannel') || '',
@@ -149,7 +151,7 @@
           error: '',
           showFilters: false,
           get activeFilterCount() {
-            return ['status','active','categorySlug','sourceChannel','referralId','agentReferralValidation','startDate','endDate'].filter((key) => this.filters[key]).length;
+            return ['status','active','categorySlug','sourceChannel','referralId','agentReferralValidation','startDate','endDate','sortOrder'].filter((key) => this.filters[key]).length;
           },
           async init() {
             this.showFilters = this.activeFilterCount > 0;
@@ -185,7 +187,7 @@
           },
           search() { resetCursorPagination(this.pagination); this.load(); },
           reset() {
-            this.filters = { q: '', status: '', active: '', categorySlug: '', startDate: '', endDate: '', sourceChannel: '', referralId: '', agentReferralValidation: '' };
+            this.filters = { q: '', status: '', active: '', categorySlug: '', dateField: 'createdAt', sortOrder: 'newest', startDate: '', endDate: '', sourceChannel: '', referralId: '', agentReferralValidation: '' };
             this.showFilters = false;
             history.replaceState({}, '', location.pathname);
             this.search();

@@ -1,5 +1,6 @@
 const FollowUp = require("../../models/FollowUp");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   enumValue,
@@ -113,9 +114,10 @@ async function list(filters = {}) {
       { enquiryId: search },
     ];
   }
+  applyDateRange(query, filters, { fields: { dueAt: "Due date", createdAt: "Created date", updatedAt: "Updated date" }, defaultField: "dueAt" });
   return cursorPaginate(FollowUp, {
     query,
-    sort: { dueAt: 1, createdAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["dueAt", "createdAt", "updatedAt"], defaultField: "dueAt" }),
     limit,
     cursor,
   });

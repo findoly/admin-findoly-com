@@ -31,6 +31,25 @@ const enquirySchema = new mongoose.Schema(
     category: { type: String, default: "", trim: true },
     categorySlug: { type: String, required: true, trim: true, index: true, maxlength: 80, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ },
     serviceType: { type: String, default: "", trim: true },
+    serviceTypes: {
+      type: [
+        new mongoose.Schema(
+          {
+            serviceTypeId: { type: String, required: true },
+            name: { type: String, required: true, trim: true, maxlength: 120 },
+            slug: { type: String, required: true, trim: true, maxlength: 80 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+      validate: {
+        validator(value) {
+          return value === undefined || (Array.isArray(value) && value.length <= 5);
+        },
+        message: "A lead may contain no more than 5 Service Types",
+      },
+    },
     requirementTitle: { type: String, default: "", trim: true, maxlength: 200 },
     priority: { type: String, default: "normal", index: true, enum: ["low", "normal", "high", "urgent"] },
     leadIntent: { type: String, enum: ["not_assessed", "low", "medium", "high"], default: "not_assessed", index: true },

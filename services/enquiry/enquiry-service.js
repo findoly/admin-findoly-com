@@ -1,4 +1,5 @@
 const Enquiry = require("../../models/Enquiry");
+const catalogService = require("../catalog/catalog-service");
 const LeadDistribution = require("../../models/LeadDistribution");
 const notificationService = require("../communication/notification-service");
 const uuid = require("../../utils/uuid");
@@ -13,8 +14,11 @@ const providerStatusService = require("../distribution/provider-status-service")
 const { geocodePincode } = require("../location/geocoding-service");
 const { haversineDistanceKm, marketplaceVisibleAt } = require("../../utils/marketplace-radius");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
+  humanTextValue,
+  assertHumanText,
   emailValue,
   enumValue,
   booleanValue,
@@ -66,7 +70,25 @@ function normalizeMetadata(input, current = {}) {
   return metadata;
 }
 
-function normalizeInput(input = {}, current = {}) {
+function assertHumanJson(value, label = "Additional details", depth = 0) {
+  if (depth > 6 || value === null || value === undefined) return;
+  if (typeof value === "string") {
+    assertHumanText(value, { label });
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertHumanJson(item, `${label} item ${index + 1}`, depth + 1));
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      assertHumanText(key, { label: `${label} field name` });
+      assertHumanJson(item, `${label} ${key}`, depth + 1);
+    }
+  }
+}
+
+async function normalizeInput(input = {}, current = {}) {
   const categorySlug = tokenValue(input.categorySlug ?? current.categorySlug, {
     label: "Category",
     required: true,
@@ -82,9 +104,25 @@ function normalizeInput(input = {}, current = {}) {
     1,
     Number(current.unlockedCount || 0) + Number(current.pendingUnlockCount || 0),
   );
+  let requestedServiceTypes = input.serviceTypeIds ?? input.serviceTypes ?? current.serviceTypes;
+  if ((!Array.isArray(requestedServiceTypes) || !requestedServiceTypes.length) && (input.serviceType ?? current.serviceType)) {
+    const legacyValue = String(input.serviceType ?? current.serviceType).trim();
+    const matches = await catalogService.listServiceTypes({ categorySlug, includeInactive: true });
+    const match = matches.find((item) =>
+      String(item.serviceTypeId || item.id) === legacyValue ||
+      String(item.slug || "").toLowerCase() === legacyValue.toLowerCase() ||
+      String(item.name || "").toLowerCase() === legacyValue.toLowerCase(),
+    );
+    if (match) requestedServiceTypes = [match.serviceTypeId || match.id];
+  }
+  const serviceTypes = await catalogService.resolveLeadServiceTypes(
+    categorySlug,
+    requestedServiceTypes,
+    { allowInactiveCurrent: current.serviceTypes || [] },
+  );
 
   return {
-    name: textValue(input.name ?? current.name, {
+    name: humanTextValue(input.name ?? current.name, {
       label: "Customer name",
       required: true,
       maxLength: 120,
@@ -94,16 +132,16 @@ function normalizeInput(input = {}, current = {}) {
       label: "Customer email",
       required: false,
     }),
-    addressLine: textValue(input.addressLine ?? current.addressLine, {
+    addressLine: humanTextValue(input.addressLine ?? current.addressLine, {
       label: "Customer address",
       maxLength: 500,
     }),
-    city: textValue(input.city ?? current.city, {
+    city: humanTextValue(input.city ?? current.city, {
       label: "City",
       required: true,
       maxLength: 100,
     }),
-    state: textValue(input.state ?? current.state, {
+    state: humanTextValue(input.state ?? current.state, {
       label: "State",
       required: true,
       maxLength: 100,
@@ -112,18 +150,16 @@ function normalizeInput(input = {}, current = {}) {
       label: "Pincode",
       required: true,
     }),
-    category: textValue(input.category ?? current.category ?? categorySlug, {
+    category: humanTextValue(input.category ?? current.category ?? categorySlug, {
       label: "Category name",
       fallback: categorySlug,
       required: true,
       maxLength: 120,
     }),
     categorySlug,
-    serviceType: textValue(input.serviceType ?? current.serviceType, {
-      label: "Service type",
-      maxLength: 120,
-    }),
-    requirementTitle: textValue(
+    serviceTypes,
+    serviceType: serviceTypes[0]?.name || "",
+    requirementTitle: humanTextValue(
       input.requirementTitle ?? current.requirementTitle,
       {
         label: "Requirement title",
@@ -143,7 +179,7 @@ function normalizeInput(input = {}, current = {}) {
       input.preferredDate ?? current.preferredDate,
       { label: "Preferred date", required: false },
     ),
-    preferredSlot: textValue(input.preferredSlot ?? current.preferredSlot, {
+    preferredSlot: humanTextValue(input.preferredSlot ?? current.preferredSlot, {
       label: "Preferred slot",
       maxLength: 100,
     }),
@@ -177,11 +213,11 @@ function normalizeInput(input = {}, current = {}) {
       fallback: "manual",
       maxLength: 80,
     }),
-    sourceName: textValue(input.sourceName ?? current.sourceName, {
+    sourceName: humanTextValue(input.sourceName ?? current.sourceName, {
       label: "Source name",
       maxLength: 120,
     }),
-    campaign: textValue(input.campaign ?? current.campaign, {
+    campaign: humanTextValue(input.campaign ?? current.campaign, {
       label: "Campaign",
       maxLength: 120,
     }),
@@ -189,19 +225,22 @@ function normalizeInput(input = {}, current = {}) {
       input.externalEnquiryId ?? current.externalEnquiryId,
       { label: "External enquiry ID", maxLength: 128 },
     ),
-    notes: textValue(input.notes ?? current.notes, {
+    notes: humanTextValue(input.notes ?? current.notes, {
       label: "Lead notes",
       maxLength: 5000,
       preserveWhitespace: true,
     }),
-    additionalDetails:
-      input.additionalDetails === undefined
+    additionalDetails: (() => {
+      const details = input.additionalDetails === undefined
         ? current.additionalDetails || {}
         : plainObjectValue(input.additionalDetails, {
             label: "Additional details",
             maxKeys: 100,
             maxBytes: 50_000,
-          }),
+          });
+      assertHumanJson(details);
+      return details;
+    })(),
     metadata: normalizeMetadata(input.metadata, current.metadata || {}),
     updatedAt: new Date(),
   };
@@ -237,6 +276,12 @@ function presentEnquiry(row = {}) {
         ? row.category
         : categoryObject.name || "",
     categorySlug: row.categorySlug || categoryObject.slug || "",
+    serviceTypes: Array.isArray(row.serviceTypes) ? row.serviceTypes.map((item) => ({
+      serviceTypeId: item.serviceTypeId || item.id || "",
+      name: item.name || "",
+      slug: item.slug || "",
+    })).filter((item) => item.name) : [],
+    serviceType: row.serviceType || (Array.isArray(row.serviceTypes) ? row.serviceTypes[0]?.name : "") || "",
     sourceWebsite: row.sourceWebsite || source.website || "",
     sourceChannel: row.sourceChannel || source.channel || "",
     sourceName: row.sourceName || source.sourceName || "",
@@ -427,7 +472,7 @@ async function create(input = {}, actor = "admin") {
     );
   }
 
-  const data = normalizeInput(input);
+  const data = await normalizeInput(input);
   const initialStatus = "new";
   const now = new Date();
   data.status = initialStatus;
@@ -526,26 +571,14 @@ async function list(filters = {}) {
     query.partnerPayoutStatus = enumValue(filters.partnerPayoutStatus, ["waiting_period", "unpaid", "reserved", "paid", "not_eligible"], { label: "Partner payout status filter" });
   }
 
-  const startDate = dateOnlyValue(filters.startDate, {
-    label: "Start date",
-    required: false,
+  applyDateRange(query, filters, {
+    fields: {
+      createdAt: "Created date",
+      updatedAt: "Updated date",
+      statusUpdatedAt: "Status updated date",
+      marketplacePublishedAt: "Marketplace published date",
+    },
   });
-  const endDate = dateOnlyValue(filters.endDate, {
-    label: "End date",
-    required: false,
-  });
-  if (startDate && endDate && endDate < startDate) {
-    throw validationError("End date cannot be before start date");
-  }
-  if (startDate || endDate) {
-    query.createdAt = {};
-    if (startDate) {
-      query.createdAt.$gte = new Date(`${startDate}T00:00:00.000+05:30`);
-    }
-    if (endDate) {
-      query.createdAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
-    }
-  }
 
   const q = queryTextValue(filters.q, {
     label: "Lead search",
@@ -571,7 +604,7 @@ async function list(filters = {}) {
 
   const result = await cursorPaginate(Enquiry, {
     query,
-    sort: { createdAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["createdAt", "updatedAt", "statusUpdatedAt", "marketplacePublishedAt"] }),
     limit,
     cursor,
   });
@@ -666,7 +699,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
   }
 
   // Normalize against the presented shape so legacy nested lead records remain editable.
-  const data = normalizeInput(input, presentEnquiry(existing));
+  const data = await normalizeInput(input, presentEnquiry(existing));
   data.status = existing.status;
   data.statusUpdatedAt = existing.statusUpdatedAt || null;
   data.statusUpdatedBy = existing.statusUpdatedBy || "";
@@ -958,6 +991,7 @@ function distributionData(enquiry, provider) {
     currency: "INR",
     leadTitle: enquiry.requirementTitle,
     serviceType: enquiry.serviceType,
+    serviceTypes: Array.isArray(enquiry.serviceTypes) ? enquiry.serviceTypes : undefined,
     category: enquiry.category,
     city: enquiry.city,
     state: enquiry.state,

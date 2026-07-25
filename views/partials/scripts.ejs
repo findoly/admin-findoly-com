@@ -106,6 +106,16 @@
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
   }
 
+  const HUMAN_TEXT_EMOJI_PATTERN = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u20E3]/u;
+  const HUMAN_TEXT_HTML_PATTERN = /<\/?[A-Za-z][^>]*>|&(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);/u;
+
+  function assertPlainHumanText(value, label = 'Text') {
+    const text = String(value || '');
+    if (HUMAN_TEXT_EMOJI_PATTERN.test(text)) throw new Error(label + ' must not contain emoji');
+    if (HUMAN_TEXT_HTML_PATTERN.test(text)) throw new Error(label + ' must not contain HTML tags or encoded HTML');
+    return text;
+  }
+
   function humanize(value) {
     return String(value || '—').replace(/[_-]/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   }
@@ -224,6 +234,27 @@
       });
     });
   }
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.dataset.allowRichText === 'true') return;
+    const fields = form.querySelectorAll('input[type="text"], input[type="search"], textarea');
+    for (const field of fields) {
+      if (field.disabled || field.dataset.allowRichText === 'true' || field.classList.contains('crm-json')) continue;
+      try {
+        assertPlainHumanText(field.value, field.labels?.[0]?.textContent?.trim() || field.placeholder || 'Text');
+      } catch (error) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        field.focus();
+        field.setCustomValidity(error.message);
+        field.reportValidity();
+        window.setTimeout(() => field.setCustomValidity(''), 0);
+        showCrmToast(error.message, 'error');
+        return;
+      }
+    }
+  }, true);
 
   function crmShell() {
     return {

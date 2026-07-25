@@ -239,12 +239,30 @@ function normalizedHeaders(headers = {}, host) {
   };
 }
 
+function compareCanonicalValues(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function canonicalQuery(searchParams) {
   const entries = [...searchParams.entries()].map(([key, value]) => [awsEncode(key), awsEncode(value)]);
-  entries.sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-    leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
-  );
+  entries.sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+    const keyComparison = compareCanonicalValues(leftKey, rightKey);
+    return keyComparison || compareCanonicalValues(leftValue, rightValue);
+  });
   return entries.map(([key, value]) => `${key}=${value}`).join("&");
+}
+
+function canonicalUrl(url) {
+  const query = canonicalQuery(url.searchParams);
+  return `${url.origin}${url.pathname}${query ? `?${query}` : ""}`;
+}
+
+function rfc5987Value(value) {
+  return encodeURIComponent(String(value)).replace(/[\'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 function signedRequest(settings, method, key, options = {}) {
@@ -278,7 +296,7 @@ function signedRequest(settings, method, key, options = {}) {
     "hex",
   );
   requestHeaders.Authorization = `AWS4-HMAC-SHA256 Credential=${settings.credentials.accessKeyId}/${scope}, SignedHeaders=${headers.signed}, Signature=${signature}`;
-  return { url: url.toString(), headers: requestHeaders, body };
+  return { url: canonicalUrl(url), headers: requestHeaders, body };
 }
 
 function presignedUrl(settings, method, key, options = {}) {
@@ -311,7 +329,7 @@ function presignedUrl(settings, method, key, options = {}) {
     "hex",
   );
   url.searchParams.set("X-Amz-Signature", signature);
-  return url.toString();
+  return canonicalUrl(url);
 }
 
 function decodeXml(value) {
@@ -494,7 +512,7 @@ async function createDownloadUrl(input = {}) {
   const disposition = String(input.disposition || "attachment").toLowerCase() === "inline" ? "inline" : "attachment";
   const fileName = key.split("/").pop() || "download";
   const url = presignedUrl(settings, "GET", key, {
-    query: { "response-content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}` },
+    query: { "response-content-disposition": `${disposition}; filename*=UTF-8''${rfc5987Value(fileName)}` },
     expiresIn: settings.downloadUrlExpiresSeconds,
   });
   return {

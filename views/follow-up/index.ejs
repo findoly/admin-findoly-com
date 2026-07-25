@@ -20,9 +20,9 @@
               <section class="card crm-filter-card mb-3">
                 <form class="crm-filter-bar" @submit.prevent="search()">
                   <label class="crm-search-control"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" placeholder="Search follow-ups"></label>
-                  <select class="form-select" style="max-width:180px" x-model="status"><option value="">All statuses</option><option>open</option><option>pending</option><option>completed</option><option>cancelled</option></select>
+                  <select class="form-select" style="max-width:180px" x-model="status"><option value="">All statuses</option><option>open</option><option>pending</option><option>completed</option><option>cancelled</option></select><select class="form-select" style="max-width:170px" x-model="dateField"><option value="dueAt">Due date</option><option value="createdAt">Created date</option><option value="updatedAt">Updated date</option></select><input class="form-control" style="max-width:150px" type="date" x-model="startDate" aria-label="From date"><input class="form-control" style="max-width:150px" type="date" x-model="endDate" aria-label="To date"><select class="form-select" style="max-width:150px" x-model="sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select>
                   <button class="btn btn-primary" type="submit">Search</button>
-                  <button class="btn btn-light" type="button" x-show="q || status" @click="reset()">Clear</button>
+                  <button class="btn btn-light" type="button" x-show="q || status || startDate || endDate || sortOrder === 'oldest'" @click="reset()">Clear</button>
                   <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
                 </form>
               </section>
@@ -42,11 +42,11 @@
             <script>
               function listPage() {
                 return {
-                  rows: [], q: '', status: '', pagination: createCursorPagination(20), loading: false, error: '',
-                  query() { const q = new URLSearchParams({ q: this.q, status: this.status, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...q].forEach(([k,v]) => { if (!v) q.delete(k); }); return q.toString(); },
+                  rows: [], q: '', status: '', dateField: 'dueAt', startDate: '', endDate: '', sortOrder: 'newest', pagination: createCursorPagination(20), loading: false, error: '',
+                  query() { const q = new URLSearchParams({ q: this.q, status: this.status, dateField: this.dateField, startDate: this.startDate, endDate: this.endDate, sortOrder: this.sortOrder, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...q].forEach(([k,v]) => { if (!v) q.delete(k); }); return q.toString(); },
                   async load() { this.loading = true; this.error = ''; try { const b = await apiFetch('/api/follow-up?' + this.query()); this.rows = b.data || []; applyCursorPagination(this.pagination, b.pagination || {}); } catch (e) { this.error = e.message; } finally { this.loading = false; } },
                   search() { resetCursorPagination(this.pagination); this.load(); },
-                  reset() { this.q = ''; this.status = ''; this.search(); },
+                  reset() { this.q = ''; this.status = ''; this.dateField = 'dueAt'; this.startDate = ''; this.endDate = ''; this.sortOrder = 'newest'; this.search(); },
                   next() { if (cursorNext(this.pagination)) this.load(); },
                   previous() { if (cursorPrevious(this.pagination)) this.load(); }
                 };

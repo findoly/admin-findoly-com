@@ -4,6 +4,7 @@ const LeadDistribution = require("../../models/LeadDistribution");
 const AgentWithdrawal = require("../../models/AgentWithdrawal");
 const uuid = require("../../utils/uuid");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { textValue, enumValue, identifierValue, queryTextValue, validationError } = require("../../utils/validation");
 const { canonicalLeadStatus, PROVIDER_CONTROLLED_STATUS } = require("../../utils/lead-journey");
 const razorpay = require("./razorpay-service");
@@ -261,7 +262,8 @@ async function listWithdrawals(filters = {}) {
     const search = new RegExp(escaped, "i");
     query.$or = [{ withdrawalNumber: search }, { agentName: search }, { agentBusinessName: search }, { referralId: search }, { razorpayPayoutId: search }];
   }
-  const result = await cursorPaginate(AgentWithdrawal, { query, sort: { createdAt: -1, _id: -1 }, limit, cursor });
+  applyDateRange(query, filters, { fields: { submittedAt: "Submitted date", createdAt: "Created date", updatedAt: "Updated date", paidAt: "Paid date" }, defaultField: "submittedAt" });
+  const result = await cursorPaginate(AgentWithdrawal, { query, sort: dateSort(filters, { fields: ["submittedAt", "createdAt", "updatedAt", "paidAt"], defaultField: "submittedAt" }), limit, cursor });
   return { ...result, data: result.data.map(presentWithdrawal) };
 }
 

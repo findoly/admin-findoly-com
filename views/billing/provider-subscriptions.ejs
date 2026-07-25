@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Billing</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Read-only subscription history synced from the Provider Portal shared database.</p></div><a href="/billing" class="btn btn-light crm-primary-action">Invoices</a></div></div>
+        <div class="content" x-data="subscriptionList()" x-init="load()">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+          <section class="card crm-filter-card mb-3"><form class="crm-filter-bar flex-wrap" @submit.prevent="search()">
+            <label class="crm-search-control"><input type="search" x-model="filters.q" maxlength="100" placeholder="Provider, plan or subscription ID"></label>
+            <select class="form-select" style="max-width:150px" x-model="filters.status"><option value="">All statuses</option><option value="active">Active</option><option value="scheduled">Scheduled</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option></select>
+            <select class="form-select" style="max-width:160px" x-model="filters.dateField"><option value="purchasedAt">Purchase date</option><option value="startsAt">Start date</option><option value="expiresAt">Expiry date</option><option value="updatedAt">Updated date</option></select>
+            <input class="form-control" style="max-width:150px" type="date" x-model="filters.startDate" aria-label="From date">
+            <input class="form-control" style="max-width:150px" type="date" x-model="filters.endDate" aria-label="To date">
+            <select class="form-select" style="max-width:145px" x-model="filters.sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select>
+            <button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" @click="reset()">Clear</button>
+          </form></section>
+          <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Provider subscriptions</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> records on this page</p></div></div>
+            <div class="table-responsive"><table class="table mb-0"><thead><tr><th>Provider</th><th>Plan</th><th>Status</th><th>Credits</th><th>Amount</th><th>Purchased</th><th>Validity</th><th>Reference</th></tr></thead><tbody>
+              <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+              <template x-for="row in rows" :key="row.providerSubscriptionId"><tr>
+                <td><a class="fw-semibold" :href="'/providers/'+row.providerId" x-text="row.provider?.businessName || row.provider?.name || row.providerId"></a><div class="crm-record-id" x-text="row.providerId"></div></td>
+                <td><div class="fw-semibold" x-text="row.planName"></div><div class="text-muted fs-sm" x-text="humanize(row.billingCycle)"></div></td>
+                <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span></td>
+                <td><div class="fw-semibold" x-text="Number(row.totalCredits||0).toLocaleString('en-IN')"></div><div class="text-muted fs-sm" x-text="Number(row.baseCredits||0)+' base + '+Number(row.bonusCredits||0)+' bonus'"></div></td>
+                <td><div class="fw-semibold" x-text="money(row.totalAmountPaise)"></div><div class="text-muted fs-sm" x-text="'GST '+money(row.gstAmountPaise)"></div></td>
+                <td x-text="formatDate(row.purchasedAt || row.createdAt)"></td>
+                <td><div x-text="formatDateOnly(row.startsAt)"></div><div class="text-muted fs-sm" x-text="'to '+formatDateOnly(row.expiresAt)"></div></td>
+                <td><div class="crm-record-id" x-text="row.providerSubscriptionId"></div><div class="text-muted fs-sm" x-text="row.paymentOrderId"></div></td>
+              </tr></template>
+              <tr x-show="!loading && !rows.length"><td colspan="8" class="text-center text-muted py-4">No provider subscriptions found</td></tr>
+            </tbody></table></div>
+            <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page<=1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+          </section>
+        </div>
+        <script>
+          function subscriptionList(){return{rows:[],loading:false,error:'',pagination:createCursorPagination(20),filters:{q:'',status:'',dateField:'purchasedAt',startDate:'',endDate:'',sortOrder:'newest'},query(){const q=new URLSearchParams({...this.filters,limit:this.pagination.limit,cursor:this.pagination.cursor});[...q].forEach(([k,v])=>{if(!v)q.delete(k)});return q.toString()},async load(){this.loading=true;this.error='';try{const body=await apiFetch('/api/provider-subscriptions?'+this.query());this.rows=body.data||[];applyCursorPagination(this.pagination,body.pagination||{})}catch(e){this.error=e.message}finally{this.loading=false}},search(){resetCursorPagination(this.pagination);this.load()},reset(){this.filters={q:'',status:'',dateField:'purchasedAt',startDate:'',endDate:'',sortOrder:'newest'};this.search()},next(){if(cursorNext(this.pagination))this.load()},previous(){if(cursorPrevious(this.pagination))this.load()}}}
+        </script>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

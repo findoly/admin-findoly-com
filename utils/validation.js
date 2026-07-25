@@ -49,6 +49,27 @@ function textValue(value, options = {}) {
   return normalized;
 }
 
+const EMOJI_PATTERN = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u20E3]/u;
+const HTML_CODE_PATTERN = /<\/?[A-Za-z][^>]*>|&(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);/u;
+
+function assertHumanText(value, options = {}) {
+  const { label = "Value", allowEmoji = false, allowHtml = false } = options;
+  const normalized = String(value ?? "");
+  if (!allowEmoji && EMOJI_PATTERN.test(normalized)) {
+    throw validationError(`${label} must not contain emoji`);
+  }
+  if (!allowHtml && HTML_CODE_PATTERN.test(normalized)) {
+    throw validationError(`${label} must not contain HTML tags or encoded HTML`);
+  }
+  return normalized;
+}
+
+function humanTextValue(value, options = {}) {
+  const normalized = textValue(value, options);
+  assertHumanText(normalized, options);
+  return normalized;
+}
+
 function emailValue(value, options = {}) {
   const { label = "Email", required = false, fallback = "" } = options;
   const email = textValue(value, {
@@ -372,6 +393,8 @@ function assertImmutableFields(existing = {}, input = {}, fields = []) {
 module.exports = {
   validationError,
   textValue,
+  humanTextValue,
+  assertHumanText,
   emailValue,
   enumValue,
   booleanValue,

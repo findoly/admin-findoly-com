@@ -4,6 +4,7 @@ const LeadDistribution = require("../../models/LeadDistribution");
 const WalletTransaction = require("../../models/WalletTransaction");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   emailValue,
@@ -220,9 +221,10 @@ async function list(filters = {}) {
     ];
   }
 
+  applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date" } });
   const result = await cursorPaginate(Provider, {
     query,
-    sort: { createdAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["createdAt", "updatedAt"] }),
     limit,
     cursor,
   });

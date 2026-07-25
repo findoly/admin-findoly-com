@@ -1,6 +1,7 @@
 const Invoice = require("../../models/Invoice");
 const uuid = require("../../utils/uuid");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   enumValue,
@@ -190,9 +191,10 @@ async function list(filters = {}) {
       { enquiryId: search },
     ];
   }
+  applyDateRange(query, filters, { fields: { issueDate: "Issue date", dueDate: "Due date", createdAt: "Created date", updatedAt: "Updated date" }, defaultField: "issueDate" });
   return cursorPaginate(Invoice, {
     query,
-    sort: { createdAt: -1, _id: -1 },
+    sort: dateSort(filters, { fields: ["issueDate", "dueDate", "createdAt", "updatedAt"], defaultField: "issueDate" }),
     limit,
     cursor,
   });
