@@ -11,9 +11,11 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const responsiveFilterViews = [
   "views/agent/index.ejs",
   "views/billing/provider-subscriptions.ejs",
+  "views/category/index.ejs",
   "views/communication/logs.ejs",
   "views/communication/templates.ejs",
   "views/provider-unlock/index.ejs",
+  "views/provider-request/index.ejs",
   "views/employee/index.ejs",
   "views/enquiry/index.ejs",
   "views/enquiry/provider-statuses.ejs",
@@ -42,7 +44,7 @@ test("real shell keeps a single-row header and a full-viewport mobile drawer", (
   const sidebar = read("views/partials/sidebar.ejs");
   const css = read("public/css/app.css");
 
-  assert.match(head, /app\.css\?v=20260726-responsive-shell/);
+  assert.match(head, /app\.css\?v=20260801-provider-requests-1/);
   assert.match(navbar, /crm-brand-copy d-none d-xl-flex/);
   assert.match(navbar, /crm-global-search d-none d-xl-flex/);
   assert.match(navbar, /crm-admin-copy d-none d-xl-flex/);
@@ -61,19 +63,45 @@ test("real shell keeps a single-row header and a full-viewport mobile drawer", (
   assert.doesNotMatch(css, /\.crm-sidebar-overlay\s*\{[^}]*inset:\s*64px/s);
 });
 
-test("shared filter bars are responsive on phone, tablet and laptop", () => {
+test("shared filter bars are responsive and consistent on phone, tablet and laptop", () => {
   const css = read("public/css/app.css");
 
-  assert.match(css, /CRM responsive consistency repair/);
+  assert.match(css, /CRM unified filter system — authoritative layout/);
   assert.match(css, /@media \(max-width: 1199\.98px\)/);
   assert.match(css, /@media \(max-width: 991\.98px\)/);
   assert.match(css, /@media \(max-width: 767\.98px\)/);
   assert.match(css, /@media \(max-width: 479\.98px\)/);
-  assert.match(css, /\.crm-filter-bar > \.form-control,[\s\S]*max-width:\s*none\s*!important/);
-  assert.match(css, /\.crm-filter-bar > \.btn,[\s\S]*flex:\s*1 1 calc\(50% - \.25rem\)/);
+  assert.match(css, /\.crm-filter-field\s*\{[\s\S]*flex-direction:\s*column/s);
+  assert.match(css, /\.crm-filter-actions\s*\{[\s\S]*display:\s*flex/s);
+  assert.match(css, /\.crm-filter-actions \.btn\s*\{[\s\S]*white-space:\s*nowrap/s);
 
   for (const view of responsiveFilterViews) {
-    assert.match(read(view), /crm-filter-(?:bar|toolbar)/, `${view} must use the shared filter layout`);
+    const source = read(view);
+    assert.match(source, /crm-filter-(?:bar|toolbar)/, `${view} must use the shared filter layout`);
+    assert.doesNotMatch(source, /style="max-width:[^"]+"/, `${view} must not use inline filter widths`);
+  }
+});
+
+test("filter date controls have visible labels and actions stay grouped", () => {
+  const dateViews = [
+    "views/agent/index.ejs",
+    "views/billing/provider-subscriptions.ejs",
+    "views/category/index.ejs",
+    "views/communication/logs.ejs",
+    "views/employee/index.ejs",
+    "views/follow-up/index.ejs",
+    "views/invoice/index.ejs",
+    "views/partner-payout/index.ejs",
+    "views/provider-unlock/index.ejs",
+    "views/provider-request/index.ejs",
+    "views/provider/index.ejs",
+  ];
+  for (const view of dateViews) {
+    const source = read(view);
+    assert.match(source, /crm-filter-date/, `${view} must use labelled date controls`);
+    assert.match(source, /<span>From<\/span>/, `${view} must label the from date`);
+    assert.match(source, /<span>To<\/span>/, `${view} must label the to date`);
+    assert.match(source, /crm-filter-actions/, `${view} must keep Apply and Clear together`);
   }
 });
 

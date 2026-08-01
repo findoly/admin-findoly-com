@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Provider network</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Review public joining requests before manually creating provider accounts.</p></div><a href="/providers" class="btn btn-light crm-primary-action">View providers</a></div></div>
+        <div class="content">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <main x-data="providerRequestList()" x-init="init()">
+            <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+            <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
+              <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="filters.q" placeholder="Search name, business, mobile, email or location" aria-label="Search provider requests"></label>
+              <label class="crm-filter-field"><span>Status</span><select x-model="filters.status"><option value="">All requests</option><template x-for="status in statuses" :key="status"><option :value="status" x-text="humanize(status)"></option></template></select></label>
+              <label class="crm-filter-field"><span>Category</span><select x-model="filters.categorySlug"><option value="">All categories</option><template x-for="category in categories" :key="category.slug"><option :value="category.slug" x-text="category.name"></option></template></select></label>
+              <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="filters.startDate"></label>
+              <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="filters.endDate"></label>
+              <label class="crm-filter-field"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
+              <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" @click="reset()">Clear</button></div>
+              <label class="crm-filter-field crm-filter-page-size"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+            </form></section>
+
+            <section class="card crm-data-card">
+              <div class="card-header crm-card-heading crm-list-heading"><div><h2 class="card-title mb-1">Joining requests</h2><p class="text-muted mb-0"><span x-text="rows.length"></span> requests on this page</p></div></div>
+              <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Applicant</th><th>Contact</th><th>Category</th><th>Location</th><th>Status</th><th>Submitted</th><th class="text-end">Action</th></tr></thead><tbody>
+                <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                <template x-for="row in rows" :key="row.providerJoinRequestId"><tr>
+                  <td><strong x-text="row.name"></strong><div class="text-muted fs-sm" x-text="row.businessName || row.providerJoinRequestId"></div></td>
+                  <td><a :href="'tel:+91'+row.mobile" x-text="'+91 '+row.mobile"></a><div class="text-muted fs-sm" x-text="row.email || ('WhatsApp +91 '+row.whatsappNumber)"></div></td>
+                  <td x-text="row.categoryNameSnapshot || humanize(row.categorySlug)"></td>
+                  <td><span x-text="row.city"></span><div class="text-muted fs-sm" x-text="[row.state,row.servicePincode].filter(Boolean).join(' · ')"></div></td>
+                  <td><span class="crm-status" :class="requestStatusClass(row.status)" x-text="humanize(row.status)"></span></td>
+                  <td x-text="formatDate(row.createdAt)"></td>
+                  <td class="text-end"><a class="crm-row-action" :href="'/provider-requests/'+row.providerJoinRequestId">Review</a></td>
+                </tr></template>
+                <tr x-show="!loading && !rows.length"><td colspan="7" class="text-center text-muted py-4">No provider joining requests found</td></tr>
+              </tbody></table></div>
+              <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+            </section>
+          </main>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <script>
+      function providerRequestList() {
+        return {
+          rows: [], categories: [], statuses: ['new','contacted','converted','rejected'], loading: false, error: '',
+          filters: { q: '', status: '', categorySlug: '', startDate: '', endDate: '', sortOrder: 'newest' },
+          pagination: createCursorPagination(20),
+          async init() {
+            try {
+              const metadata = (await apiFetch('/api/provider-requests/metadata')).data || {};
+              this.categories = metadata.categories || [];
+              this.statuses = metadata.statuses || this.statuses;
+            } catch (error) { this.error = error.message; }
+            await this.load();
+          },
+          requestStatusClass(status) { return { new: 'status-pending', contacted: 'status-active', converted: 'status-completed', rejected: 'status-blocked' }[status] || 'status-inactive'; },
+          query(cursor='') { const q = new URLSearchParams(); Object.entries(this.filters).forEach(([key,value]) => { if (value) q.set(key,value); }); q.set('dateField','createdAt'); q.set('limit',this.pagination.limit); if (cursor) q.set('cursor',cursor); return q.toString(); },
+          async load(cursor='') { this.loading=true; this.error=''; try { const body=await apiFetch('/api/provider-requests?'+this.query(cursor)); this.rows=body.data||[]; applyCursorPagination(this.pagination,body.pagination||{}); } catch(error) { this.error=error.message; } finally { this.loading=false; } },
+          search() { resetCursorPagination(this.pagination); this.load(); },
+          next() { const cursor=this.pagination.nextCursor; if (!cursor) return; advanceCursorPagination(this.pagination,cursor); this.load(cursor); },
+          previous() { const cursor=retreatCursorPagination(this.pagination); this.load(cursor); },
+          reset() { this.filters={ q:'', status:'', categorySlug:'', startDate:'', endDate:'', sortOrder:'newest' }; this.search(); }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

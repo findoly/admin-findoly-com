@@ -19,7 +19,8 @@
         <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
         <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
         <div x-show="configLoaded && !config.configured" x-cloak class="alert alert-warning">
-          Amazon S3 is not configured. Add <code>AWS_REGION</code>, <code>AWS_S3_BUCKET</code>, and restricted IAM access keys to the server environment. See <code>S3_FILE_MANAGER_SETUP.md</code>.
+          <span x-text="config.configurationMessage || 'Amazon S3 is not configured. Add the S3 region, bucket, and restricted IAM credentials.'"></span>
+          <span class="d-block mt-1">See <code>S3_FILE_MANAGER_SETUP.md</code>.</span>
         </div>
 
         <section class="card mb-3" x-show="config.configured">
@@ -69,7 +70,7 @@
 
         <section class="card crm-data-card" x-show="config.configured">
           <div class="table-responsive">
-            <table class="table mb-0">
+            <table class="table crm-table mb-0">
               <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th class="text-end">Actions</th></tr></thead>
               <tbody>
                 <template x-if="!loading && filteredFolders.length === 0 && filteredFiles.length === 0"><tr><td colspan="5" class="text-center text-muted py-4">This folder is empty.</td></tr></template>

@@ -22,6 +22,11 @@
 
             <div x-data="providerForm()" x-init="init()">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="prefillWarning" x-cloak class="alert alert-warning" x-text="prefillWarning"></div>
+              <div x-show="sourceRequest.providerJoinRequestId" x-cloak class="alert alert-info crm-provider-request-prefill">
+                <div><strong>Creating from provider joining request</strong><span x-text="sourceRequest.providerJoinRequestId"></span></div>
+                <a :href="'/provider-requests/'+sourceRequest.providerJoinRequestId">Review request</a>
+              </div>
               <form class="card" @submit.prevent="save">
                 <div class="card-body" :class="loading && 'crm-loading'">
                   <div class="row g-3">
@@ -147,6 +152,9 @@
                 return {
                   mode: pageMode(),
                   recordId: pageMode() === "edit" ? pathRecordId(true) : "",
+                  requestId: pageMode() === "create" ? queryValue("requestId") : "",
+                  sourceRequest: {},
+                  prefillWarning: "",
                   categories: [],
                   form: {
                     name: "",
@@ -190,6 +198,25 @@
                           categorySlugs: Array.isArray(d.categorySlugs) ? d.categorySlugs : [],
                         };
                         this.areaText = (d.serviceAreas || []).join(", ");
+                      } else if (this.requestId) {
+                        const request = (await apiFetch('/api/provider-requests/' + encodeURIComponent(this.requestId))).data || {};
+                        this.sourceRequest = request;
+                        this.form = {
+                          ...this.form,
+                          name: request.name || '',
+                          businessName: request.businessName || '',
+                          mobile: this.digitsOnly(request.mobile),
+                          email: request.email || '',
+                          city: request.city || '',
+                          state: request.state || '',
+                          servicePincode: request.servicePincode || '',
+                          serviceAddress: request.serviceAddress || '',
+                          categorySlugs: request.categorySlug && this.categories.some((category) => category.slug === request.categorySlug) ? [request.categorySlug] : [],
+                        };
+                        if (request.categorySlug && !this.form.categorySlugs.length) {
+                          this.prefillWarning = 'The requested category is no longer available. Select an active category before creating the provider.';
+                        }
+                        this.areaText = [request.city, request.servicePincode].filter(Boolean).join(', ');
                       }
                     } catch (e) {
                       this.error = e.message;
@@ -246,16 +273,20 @@
                         skills: [...this.form.categorySlugs],
                         serviceAreas,
                       };
+                      const isRequestConversion = this.mode === "create" && Boolean(this.requestId);
                       const response = await apiFetch(
                         this.mode === "edit"
                           ? "/api/provider/" + this.recordId
-                          : "/api/provider",
+                          : isRequestConversion
+                            ? "/api/provider-requests/" + encodeURIComponent(this.requestId) + "/convert"
+                            : "/api/provider",
                         {
                           method: this.mode === "edit" ? "PUT" : "POST",
                           body: JSON.stringify(payload),
                         },
                       );
-                      location.href = "/providers/" + response.data.providerId;
+                      const provider = isRequestConversion ? response.data.provider : response.data;
+                      location.href = "/providers/" + provider.providerId;
                     } catch (e) {
                       this.error = e.message;
                     } finally {

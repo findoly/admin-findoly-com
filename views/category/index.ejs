@@ -50,19 +50,18 @@
 
                 <div class="col-xl-8">
                   <div class="card" :class="loading && 'crm-loading'">
-                    <div class="card-header crm-category-filter-header">
-                      <div class="crm-filter-bar crm-filter-bar-embedded">
-                        <div class="crm-filter-heading"><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
-                        <input class="form-control" style="max-width:200px" type="search" x-model="q" maxlength="100" placeholder="Search categories" />
-                        <input class="form-control" style="max-width:150px" type="date" x-model="startDate" aria-label="From date" />
-                        <input class="form-control" style="max-width:150px" type="date" x-model="endDate" aria-label="To date" />
-                        <select class="form-select" style="max-width:150px" x-model="sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select>
-                        <button class="btn btn-primary" type="button" @click="search()">Apply</button>
-                        <button class="btn btn-light" type="button" x-show="q || startDate || endDate || sortOrder !== 'newest'" @click="clearFilters()">Clear</button>
-                      </div>
+                    <div class="card-header crm-card-heading crm-list-heading">
+                      <div><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
+                    </div>
+                    <div class="crm-filter-bar crm-filter-bar-embedded">
+                      <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" maxlength="100" placeholder="Search categories" aria-label="Search categories"></label>
+                      <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="startDate"></label>
+                      <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="endDate"></label>
+                      <label class="crm-filter-field"><span>Sort</span><select x-model="sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+                      <div class="crm-filter-actions"><button class="btn btn-primary" type="button" @click="search()">Apply</button><button class="btn btn-light" type="button" x-show="q || startDate || endDate || sortOrder !== 'newest'" @click="clearFilters()">Clear</button></div>
                     </div>
                     <div class="table-responsive">
-                      <table class="table mb-0">
+                      <table class="table crm-table mb-0">
                         <thead><tr><th>Name</th><th>Service Types</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
                         <tbody>
                           <template x-if="loading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
@@ -85,7 +84,7 @@
                   <div class="card mt-3" x-show="selectedCategory" x-cloak>
                     <div class="card-header"><div><h5 class="mb-1">Service Types</h5><p class="text-muted mb-0" x-text="selectedCategory ? selectedCategory.name + ' · ' + serviceTypes.length + ' Service Types' : ''"></p></div></div>
                     <div class="table-responsive">
-                      <table class="table mb-0"><thead><tr><th>Name</th><th>Slug</th><th>Order</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
+                      <table class="table crm-table mb-0"><thead><tr><th>Name</th><th>Slug</th><th>Order</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
                         <template x-if="serviceLoading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                         <template x-for="item in serviceTypes" :key="item.serviceTypeId"><tr><td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.description || 'No description'"></small></td><td><code x-text="item.slug"></code></td><td x-text="item.displayOrder || 0"></td><td><span class="badge" :class="item.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false ? 'Active' : 'Inactive'"></span></td><td x-text="formatDate(item.updatedAt || item.createdAt)"></td><td class="text-end"><button type="button" class="btn btn-light btn-sm" @click="editServiceType(item)">Edit</button></td></tr></template>
                         <tr x-show="!serviceLoading && !serviceTypes.length"><td colspan="6" class="text-center text-muted py-4">No Service Types yet. Add the first Service Type using the form.</td></tr>

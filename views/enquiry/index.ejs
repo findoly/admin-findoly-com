@@ -31,13 +31,15 @@
                       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
                       <input type="search" x-model="filters.q" placeholder="Search customer, mobile, title or lead ID" aria-label="Search requirements">
                     </label>
-                    <button type="submit" class="btn btn-primary crm-filter-apply">Search</button>
-                    <button type="button" class="btn btn-light crm-filter-toggle" :class="{'is-active': showFilters || activeFilterCount}" @click="showFilters = !showFilters">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-                      Filters
-                      <span x-show="activeFilterCount" x-text="activeFilterCount"></span>
-                    </button>
-                    <button type="button" class="btn btn-light" x-show="activeFilterCount || filters.q" @click="reset()">Clear</button>
+                    <div class="crm-filter-actions">
+                      <button type="submit" class="btn btn-primary crm-filter-apply">Search</button>
+                      <button type="button" class="btn btn-light crm-filter-toggle" :class="{'is-active': showFilters || activeFilterCount}" @click="showFilters = !showFilters">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+                        Filters
+                        <span x-show="activeFilterCount" x-text="activeFilterCount"></span>
+                      </button>
+                      <button type="button" class="btn btn-light" x-show="activeFilterCount || filters.q" @click="reset()">Clear</button>
+                    </div>
                     <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
                   </div>
 

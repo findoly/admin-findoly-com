@@ -25,6 +25,14 @@ const PERMISSION_GROUPS = Object.freeze([
     ],
   },
   {
+    key: "provider_requests",
+    label: "Provider requests",
+    permissions: [
+      { key: "provider_requests.view", label: "View provider joining requests" },
+      { key: "provider_requests.manage", label: "Contact, reject and convert provider requests" },
+    ],
+  },
+  {
     key: "agents",
     label: "Agents",
     permissions: [
@@ -144,6 +152,8 @@ const DEFAULT_ROLES = Object.freeze([
       "requirements.manage",
       "providers.view",
       "providers.edit",
+      "provider_requests.view",
+      "provider_requests.manage",
       "agents.view",
       "partnerPayouts.view",
       "categories.view",

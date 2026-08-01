@@ -19,6 +19,7 @@ const {
 } = require("../../utils/validation");
 const { geocodePincode } = require("../location/geocoding-service");
 const accountRegistrationService = require("../communication/account-registration-service");
+const catalogService = require("../catalog/catalog-service");
 
 const PROVIDER_STATUSES = Object.freeze([
   "active",
@@ -400,8 +401,18 @@ async function assertUniqueProviderMobile(mobile, excludingProviderId = "") {
   }
 }
 
+async function assertAvailableProviderCategories(categorySlugs = []) {
+  const available = await catalogService.listCategories({ includeInactive: false });
+  const allowed = new Set(available.map((category) => String(category.slug || "")));
+  const unavailable = categorySlugs.filter((slug) => !allowed.has(slug));
+  if (unavailable.length) {
+    throw validationError(`Select available provider categories. Unavailable: ${unavailable.join(", ")}`);
+  }
+}
+
 async function create(input, actor = "crm-admin") {
   const normalized = normalizeProviderInput(input);
+  await assertAvailableProviderCategories(normalized.categorySlugs);
   await assertUniqueProviderMobile(normalized.normalizedMobile);
   const data = await applyProviderLocation(normalized);
   let provider;
@@ -431,6 +442,7 @@ async function update(providerId, input = {}, actor = "crm-admin") {
   assertProviderIdUnchanged(current, input);
 
   const normalized = normalizeProviderInput(input, current);
+  await assertAvailableProviderCategories(normalized.categorySlugs);
   await assertUniqueProviderMobile(normalized.normalizedMobile, current.providerId || current.id);
   const data = await applyProviderLocation(normalized, current);
   await Provider.updateOne(query, { $set: data });
@@ -523,4 +535,5 @@ module.exports = {
   OUTCOME_VERIFICATION_STATUSES,
   PROVIDER_REVIEW_ACTIONS,
   reviewProviderOutcome,
+  assertAvailableProviderCategories,
 };

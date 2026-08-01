@@ -10,6 +10,7 @@ const ProviderLeadUnlock = require("../models/ProviderLeadUnlock");
 const ProviderSubscription = require("../models/ProviderSubscription");
 const PaymentOrder = require("../models/PaymentOrder");
 const WalletTransaction = require("../models/WalletTransaction");
+const ProviderJoinRequest = require("../models/ProviderJoinRequest");
 
 function indexedModels() {
   return [
@@ -20,6 +21,7 @@ function indexedModels() {
     ProviderSubscription,
     PaymentOrder,
     WalletTransaction,
+    ProviderJoinRequest,
   ];
 }
 

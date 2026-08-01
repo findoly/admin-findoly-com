@@ -46,6 +46,12 @@ test("EJS pages use structural partials only and Alpine calls the API", () => {
   assert.match(source("views/provider-unlock/index.ejs"), /apiFetch\(["']\/api\/provider-unlocks/);
 });
 
+test("provider unlock page does not depend on an undefined CSP nonce local", () => {
+  const view = source("views/provider-unlock/index.ejs");
+  assert.doesNotMatch(view, /cspNonce/);
+  assert.match(view, /<script>/);
+});
+
 test("marketplace architecture has no per-provider visibility collection", () => {
   assert.equal(fs.existsSync(path.join(root, "models/LeadDistribution.js")), false);
   assert.equal(fs.existsSync(path.join(root, "services/distribution")), false);

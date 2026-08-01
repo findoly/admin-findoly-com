@@ -8,6 +8,9 @@ const SAFE_OPERATIONAL_CODES = new Set([
   "OTP_SERVICE_RATE_LIMIT",
   "S3_NOT_CONFIGURED",
   "S3_REQUEST_FAILED",
+  "S3_CREDENTIALS_INVALID",
+  "S3_TOKEN_EXPIRED",
+  "S3_ACCESS_DENIED",
 ]);
 
 function notFound(req, res) {
@@ -74,7 +77,7 @@ function normalizedError(error = {}) {
 
 function errorHandler(error, req, res, next) {
   const normalized = normalizedError(error);
-  if (normalized.status >= 500) {
+  if (normalized.status >= 500 && error?.logged !== true) {
     console.error({
       event: "http_request_error",
       requestId: req.requestId,

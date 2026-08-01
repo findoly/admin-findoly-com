@@ -137,3 +137,80 @@ test("S3 presigned GET URLs use AWS canonical ordering and encoding", () => {
     delete require.cache[require.resolve("../services/storage/s3-service")];
   }
 });
+
+test("S3 session token validation disables malformed credentials safely", () => {
+  const previous = {
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
+  };
+  Object.assign(process.env, {
+    AWS_REGION: "ap-south-1",
+    AWS_S3_BUCKET: "findoly-prod",
+    AWS_ACCESS_KEY_ID: "AKIAEXAMPLE123456789",
+    AWS_SECRET_ACCESS_KEY: "secret-example-value-with-enough-length",
+    AWS_SESSION_TOKEN: "REPLACE_ONLY_IF_USING_TEMPORARY_AWS_CREDENTIALS",
+  });
+  try {
+    delete require.cache[require.resolve("../services/storage/s3-service")];
+    const storage = require("../services/storage/s3-service");
+    assert.match(storage.sessionTokenConfigurationError(storage.config().credentials), /AWS_SESSION_TOKEN is invalid/);
+    assert.equal(storage.publicConfig().configured, false);
+    assert.match(storage.publicConfig().configurationMessage, /Remove it when using long-lived IAM credentials/);
+    assert.throws(() => storage.validateUpload({}), (error) => error.code === "S3_CREDENTIALS_INVALID");
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    delete require.cache[require.resolve("../services/storage/s3-service")];
+  }
+});
+
+test("S3 upstream authentication failures are printed once with safe metadata", async () => {
+  const previousEnv = {
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
+  };
+  const previousFetch = global.fetch;
+  const previousError = console.error;
+  const lines = [];
+  Object.assign(process.env, {
+    AWS_REGION: "ap-south-1",
+    AWS_S3_BUCKET: "findoly-prod",
+    AWS_ACCESS_KEY_ID: "AKIAEXAMPLE123456789",
+    AWS_SECRET_ACCESS_KEY: "secret-example-value-with-enough-length",
+  });
+  delete process.env.AWS_SESSION_TOKEN;
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    text: async () => "<Error><Code>InvalidToken</Code><Message>The provided token is malformed or otherwise invalid.</Message></Error>",
+  });
+  console.error = (...args) => lines.push(args.join(" "));
+  try {
+    delete require.cache[require.resolve("../services/storage/s3-service")];
+    const storage = require("../services/storage/s3-service");
+    await assert.rejects(
+      storage.list({ prefix: "public/" }),
+      (error) => error.code === "S3_CREDENTIALS_INVALID" && error.logged === true,
+    );
+    assert.deepEqual(lines, [
+      "S3 request failed: operation=list_objects code=InvalidToken status=400 region=ap-south-1 bucket=findoly-prod",
+    ]);
+    assert.doesNotMatch(lines[0], /secret-example|AKIAEXAMPLE|Authorization|token is malformed/i);
+  } finally {
+    global.fetch = previousFetch;
+    console.error = previousError;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    delete require.cache[require.resolve("../services/storage/s3-service")];
+  }
+});

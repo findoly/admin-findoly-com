@@ -29,6 +29,7 @@ router.use("/enquiry", require("./enquiry"));
 router.use("/enquiries", require("./enquiry"));
 router.use("/requirements", require("./enquiry"));
 router.use("/leads", require("./enquiry"));
+router.use("/provider-requests", require("./provider-request"));
 router.use("/provider", require("./provider"));
 router.use("/agent", require("./agent"));
 router.use("/partner-payouts", require("./partner-payout"));

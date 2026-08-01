@@ -26,18 +26,14 @@
 
               <section class="card crm-filter-card mb-3">
                 <form class="crm-filter-bar" @submit.prevent="search()">
-                  <label class="crm-search-control">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-                    <input type="search" x-model="filters.q" placeholder="Search provider, business, mobile or city" aria-label="Search providers">
-                  </label>
-                  <label class="crm-inline-select"><span>Status</span><select x-model="filters.status"><option value="">All providers</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></label>
-                  <label class="crm-inline-select"><span>Date</span><select x-model="filters.dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option></select></label>
-                  <input class="form-control" style="max-width:150px" type="date" x-model="filters.startDate" aria-label="From date">
-                  <input class="form-control" style="max-width:150px" type="date" x-model="filters.endDate" aria-label="To date">
-                  <label class="crm-inline-select"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
-                  <button type="submit" class="btn btn-primary">Search</button>
-                  <button type="button" class="btn btn-light" x-show="filters.q || filters.status || filters.startDate || filters.endDate || filters.sortOrder === 'oldest'" @click="reset()">Clear</button>
-                  <label class="crm-page-size ms-auto"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                  <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="filters.q" placeholder="Search provider, business, mobile or city" aria-label="Search providers"></label>
+                  <label class="crm-filter-field"><span>Status</span><select x-model="filters.status"><option value="">All providers</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="pending">Pending</option><option value="blocked">Blocked</option></select></label>
+                  <label class="crm-filter-field"><span>Date</span><select x-model="filters.dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option></select></label>
+                  <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="filters.startDate"></label>
+                  <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="filters.endDate"></label>
+                  <label class="crm-filter-field"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
+                  <div class="crm-filter-actions"><button type="submit" class="btn btn-primary">Apply</button><button type="button" class="btn btn-light" x-show="filters.q || filters.status || filters.startDate || filters.endDate || filters.sortOrder === 'oldest'" @click="reset()">Clear</button></div>
+                  <label class="crm-filter-field crm-filter-page-size"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
                 </form>
               </section>
 

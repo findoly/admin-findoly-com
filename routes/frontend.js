@@ -20,6 +20,8 @@ router.get("/requirements/:enquiryId/providers", ...protectedPage("requirements.
 router.get("/enquiries/:enquiryId", ...protectedPage("requirements.view"), page.enquiryShow);
 router.get("/requirements/:enquiryId", ...protectedPage("requirements.view"), page.enquiryShow);
 router.get("/providers", ...protectedPage("providers.view"), page.providers);
+router.get("/provider-requests", ...protectedPage("provider_requests.view"), page.providerRequests);
+router.get("/provider-requests/:providerJoinRequestId", ...protectedPage("provider_requests.view"), page.providerRequestShow);
 router.get("/providers/new", ...protectedPage("providers.create"), page.providerCreate);
 router.get("/providers/:providerId/edit", ...protectedPage("providers.edit"), page.providerEdit);
 router.get("/providers/:providerId", ...protectedPage("providers.view"), page.providerShow);

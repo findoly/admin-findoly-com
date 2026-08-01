@@ -18,6 +18,8 @@ const frontendController = {
     "Provider unlock details",
   ),
   providers: render("provider/index", "Providers"),
+  providerRequests: render("provider-request/index", "Provider requests"),
+  providerRequestShow: render("provider-request/show", "Provider request"),
   agents: render("agent/index", "Agents"),
   agentCreate: render("agent/form", "Create agent"),
   agentEdit: render("agent/form", "Edit agent"),

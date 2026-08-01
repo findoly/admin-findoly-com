@@ -7,6 +7,28 @@ const {
   validationError,
 } = require("../../utils/validation");
 
+const PLACEHOLDER_VALUE_PATTERN = /(?:^|[_\s-])(replace|placeholder|example|dummy|your)(?:$|[_\s-])/i;
+
+function sessionTokenConfigurationError(auth = {}) {
+  const accessKeyId = String(auth.accessKeyId || "").trim();
+  const sessionToken = String(auth.sessionToken || "").trim();
+  if (!sessionToken) {
+    return accessKeyId.startsWith("ASIA")
+      ? "AWS_SESSION_TOKEN is required when using temporary AWS credentials."
+      : "";
+  }
+  if (
+    PLACEHOLDER_VALUE_PATTERN.test(sessionToken) ||
+    /[\s\u0000-\u001f\u007f]/.test(sessionToken) ||
+    sessionToken.length < 16 ||
+    sessionToken.length > 4096 ||
+    !/^[A-Za-z0-9/+=._-]+$/.test(sessionToken)
+  ) {
+    return "AWS_SESSION_TOKEN is invalid. Remove it when using long-lived IAM credentials, or provide the exact matching token for temporary AWS credentials.";
+  }
+  return "";
+}
+
 function normalizedRoot(value, fallback) {
   const raw = String(value || fallback || "").trim().replace(/^\/+/, "").replace(/\\/g, "/");
   if (!raw) return "";
@@ -38,6 +60,7 @@ function config() {
     process.env.AWS_CLOUDFRONT_DOMAIN || process.env.S3_PUBLIC_BASE_URL || "",
   ).trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   const auth = credentials();
+  const credentialError = sessionTokenConfigurationError(auth);
   const region = String(process.env.AWS_REGION || "").trim();
   const bucket = String(process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || "").trim();
   return {
@@ -63,7 +86,8 @@ function config() {
     endpoint: String(process.env.AWS_S3_ENDPOINT || "").trim().replace(/\/+$/, ""),
     forcePathStyle: String(process.env.AWS_S3_FORCE_PATH_STYLE || "").toLowerCase() === "true",
     requestTimeoutMs: Math.min(Math.max(Number(process.env.AWS_S3_TIMEOUT_MS || 15000) || 15000, 1000), 60000),
-    configured: Boolean(region && bucket && auth.accessKeyId && auth.secretAccessKey),
+    credentialError,
+    configured: Boolean(region && bucket && auth.accessKeyId && auth.secretAccessKey && !credentialError),
   };
 }
 
@@ -83,16 +107,17 @@ function publicConfig() {
     downloadUrlExpiresSeconds: value.downloadUrlExpiresSeconds,
     configurationMessage: value.configured
       ? ""
-      : "Add AWS_REGION, AWS_S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to enable File Manager.",
+      : value.credentialError || "Add AWS_REGION, AWS_S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to enable File Manager.",
   };
 }
 
 function assertConfigured() {
   const value = config();
   if (!value.configured) {
+    const credentialError = value.credentialError;
     throw Object.assign(
-      new Error("Amazon S3 is not configured. Add the S3 region, bucket and restricted IAM credentials to the server environment."),
-      { status: 503, code: "S3_NOT_CONFIGURED", expose: true },
+      new Error(credentialError || "Amazon S3 is not configured. Add the S3 region, bucket and restricted IAM credentials to the server environment."),
+      { status: 503, code: credentialError ? "S3_CREDENTIALS_INVALID" : "S3_NOT_CONFIGURED", expose: true },
     );
   }
   return value;
@@ -349,14 +374,53 @@ function xmlBlocks(xml, tag) {
 }
 
 function s3Error(status, body) {
-  const code = xmlValue(body, "Code") || "S3_REQUEST_FAILED";
-  const message = xmlValue(body, "Message") || `Amazon S3 request failed with status ${status}`;
+  const upstreamCode = xmlValue(body, "Code") || "S3_REQUEST_FAILED";
+  const upstreamMessage = xmlValue(body, "Message") || `Amazon S3 request failed with status ${status}`;
+  const authenticationCodes = new Set([
+    "InvalidToken",
+    "InvalidAccessKeyId",
+    "SignatureDoesNotMatch",
+    "TokenRefreshRequired",
+  ]);
+  let code = "S3_REQUEST_FAILED";
+  let message = upstreamMessage;
+  let responseStatus = status === 404 ? 404 : status === 403 ? 403 : status >= 500 ? 503 : 400;
+
+  if (authenticationCodes.has(upstreamCode)) {
+    code = "S3_CREDENTIALS_INVALID";
+    message = "Amazon S3 credentials are invalid. Check the configured access key, secret key, and session token.";
+    responseStatus = 503;
+  } else if (upstreamCode === "ExpiredToken") {
+    code = "S3_TOKEN_EXPIRED";
+    message = "Amazon S3 temporary credentials have expired.";
+    responseStatus = 503;
+  } else if (upstreamCode === "AccessDenied") {
+    code = "S3_ACCESS_DENIED";
+    message = "Amazon S3 access was denied. Check the IAM policy and bucket permissions.";
+    responseStatus = 503;
+  } else if (["NoSuchKey", "NotFound"].includes(upstreamCode)) {
+    code = upstreamCode;
+    message = "File not found";
+    responseStatus = 404;
+  }
+
   return Object.assign(new Error(message), {
-    status: status === 404 ? 404 : status === 403 ? 403 : status >= 400 && status < 500 ? 400 : 503,
-    code: code === "NoSuchKey" || code === "NotFound" ? code : "S3_REQUEST_FAILED",
-    upstreamCode: code,
-    expose: status < 500,
+    status: responseStatus,
+    code,
+    upstreamCode,
+    upstreamStatus: status,
+    expose: true,
   });
+}
+
+function logS3Failure(settings, method, error, operation) {
+  const safeOperation = String(operation || method || "request").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  const safeCode = String(error?.upstreamCode || error?.code || "S3_REQUEST_FAILED").replace(/[^A-Za-z0-9_:-]/g, "_");
+  const safeStatus = Number(error?.upstreamStatus || error?.status || 503);
+  console.error(
+    `S3 request failed: operation=${safeOperation} code=${safeCode} status=${safeStatus} region=${settings.region} bucket=${settings.bucket}`,
+  );
+  error.logged = true;
 }
 
 async function fetchS3(settings, method, key, options = {}) {
@@ -374,11 +438,16 @@ async function fetchS3(settings, method, key, options = {}) {
     if (!response.ok) throw s3Error(response.status, body);
     return { response, body };
   } catch (error) {
-    if (error?.status) throw error;
-    throw Object.assign(
-      new Error(error?.name === "AbortError" ? "Amazon S3 did not respond in time" : "Unable to connect to Amazon S3"),
-      { status: 503, code: "S3_REQUEST_FAILED", expose: true, cause: error },
-    );
+    const normalized = error?.status
+      ? error
+      : Object.assign(
+        new Error(error?.name === "AbortError" ? "Amazon S3 did not respond in time" : "Unable to connect to Amazon S3"),
+        { status: 503, code: "S3_REQUEST_FAILED", expose: true, cause: error },
+      );
+    const expectedNotFound = options.suppressNotFoundLog &&
+      (normalized?.status === 404 || ["NoSuchKey", "NotFound"].includes(normalized?.upstreamCode));
+    if (!expectedNotFound) logS3Failure(settings, method, normalized, options.operation);
+    throw normalized;
   } finally {
     clearTimeout(timer);
   }
@@ -387,7 +456,7 @@ async function fetchS3(settings, method, key, options = {}) {
 async function exists(key) {
   const settings = assertConfigured();
   try {
-    await fetchS3(settings, "HEAD", key);
+    await fetchS3(settings, "HEAD", key, { operation: "head_object", suppressNotFoundLog: true });
     return true;
   } catch (error) {
     if (error?.status === 404 || ["NoSuchKey", "NotFound"].includes(error?.upstreamCode)) return false;
@@ -424,6 +493,7 @@ async function list(input = {}) {
     maxLength: 4000,
   });
   const { body } = await fetchS3(settings, "GET", "", {
+    operation: "list_objects",
     query: {
       "list-type": "2",
       delimiter: "/",
@@ -464,6 +534,7 @@ async function createFolder(input = {}) {
   const settings = assertConfigured();
   const key = folderPrefix(input.prefix, input.folderName);
   await fetchS3(settings, "PUT", key, {
+    operation: "create_folder",
     headers: { "Content-Type": "application/x-directory" },
     body: "",
   });
@@ -504,7 +575,7 @@ async function createDownloadUrl(input = {}) {
   if (!hasAllowedRoot(key, settings.roots)) throw validationError("File is outside the approved S3 locations");
   let metadata;
   try {
-    metadata = await fetchS3(settings, "HEAD", key);
+    metadata = await fetchS3(settings, "HEAD", key, { operation: "head_object", suppressNotFoundLog: true });
   } catch (error) {
     if (error?.status === 404) throw Object.assign(new Error("File not found"), { status: 404 });
     throw error;
@@ -541,4 +612,5 @@ module.exports = {
   createDownloadUrl,
   presignedUrl,
   signedRequest,
+  sessionTokenConfigurationError,
 };

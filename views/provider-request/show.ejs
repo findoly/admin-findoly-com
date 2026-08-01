@@ -1,0 +1,77 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+%>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Provider network</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Review applicant information and decide the next onboarding action.</p></div><a href="/provider-requests" class="btn btn-light crm-primary-action">Back to requests</a></div></div>
+        <div class="content">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <main x-data="providerRequestDetail()" x-init="load()">
+            <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+            <section class="card crm-data-card" :class="loading && 'crm-loading'">
+              <div class="card-header crm-card-heading crm-provider-request-head"><div><h2 class="card-title mb-1" x-text="request.name || 'Provider request'"></h2><p class="text-muted mb-0" x-text="request.businessName || request.providerJoinRequestId"></p></div><span class="crm-status" :class="requestStatusClass(request.status)" x-text="humanize(request.status || 'new')"></span></div>
+              <div class="card-body">
+                <div class="crm-provider-request-grid">
+                  <article><span>Mobile</span><strong x-text="request.mobile ? '+91 '+request.mobile : '—'"></strong></article>
+                  <article><span>WhatsApp</span><strong x-text="request.whatsappNumber ? '+91 '+request.whatsappNumber : '—'"></strong></article>
+                  <article><span>Email</span><strong x-text="request.email || '—'"></strong></article>
+                  <article><span>Category</span><strong x-text="request.categoryNameSnapshot || humanize(request.categorySlug)"></strong></article>
+                  <article><span>PIN code</span><strong x-text="request.servicePincode || '—'"></strong></article>
+                  <article><span>Submitted</span><strong x-text="formatDate(request.createdAt)"></strong></article>
+                  <article class="crm-provider-request-address"><span>Service address</span><strong x-text="request.serviceAddress || '—'"></strong><small x-text="[request.city,request.state].filter(Boolean).join(', ')"></small></article>
+                  <article><span>Last processed by</span><strong x-text="request.processedBy || 'Not processed'"></strong></article>
+                </div>
+                <div class="crm-provider-request-timeline">
+                  <span>Contacted: <strong x-text="formatDate(request.contactedAt)"></strong></span>
+                  <span>Rejected: <strong x-text="formatDate(request.rejectedAt)"></strong></span>
+                  <span>Converted: <strong x-text="formatDate(request.convertedAt)"></strong></span>
+                </div>
+                <div class="mt-4">
+                  <label class="form-label" for="providerRequestNote">Internal note</label>
+                  <textarea id="providerRequestNote" class="form-control" rows="4" maxlength="2000" x-model="internalNote" <%= canAccess('provider_requests.manage') ? '' : 'readonly' %>></textarea>
+                </div>
+              </div>
+              <div class="card-footer crm-provider-request-actions">
+                <a href="/provider-requests" class="btn btn-light">Back</a>
+                <template x-if="request.convertedProviderId"><a class="btn btn-outline-primary" :href="'/providers/'+request.convertedProviderId">Open provider</a></template>
+                <% if (canAccess('provider_requests.manage')) { %>
+                  <button type="button" class="btn btn-outline-primary" x-show="request.status === 'new'" :disabled="saving" @click="setStatus('contacted')">Mark contacted</button>
+                  <button type="button" class="btn btn-outline-danger" x-show="request.status !== 'converted' && request.status !== 'rejected'" :disabled="saving" @click="setStatus('rejected')">Reject request</button>
+                <% } %>
+                <% if (canAccess('provider_requests.manage') && canAccess('providers.create')) { %>
+                  <a class="btn btn-primary" x-show="request.status === 'new' || request.status === 'contacted'" :href="'/providers/new?requestId='+encodeURIComponent(request.providerJoinRequestId || '')">Create provider</a>
+                <% } %>
+              </div>
+            </section>
+          </main>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <script>
+      function providerRequestDetail() {
+        return {
+          request: {}, internalNote: '', loading: true, saving: false, error: '',
+          requestId: pathRecordId(),
+          requestStatusClass(status) { return { new: 'status-pending', contacted: 'status-active', converted: 'status-completed', rejected: 'status-blocked' }[status] || 'status-inactive'; },
+          async load() { this.loading=true; this.error=''; try { this.request=(await apiFetch('/api/provider-requests/'+this.requestId)).data||{}; this.internalNote=this.request.internalNote||''; } catch(error) { this.error=error.message; } finally { this.loading=false; } },
+          async setStatus(status) {
+            if (this.saving) return;
+            if (status === 'rejected' && !String(this.internalNote || '').trim()) { this.error='Add an internal note before rejecting this request'; return; }
+            this.saving=true; this.error='';
+            try { this.request=(await apiFetch('/api/provider-requests/'+this.requestId+'/status',{method:'PATCH',body:JSON.stringify({status,internalNote:this.internalNote})})).data||{}; this.internalNote=this.request.internalNote||''; showCrmToast('Provider request updated','success'); }
+            catch(error) { this.error=error.message; }
+            finally { this.saving=false; }
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

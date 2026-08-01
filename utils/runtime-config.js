@@ -2,6 +2,24 @@ function present(value) {
   return Boolean(String(value || "").trim());
 }
 
+function invalidAwsSessionToken(env = {}) {
+  const accessKeyId = String(env.AWS_ACCESS_KEY_ID || "").trim();
+  const token = String(env.AWS_SESSION_TOKEN || "").trim();
+  if (!token) return accessKeyId.startsWith("ASIA")
+    ? "AWS_SESSION_TOKEN is required when using temporary AWS credentials"
+    : "";
+  if (
+    /(?:^|[_\s-])(replace|placeholder|example|dummy|your)(?:$|[_\s-])/i.test(token) ||
+    /[\s\u0000-\u001f\u007f]/.test(token) ||
+    token.length < 16 ||
+    token.length > 4096 ||
+    !/^[A-Za-z0-9/+=._-]+$/.test(token)
+  ) {
+    return "AWS_SESSION_TOKEN is invalid; remove it for long-lived IAM credentials or provide the exact matching temporary session token";
+  }
+  return "";
+}
+
 function validHttpUrl(value, { httpsOnly = false } = {}) {
   try {
     const url = new URL(String(value || ""));
@@ -48,6 +66,11 @@ function validateRuntimeConfig(env = process.env) {
     warnings.push(`S3 configuration is incomplete; File Manager will stay disabled until ${missing.join(", ")} is configured`);
   }
 
+  const sessionTokenError = invalidAwsSessionToken(env);
+  if (configuredS3Parts.length === Object.keys(s3Values).length && sessionTokenError) {
+    warnings.push(`${sessionTokenError}; File Manager will stay disabled`);
+  }
+
   if (env.AWS_CLOUDFRONT_DOMAIN && /[/?#]/.test(String(env.AWS_CLOUDFRONT_DOMAIN).replace(/^https?:\/\//, ""))) {
     errors.push("AWS_CLOUDFRONT_DOMAIN must be a hostname without a path");
   }
@@ -79,4 +102,4 @@ function assertRuntimeConfig(env = process.env) {
   return result;
 }
 
-module.exports = { validateRuntimeConfig, assertRuntimeConfig, validHttpUrl };
+module.exports = { validateRuntimeConfig, assertRuntimeConfig, validHttpUrl, invalidAwsSessionToken };
