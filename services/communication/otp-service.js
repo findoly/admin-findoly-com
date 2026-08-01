@@ -3,12 +3,15 @@ const OtpRequest = require("../../models/OtpRequest");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("./communication-service");
 const { validateMobile } = require("../../utils/mobile");
+const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
   enumValue,
   identifierValue,
   numberValue,
   validationError,
+  queryTextValue,
 } = require("../../utils/validation");
 
 const secret = function () {
@@ -189,16 +192,41 @@ const verify = async function (input) {
   return { verified: true, otpId: record.otpId, recipient: record.recipient, purpose: record.purpose, verifiedAt: now };
 };
 
+const escapeRegex = function (value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const list = async function (filters) {
+  const source = filters || {};
+  const { limit, cursor } = getPagination(source);
   const query = {};
-  if (filters?.status) query.status = enumValue(filters.status, ["sent", "verified", "expired", "blocked", "failed"], { label: "OTP status filter" });
-  if (filters?.channel) query.channel = enumValue(filters.channel, ["whatsapp", "email"], { label: "OTP channel filter" });
-  const limit = numberValue(filters?.limit, { label: "OTP list limit", fallback: 100, min: 1, max: 500, integer: true });
-  return OtpRequest.find(query)
-    .select("-otpHash -salt")
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit)
-    .lean();
+  if (source.status) {
+    query.status = enumValue(source.status, ["sent", "verified", "expired", "blocked", "failed"], {
+      label: "OTP status filter",
+    });
+  }
+  if (source.channel) {
+    query.channel = enumValue(source.channel, ["whatsapp", "email"], { label: "OTP channel filter" });
+  }
+  if (source.purpose) {
+    query.purpose = textValue(source.purpose, { label: "OTP purpose filter", maxLength: 80 }).toLowerCase();
+  }
+  const q = queryTextValue(source.q, { label: "OTP search", maxLength: 100 });
+  if (q) {
+    const search = new RegExp(escapeRegex(q), "i");
+    query.$or = [{ recipient: search }, { otpId: search }, { purpose: search }];
+  }
+  applyDateRange(query, source, {
+    fields: { createdAt: "Created date" },
+    defaultField: "createdAt",
+  });
+  return cursorPaginate(OtpRequest, {
+    query,
+    sort: dateSort(source, { fields: ["createdAt"] }),
+    limit,
+    cursor,
+    select: "-otpHash -salt",
+  });
 };
 
 module.exports = { send, verify, list, hashOtp, generateOtp, enforceRateLimits };

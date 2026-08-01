@@ -6,42 +6,76 @@
     <div class="page-content">
       <%- include('../partials/sidebar') %>
       <div class="content-wrapper"><div class="content-inner">
-        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Review manual, WhatsApp, email, Slack and OTP delivery records. Logs are retained for seven days.</p></div><div class="d-flex gap-2"><a href="/communications/send" class="btn btn-primary crm-primary-action">Send message</a><a href="/communications/new" class="btn btn-light crm-primary-action">Log activity</a></div></div></div>
-        <div class="content">
-          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
-          <div class="d-flex flex-wrap gap-2 mb-3">
-  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
-  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
-  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
-  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
-  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
-  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
-</div>
-          <div x-data="communicationLogs()" x-init="load()">
-            <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-            <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
-              <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" placeholder="Search messages, contacts or IDs" aria-label="Search communication logs"></label>
-              <label class="crm-filter-field"><span>Channel</span><select x-model="channel"><option value="">All channels</option><option>call</option><option>whatsapp</option><option>email</option><option>sms</option><option>slack</option></select></label>
-              <label class="crm-filter-field"><span>Status</span><select x-model="status"><option value="">All statuses</option><option>queued</option><option>sent</option><option>delivered</option><option>read</option><option>failed</option><option>bounced</option><option>complained</option><option>logged</option></select></label>
-              <label class="crm-filter-field"><span>Date</span><select x-model="dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option><option value="sentAt">Sent</option></select></label>
-              <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="startDate"></label>
-              <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="endDate"></label>
-              <label class="crm-filter-field"><span>Sort</span><select x-model="sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
-              <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="q || channel || status || startDate || endDate || sortOrder === 'oldest'" @click="reset()">Clear</button></div>
-            </form></section>
-            <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Communication history</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> rows on this page</p></div></div><div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Recipient</th><th>Lead</th><th>Channel</th><th>Purpose</th><th>Status</th><th>Message</th><th>Date</th><th></th></tr></thead><tbody><template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template><template x-for="row in rows" :key="row.communicationId"><tr><td><div class="fw-semibold" x-text="row.recipientName || '—'"></div><div class="text-muted fs-sm" x-text="row.recipientContact || ''"></div></td><td><a :href="row.enquiryId ? '/enquiries/'+row.enquiryId : '#'" x-text="row.enquiryId || '—'"></a></td><td x-text="humanize(row.channel)"></td><td><div x-text="humanize(row.purpose)"></div><div class="text-muted fs-sm" x-text="row.templateId || ''"></div></td><td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span><div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div></td><td><div class="text-truncate" x-text="row.subject || row.message || '—'"></div></td><td x-text="formatDate(row.createdAt)"></td><td><div class="d-flex gap-2"><button x-show="['failed','bounced','complained','rejected'].includes(row.status) && row.purpose !== 'otp'" class="btn btn-primary btn-sm" @click="retry(row)" :disabled="row.retrying">Retry</button><a class="btn btn-light btn-sm" :href="'/communications/'+row.communicationId+'/edit'">Open</a></div></td></tr></template><tr x-show="!loading && !rows.length"><td colspan="8" class="text-center text-muted py-4">No communications found</td></tr></tbody></table></div><div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div></section>
+        <div class="page-header page-header-light crm-page-header">
+          <div class="page-header-content crm-page-heading">
+            <div>
+              <div class="crm-page-eyebrow">Communication Center</div>
+              <h1 class="page-title mb-1"><%= title %></h1>
+              <p class="crm-page-subtitle mb-0">Review manual, WhatsApp, email, Slack and OTP delivery records. Logs are retained for seven days.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <a href="/communications/send" class="btn btn-primary crm-primary-action">Send message</a>
+              <a href="/communications/new" class="btn btn-light crm-primary-action">Log activity</a>
+            </div>
           </div>
+        </div>
+        <div class="content" x-data="communicationLogs()" x-init="load()">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+          <%- include('_navigation', { active: 'logs' }) %>
+
+          <section class="card crm-filter-card mb-3">
+            <form class="crm-filter-bar" @submit.prevent="search()">
+              <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" placeholder="Search messages, contacts or IDs" aria-label="Search communication logs"></label>
+              <label class="crm-filter-field"><span>Channel</span><select x-model="channel"><option value="">All channels</option><option value="call">Call</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="sms">SMS</option><option value="slack">Slack</option></select></label>
+              <label class="crm-filter-field"><span>Status</span><select x-model="status"><option value="">All statuses</option><option value="logged">Logged</option><option value="queued">Queued</option><option value="accepted">Accepted</option><option value="sent">Sent</option><option value="delivered">Delivered</option><option value="read">Read</option><option value="failed">Failed</option><option value="bounced">Bounced</option><option value="complained">Complained</option><option value="rejected">Rejected</option></select></label>
+              <label class="crm-filter-field"><span>Recipient type</span><select x-model="accountType"><option value="">All recipients</option><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option><option value="employee">Employee</option><option value="manual">Manual entry</option></select></label>
+              <label class="crm-filter-field crm-filter-field-wide"><span>Purpose</span><input type="text" x-model="purpose" maxlength="100" placeholder="provider_created"></label>
+              <label class="crm-filter-field"><span>Date</span><select x-model="dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option><option value="sentAt">Sent</option></select></label>
+              <label class="crm-filter-field crm-filter-date"><span>From</span><input type="date" x-model="startDate"></label>
+              <label class="crm-filter-field crm-filter-date"><span>To</span><input type="date" x-model="endDate"></label>
+              <label class="crm-filter-field"><span>Sort</span><select x-model="sortOrder"><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
+              <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="hasFilters()" @click="reset()">Clear</button></div>
+              <label class="crm-filter-field crm-filter-page-size"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+            </form>
+          </section>
+
+          <section class="card crm-data-card">
+            <div class="card-header crm-card-heading"><div><h5 class="mb-1">Communication history</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> rows on this page</p></div></div>
+            <div class="table-responsive">
+              <table class="table crm-table mb-0">
+                <thead><tr><th>Recipient</th><th>Requirement</th><th>Channel</th><th>Purpose</th><th>Status</th><th>Message</th><th>Date</th><th></th></tr></thead>
+                <tbody>
+                  <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                  <template x-for="row in rows" :key="row.communicationId"><tr>
+                    <td><div class="fw-semibold" x-text="row.recipientName || '—'"></div><div class="text-muted fs-sm" x-text="row.recipientContact || ''"></div></td>
+                    <td><a :href="row.enquiryId ? '/enquiries/'+row.enquiryId : '#'" x-text="row.enquiryId || '—'"></a></td>
+                    <td x-text="humanize(row.channel)"></td>
+                    <td><div x-text="humanize(row.purpose)"></div><div class="text-muted fs-sm" x-text="row.templateId || ''"></div></td>
+                    <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span><div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div></td>
+                    <td><div class="text-truncate" x-text="row.subject || row.message || '—'"></div></td>
+                    <td x-text="formatDate(row.createdAt)"></td>
+                    <td><div class="d-flex gap-2"><button x-show="['failed','bounced','complained','rejected'].includes(row.status) && row.purpose !== 'otp'" class="btn btn-primary btn-sm" @click="retry(row)" :disabled="row.retrying">Retry</button><a class="btn btn-light btn-sm" :href="'/communications/'+row.communicationId+'/edit'">Open</a></div></td>
+                  </tr></template>
+                  <tr x-show="!loading && !rows.length"><td colspan="8" class="text-center text-muted py-4">No communications found</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page <= 1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+          </section>
         </div><%- include('../partials/footer') %>
       </div></div>
     </div>
     <script>
       function communicationLogs() {
         return {
-          rows: [], q: queryValue('q'), channel: queryValue('channel'), status: queryValue('status'), dateField: queryValue('dateField') || 'createdAt', startDate: queryValue('startDate'), endDate: queryValue('endDate'), sortOrder: queryValue('sortOrder') || 'newest', pagination: createCursorPagination(20), loading: false, error: '',
-          query() { const query = new URLSearchParams({ q: this.q, channel: this.channel, status: this.status, dateField: this.dateField, startDate: this.startDate, endDate: this.endDate, sortOrder: this.sortOrder, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...query].forEach(([key,value]) => { if (!value) query.delete(key); }); return query.toString(); },
+          rows: [], q: queryValue('q'), channel: queryValue('channel'), status: queryValue('status'), accountType: queryValue('accountType'), purpose: queryValue('purpose'), dateField: queryValue('dateField') || 'createdAt', startDate: queryValue('startDate'), endDate: queryValue('endDate'), sortOrder: queryValue('sortOrder') || 'newest', pagination: createCursorPagination(Number(queryValue('limit') || 20)), loading: false, error: '',
+          query(includeCursor = true) { const values = { q: this.q, channel: this.channel, status: this.status, accountType: this.accountType, purpose: this.purpose, dateField: this.dateField, startDate: this.startDate, endDate: this.endDate, sortOrder: this.sortOrder, limit: this.pagination.limit }; if (includeCursor) values.cursor = this.pagination.cursor; const query = new URLSearchParams(values); [...query].forEach(([key,value]) => { if (!value) query.delete(key); }); return query.toString(); },
+          hasFilters() { return Boolean(this.q || this.channel || this.status || this.accountType || this.purpose || this.startDate || this.endDate || this.dateField !== 'createdAt' || this.sortOrder !== 'newest' || this.pagination.limit !== 20); },
+          syncUrl() { history.replaceState({}, '', '/communications/logs' + (this.query(false) ? '?' + this.query(false) : '')); },
           async load() { this.loading = true; this.error = ''; try { const body = await apiFetch('/api/communication?' + this.query()); this.rows = body.data || []; applyCursorPagination(this.pagination, body.pagination || {}); } catch (error) { this.error = error.message; } finally { this.loading = false; } },
-          search() { resetCursorPagination(this.pagination); this.load(); },
-          reset() { this.q = ''; this.channel = ''; this.status = ''; this.dateField = 'createdAt'; this.startDate = ''; this.endDate = ''; this.sortOrder = 'newest'; this.search(); },
+          search() { resetCursorPagination(this.pagination); this.syncUrl(); this.load(); },
+          reset() { this.q = ''; this.channel = ''; this.status = ''; this.accountType = ''; this.purpose = ''; this.dateField = 'createdAt'; this.startDate = ''; this.endDate = ''; this.sortOrder = 'newest'; this.pagination.limit = 20; this.search(); },
           next() { if (cursorNext(this.pagination)) this.load(); },
           previous() { if (cursorPrevious(this.pagination)) this.load(); },
           async retry(row) { if(row.retrying)return; row.retrying = true; this.error = ''; try { await apiFetch('/api/communication/' + row.communicationId + '/retry', { method: 'POST', body: '{}' }); await this.load(); } catch (error) { this.error = error.message; } finally { row.retrying = false; } }

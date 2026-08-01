@@ -142,6 +142,24 @@ const list = async function (filters) {
   if (source.status) {
     query.status = textValue(source.status, { label: "Communication status filter", maxLength: 50 });
   }
+  if (source.purpose) {
+    query.purpose = textValue(source.purpose, { label: "Communication purpose filter", maxLength: 100 }).toLowerCase();
+  }
+  if (source.accountType) {
+    const accountType = enumValue(source.accountType, ["customer", "provider", "agent", "employee", "manual"], {
+      label: "Communication recipient type filter",
+    });
+    if (["provider", "agent", "employee"].includes(accountType)) {
+      query["metadata.accountType"] = accountType;
+    } else if (accountType === "manual") {
+      query.automatic = false;
+    } else {
+      query.$and = [
+        { $or: [{ "metadata.accountType": "" }, { "metadata.accountType": { $exists: false } }] },
+        { recipientContact: { $ne: "" } },
+      ];
+    }
+  }
   if (source.enquiryId) {
     query.enquiryId = identifierValue(source.enquiryId, { label: "Requirement ID filter" });
   }
@@ -157,7 +175,10 @@ const list = async function (filters) {
       { message: search },
       { subject: search },
       { enquiryId: search },
+      { communicationId: search },
       { providerMessageId: search },
+      { purpose: search },
+      { trigger: search },
     ];
   }
   applyDateRange(query, source, { fields: { createdAt: "Created date", updatedAt: "Updated date", sentAt: "Sent date" } });

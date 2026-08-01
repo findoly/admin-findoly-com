@@ -7,14 +7,7 @@
       <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Send an approved WhatsApp template or an active SES email template.</p></div><a href="/communications/logs" class="btn btn-light crm-primary-action">Message logs</a></div></div>
       <div class="content" x-data="sendMessagePage()" x-init="init()">
         <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-  <a class="btn btn-light btn-sm" href="/communications">Dashboard</a>
-  <a class="btn btn-light btn-sm" href="/communications/logs">Message logs</a>
-  <a class="btn btn-light btn-sm" href="/communications/templates">Templates</a>
-  <a class="btn btn-light btn-sm" href="/communications/rules">Rules</a>
-  <a class="btn btn-light btn-sm" href="/communications/otp">OTP activity</a>
-  <a class="btn btn-light btn-sm" href="/communications/settings">Settings</a>
-</div>
+        <%- include('_navigation', { active: 'logs' }) %>
         <form class="card" @submit.prevent="send()"><div class="card-body"><div class="row g-3">
           <div class="col-md-3"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel" @change="loadTemplates()"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
           <div class="col-md-5"><label class="form-label">Template</label><select class="form-select" x-model="form.templateId" required><option value="">Select template</option><template x-for="template in templates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>
@@ -30,7 +23,7 @@
       function sendMessagePage() {
         return { templates:[], form:{channel:'whatsapp',templateId:'',enquiryId:queryValue('enquiryId'),recipientName:'',recipientContact:'',purpose:'manual_message'}, variablesJson:'{}', error:'',message:'',sending:false,
           async init(){ await this.loadTemplates(); if(this.form.enquiryId){ try { const lead=(await apiFetch('/api/enquiry/'+this.form.enquiryId)).data; this.form.recipientName=lead.name||''; this.form.recipientContact=this.form.channel==='email'?(lead.email||''):(lead.mobile||''); this.variablesJson=JSON.stringify({'1':lead.name||'Customer','2':lead.enquiryId||'',customer_name:lead.name||'Customer',lead_id:lead.enquiryId||'',requirement_title:lead.requirementTitle||'',lead_status:lead.journeyStatus||lead.status||''},null,2); } catch(error){ this.error=error.message; } } },
-          async loadTemplates(){ this.form.templateId=''; try { const status=this.form.channel==='whatsapp'?'approved':'active'; this.templates=(await apiFetch('/api/communication/templates?channel='+this.form.channel+'&status='+status)).data||[]; } catch(error){ this.error=error.message; } },
+          async loadTemplates(){ this.form.templateId=''; try { const status=this.form.channel==='whatsapp'?'approved':'active'; this.templates=(await apiFetch('/api/communication/templates?limit=100&channel='+this.form.channel+'&status='+status+'&sortOrder=name')).data||[]; } catch(error){ this.error=error.message; } },
           async send(){ if(this.sending)return; this.sending=true;this.error='';this.message='';try{ const variables=JSON.parse(this.variablesJson||'{}'); const body=await apiFetch('/api/communication/send',{method:'POST',body:JSON.stringify({...this.form,variables})}); this.message='Message queued successfully. Communication ID: '+body.data.communicationId; }catch(error){this.error=error.message;}finally{this.sending=false;} }
         };
       }

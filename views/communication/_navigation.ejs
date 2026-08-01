@@ -1,0 +1,9 @@
+<% const selectedCommunicationTab = typeof active === "string" ? active : ""; %>
+<nav class="crm-communication-nav" aria-label="Communication Center sections">
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'overview' ? 'is-active' : '' %>" href="/communications" <%- selectedCommunicationTab === 'overview' ? 'aria-current="page"' : '' %>>Overview</a>
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'logs' ? 'is-active' : '' %>" href="/communications/logs" <%- selectedCommunicationTab === 'logs' ? 'aria-current="page"' : '' %>>Message logs</a>
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'templates' ? 'is-active' : '' %>" href="/communications/templates" <%- selectedCommunicationTab === 'templates' ? 'aria-current="page"' : '' %>>Templates</a>
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'rules' ? 'is-active' : '' %>" href="/communications/rules" <%- selectedCommunicationTab === 'rules' ? 'aria-current="page"' : '' %>>Automation rules</a>
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'otp' ? 'is-active' : '' %>" href="/communications/otp" <%- selectedCommunicationTab === 'otp' ? 'aria-current="page"' : '' %>>OTP activity</a>
+  <a class="crm-communication-nav-link <%= selectedCommunicationTab === 'settings' ? 'is-active' : '' %>" href="/communications/settings" <%- selectedCommunicationTab === 'settings' ? 'aria-current="page"' : '' %>>Settings</a>
+</nav>

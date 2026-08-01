@@ -1,11 +1,13 @@
 const CommunicationRule = require("../../models/CommunicationRule");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
+const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const {
   textValue,
   booleanValue,
   enumValue,
   identifierValue,
   validationError,
+  queryTextValue,
 } = require("../../utils/validation");
 const { normalizeChannelId } = require("./slack-service");
 
@@ -17,8 +19,15 @@ const EVENTS = Object.freeze([
   "lead_rejected",
   "lead_on_hold",
   "provider_confirmed",
+  "provider_not_confirmed",
+  "provider_contacted",
+  "provider_valid",
+  "provider_follow_up",
+  "provider_on_hold",
   "provider_rejected",
   "provider_invalid",
+  "provider_not_interested",
+  "provider_other",
   "sale_conversion_updated",
   "manual_message",
   "provider_created",
@@ -117,8 +126,45 @@ const normalizeInput = async function (input, current) {
   return data;
 };
 
-const list = async function () {
-  return CommunicationRule.find({}).sort({ event: 1, name: 1 }).lean();
+const escapeRegex = function (value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const list = async function (filters) {
+  const source = filters || {};
+  const { limit, cursor } = getPagination(source);
+  const query = {};
+  if (source.event) query.event = normalizeEvent(source.event);
+  if (source.recipientSource) {
+    query.recipientSource = enumValue(source.recipientSource, RECIPIENT_SOURCES, {
+      label: "Rule recipient filter",
+    });
+  }
+  if (source.enabled !== undefined && source.enabled !== "") {
+    query.enabled = booleanValue(source.enabled, { label: "Rule enabled filter" });
+  }
+  if (source.channel) {
+    const channel = enumValue(source.channel, ["whatsapp", "email", "slack"], {
+      label: "Rule channel filter",
+    });
+    query[`${channel}Enabled`] = true;
+  }
+  const q = queryTextValue(source.q, { label: "Rule search", maxLength: 100 });
+  if (q) {
+    const search = new RegExp(escapeRegex(q), "i");
+    query.$or = [{ name: search }, { event: search }, { description: search }];
+  }
+  const sortOrder = source.sortOrder
+    ? enumValue(source.sortOrder, ["name", "event", "newest", "oldest"], { label: "Rule sort order" })
+    : "event";
+  const sort = sortOrder === "name"
+    ? { name: 1, _id: 1 }
+    : sortOrder === "newest"
+      ? { updatedAt: -1, _id: -1 }
+      : sortOrder === "oldest"
+        ? { updatedAt: 1, _id: 1 }
+        : { event: 1, name: 1, _id: 1 };
+  return cursorPaginate(CommunicationRule, { query, sort, limit, cursor });
 };
 
 const get = async function (ruleId) {

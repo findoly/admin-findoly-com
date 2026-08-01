@@ -142,7 +142,9 @@ const config = async function (req, res, next) {
 
 const listTemplates = async function (req, res, next) {
   try {
-    res.json({ success: true, data: await templateService.list(req.query) });
+    await notificationService.ensureDefaultRules();
+    const result = await templateService.list(req.query);
+    res.json({ success: true, data: result.data, pagination: result.pagination });
   } catch (error) {
     next(error);
   }
@@ -212,7 +214,16 @@ const testTemplate = async function (req, res, next) {
 const listRules = async function (req, res, next) {
   try {
     await notificationService.ensureDefaultRules();
-    res.json({ success: true, data: await ruleService.list() });
+    const result = await ruleService.list(req.query);
+    res.json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+      metadata: {
+        events: ruleService.EVENTS,
+        recipientSources: ruleService.RECIPIENT_SOURCES,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -366,7 +377,8 @@ const verifyOtp = async function (req, res, next) {
 
 const listOtp = async function (req, res, next) {
   try {
-    res.json({ success: true, data: await otpService.list(req.query) });
+    const result = await otpService.list(req.query);
+    res.json({ success: true, data: result.data, pagination: result.pagination });
   } catch (error) {
     next(error);
   }

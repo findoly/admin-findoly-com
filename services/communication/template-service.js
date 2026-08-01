@@ -1,5 +1,6 @@
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const whatsappService = require("./whatsapp-service");
+const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const {
   textValue,
   enumValue,
@@ -136,20 +137,37 @@ const normalizeTemplateInput = function (input, current) {
   return data;
 };
 
+const escapeRegex = function (value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const list = async function (filters) {
+  const source = filters || {};
+  const { limit, cursor } = getPagination(source);
   const query = {};
-  if (filters?.channel) query.channel = enumValue(filters.channel, CHANNELS, { label: "Template channel filter" });
-  if (filters?.status) query.status = enumValue(filters.status, STATUSES, { label: "Template status filter" });
-  if (filters?.active !== undefined && filters.active !== "") {
-    query.isActive = booleanValue(filters.active, { label: "Template active filter" });
+  if (source.channel) query.channel = enumValue(source.channel, CHANNELS, { label: "Template channel filter" });
+  if (source.status) query.status = enumValue(source.status, STATUSES, { label: "Template status filter" });
+  if (source.category) query.category = enumValue(source.category, CATEGORIES, { label: "Template category filter" });
+  if (source.active !== undefined && source.active !== "") {
+    query.isActive = booleanValue(source.active, { label: "Template active filter" });
   }
-  if (filters?.q) {
-    const q = textValue(filters.q, { label: "Template search", maxLength: 100 });
-    const search = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  if (source.language) {
+    query.language = textValue(source.language, { label: "Template language filter", maxLength: 20 });
+  }
+  if (source.q) {
+    const q = textValue(source.q, { label: "Template search", maxLength: 100 });
+    const search = new RegExp(escapeRegex(q), "i");
     query.$or = [{ name: search }, { displayName: search }, { body: search }, { subject: search }];
   }
-  const limit = numberValue(filters?.limit, { label: "Template list limit", fallback: 100, min: 1, max: 500, integer: true });
-  return CommunicationTemplate.find(query).sort({ updatedAt: -1, _id: -1 }).limit(limit).lean();
+
+  const sortOrder = source.sortOrder
+    ? enumValue(source.sortOrder, ["newest", "oldest", "name"], { label: "Template sort order" })
+    : "newest";
+  const sort = sortOrder === "name"
+    ? { name: 1, _id: 1 }
+    : { updatedAt: sortOrder === "oldest" ? 1 : -1, _id: sortOrder === "oldest" ? 1 : -1 };
+
+  return cursorPaginate(CommunicationTemplate, { query, sort, limit, cursor });
 };
 
 const get = async function (templateId) {

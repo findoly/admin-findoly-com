@@ -3,6 +3,7 @@ const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("./communication-service");
 const systemEventService = require("./system-event-service");
 const { renderText } = require("./template-renderer");
+const defaultTemplateService = require("./default-template-service");
 
 const DEFAULT_RULES = Object.freeze([
   ["Lead received", "lead_created", "Customer notification after a new lead is recorded", "customer"],
@@ -21,37 +22,50 @@ const DEFAULT_RULES = Object.freeze([
   ["Provider not interested", "provider_not_interested", "Internal notification when a provider marks the lead not interested", "customer"],
   ["Provider other update", "provider_other", "Internal notification for another provider activity update", "customer"],
   ["Sale conversion updated", "sale_conversion_updated", "Notification after sale-conversion status changes", "customer"],
-  ["Provider registration", "provider_created", "Welcome email after a provider is created successfully", "provider"],
+  ["Provider account created", "provider_created", "Welcome notification after a provider is created successfully", "provider"],
   ["Agent registration", "agent_created", "Welcome email after an agent is created successfully", "agent"],
   ["Employee registration", "employee_created", "Welcome email after an employee is created successfully", "employee"],
 ]);
 
+let defaultSetupPromise = null;
+
 const ensureDefaultRules = async function () {
-  for (const row of DEFAULT_RULES) {
-    const recipientSource = row[3] || "customer";
-    await CommunicationRule.updateOne(
-      { event: row[1], recipientSource },
-      {
-        $setOnInsert: {
-          name: row[0],
-          event: row[1],
-          recipientSource,
-          description: row[2],
-          enabled: false,
-          whatsappEnabled: false,
-          whatsappTemplateId: "",
-          emailEnabled: false,
-          emailTemplateId: "",
-          slackEnabled: false,
-          slackChannelId: "",
-          slackChannelName: "",
-          slackMessage: "",
-          createdBy: "system",
-          updatedBy: "system",
-        },
-      },
-      { upsert: true },
-    );
+  if (!defaultSetupPromise) {
+    defaultSetupPromise = (async function () {
+      for (const row of DEFAULT_RULES) {
+        const recipientSource = row[3] || "customer";
+        await CommunicationRule.updateOne(
+          { event: row[1], recipientSource },
+          {
+            $setOnInsert: {
+              name: row[0],
+              event: row[1],
+              recipientSource,
+              description: row[2],
+              enabled: false,
+              whatsappEnabled: false,
+              whatsappTemplateId: "",
+              emailEnabled: false,
+              emailTemplateId: "",
+              slackEnabled: false,
+              slackChannelId: "",
+              slackChannelName: "",
+              slackMessage: "",
+              createdBy: "system",
+              updatedBy: "system",
+            },
+          },
+          { upsert: true },
+        );
+      }
+      return defaultTemplateService.ensureDefaultProviderTemplates();
+    })();
+  }
+  try {
+    return await defaultSetupPromise;
+  } catch (error) {
+    defaultSetupPromise = null;
+    throw error;
   }
 };
 
@@ -156,6 +170,14 @@ const variablesFor = function (context) {
     "6": provider.name || provider.businessName || agent.name || employee.name || context.providerName || "",
     "7": note,
   };
+  if (provider.providerId) {
+    values["1"] = provider.name || provider.businessName || "Provider";
+    values["2"] = provider.providerId || "";
+    values["3"] = provider.businessName || provider.name || "";
+    values["4"] = Array.isArray(provider.categorySlugs) ? provider.categorySlugs.join(", ") : "";
+    values["5"] = values.login_url || "";
+    values["6"] = values.support_email || "support@findoly.com";
+  }
   return values;
 };
 
@@ -241,6 +263,7 @@ const sendRule = async function (rule, context, actor) {
 };
 
 const trigger = async function (event, context, actor) {
+  await ensureDefaultRules();
   const source = context || {};
   const events = [event];
   if (event !== "lead_status_changed" && event.startsWith("lead_")) events.push("lead_status_changed");
