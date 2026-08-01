@@ -1,3 +1,7 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+  const canManageCatalog = canAccess('categories.manage');
+%>
 <!doctype html>
 <html lang="en" dir="ltr">
   <%- include('../partials/head') %>
@@ -10,86 +14,113 @@
           <div class="page-header page-header-light crm-page-header">
             <div class="page-header-content crm-page-heading">
               <div>
-                <div class="crm-page-eyebrow">Catalog management</div>
+                <div class="crm-page-eyebrow">Catalog / Categories</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Manage parent categories and the Service Types available during lead creation.</p>
+                <p class="crm-page-subtitle mb-0">Create broad service groups such as Painting, Cleaning, or Home Repair.</p>
+              </div>
+              <div class="crm-page-actions">
+                <a href="/service-types" class="btn btn-primary">Manage subcategories</a>
               </div>
             </div>
           </div>
+
           <div class="content">
             <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
             <div x-data="categoryManager()" x-init="load()">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
 
-              <div class="row g-3">
-                <div class="col-xl-4">
-                  <form class="card" @submit.prevent="saveCategory()">
-                    <div class="card-header"><h5 class="mb-0" x-text="editingId ? 'Edit category' : 'Create category'"></h5></div>
-                    <div class="card-body">
-                      <div class="mb-3"><label class="form-label">Category name</label><input class="form-control" x-model="form.name" @input="syncSlug()" maxlength="120" required /></div>
-                      <div class="mb-3"><label class="form-label">Slug</label><input class="form-control" x-model="form.slug" @input="slugTouched=true" :disabled="Boolean(editingId)" maxlength="80" pattern="[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*" required /><div class="form-text" x-show="editingId">The slug stays unchanged so existing provider and requirement links are preserved.</div></div>
-                      <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" rows="4" x-model="form.description" maxlength="2000"></textarea></div>
-                      <div class="form-check"><input class="form-check-input" type="checkbox" id="category-active" x-model="form.active" /><label class="form-check-label" for="category-active">Active and available in dropdowns</label></div>
-                    </div>
-                    <div class="card-footer d-flex gap-2"><button type="button" class="btn btn-light" x-show="editingId" @click="resetCategoryForm()">Cancel</button><button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : (editingId ? 'Update category' : 'Create category')"></button></div>
-                  </form>
-
-                  <form class="card mt-3" x-show="selectedCategory" x-cloak @submit.prevent="saveServiceType()">
-                    <div class="card-header"><div><h5 class="mb-1" x-text="serviceEditingId ? 'Edit Service Type' : 'Add Service Type'"></h5><p class="text-muted mb-0" x-text="selectedCategory ? 'Under ' + selectedCategory.name : ''"></p></div></div>
-                    <div class="card-body">
-                      <div class="mb-3"><label class="form-label">Service Type name</label><input class="form-control" x-model="serviceForm.name" @input="syncServiceSlug()" maxlength="120" required /></div>
-                      <div class="mb-3"><label class="form-label">Slug</label><input class="form-control" x-model="serviceForm.slug" @input="serviceSlugTouched=true" :disabled="Boolean(serviceEditingId)" maxlength="80" pattern="[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*" required /></div>
-                      <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" rows="3" x-model="serviceForm.description" maxlength="1000"></textarea></div>
-                      <div class="mb-3"><label class="form-label">Display order</label><input type="number" class="form-control" min="0" max="100000" step="1" x-model.number="serviceForm.displayOrder" /></div>
-                      <div class="form-check"><input class="form-check-input" type="checkbox" id="service-active" x-model="serviceForm.active" /><label class="form-check-label" for="service-active">Active and selectable in lead forms</label></div>
-                    </div>
-                    <div class="card-footer d-flex gap-2"><button type="button" class="btn btn-light" x-show="serviceEditingId" @click="resetServiceForm()">Cancel</button><button class="btn btn-primary ms-auto" :disabled="serviceSaving" x-text="serviceSaving ? 'Saving…' : (serviceEditingId ? 'Update Service Type' : 'Add Service Type')"></button></div>
-                  </form>
+              <div class="crm-catalog-definition-grid mb-3">
+                <div class="crm-catalog-definition-card">
+                  <span class="crm-catalog-definition-number">1</span>
+                  <div><strong>Category</strong><p>A broad service group. Example: Painting.</p></div>
                 </div>
+                <div class="crm-catalog-definition-card">
+                  <span class="crm-catalog-definition-number">2</span>
+                  <div><strong>Subcategory</strong><p>A specific service under a Category. Example: Interior Painting.</p></div>
+                </div>
+              </div>
 
-                <div class="col-xl-8">
+              <div class="row g-3">
+                <% if (canManageCatalog) { %>
+                  <div class="col-xl-4">
+                    <form class="card crm-catalog-form-card" @submit.prevent="saveCategory()">
+                      <div class="card-header">
+                        <div>
+                          <h5 class="mb-1" x-text="editingId ? 'Edit category' : 'Create category'"></h5>
+                          <p class="text-muted mb-0">Categories organize the services shown across CRM and Provider Portal.</p>
+                        </div>
+                      </div>
+                      <div class="card-body">
+                        <div class="mb-3">
+                          <label class="form-label" for="category-name">Category name</label>
+                          <input id="category-name" class="form-control" x-model="form.name" @input="syncSlug()" maxlength="120" placeholder="Example: Painting" required>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="category-slug">Slug</label>
+                          <input id="category-slug" class="form-control" x-model="form.slug" @input="slugTouched=true" :disabled="Boolean(editingId)" maxlength="80" pattern="[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*" placeholder="painting" required>
+                          <div class="form-text">Used internally for matching. It cannot be changed after creation.</div>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="category-description">Description</label>
+                          <textarea id="category-description" class="form-control" rows="4" x-model="form.description" maxlength="2000" placeholder="Describe the services grouped under this Category"></textarea>
+                        </div>
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="category-active" x-model="form.active">
+                          <label class="form-check-label" for="category-active">Active and available in new forms</label>
+                        </div>
+                      </div>
+                      <div class="card-footer d-flex gap-2">
+                        <button type="button" class="btn btn-light" x-show="editingId" @click="resetCategoryForm()">Cancel</button>
+                        <button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : (editingId ? 'Update category' : 'Create category')"></button>
+                      </div>
+                    </form>
+                  </div>
+                <% } %>
+
+                <div class="<%= canManageCatalog ? 'col-xl-8' : 'col-12' %>">
                   <div class="card" :class="loading && 'crm-loading'">
                     <div class="card-header crm-card-heading crm-list-heading">
-                      <div><h5 class="mb-1">Category list</h5><p class="text-muted mb-0"><span x-text="categories.length"></span> categories on this page</p></div>
+                      <div>
+                        <h5 class="mb-1">Category list</h5>
+                        <p class="text-muted mb-0"><span x-text="pagination.returned"></span> Categories on this page</p>
+                      </div>
                     </div>
-                    <div class="crm-filter-bar crm-filter-bar-embedded">
-                      <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" maxlength="100" placeholder="Search categories" aria-label="Search categories"></label>
-                      <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="startDate"></label>
-                      <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="endDate"></label>
-                      <label class="crm-filter-field"><span>Sort</span><select x-model="sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
-                      <div class="crm-filter-actions"><button class="btn btn-primary" type="button" @click="search()">Apply</button><button class="btn btn-light" type="button" x-show="q || startDate || endDate || sortOrder !== 'newest'" @click="clearFilters()">Clear</button></div>
-                    </div>
+
+                    <form class="crm-filter-bar crm-filter-bar-embedded" @submit.prevent="search()">
+                      <label class="crm-search-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                        <input type="search" x-model="q" maxlength="100" placeholder="Search name, slug, or description" aria-label="Search categories">
+                      </label>
+                      <label class="crm-filter-field"><span>Status</span><select x-model="status"><option value="">All statuses</option><option value="true">Active</option><option value="false">Inactive</option></select></label>
+                      <label class="crm-filter-field"><span>Sort</span><select x-model="sort"><option value="newest">Recently updated</option><option value="oldest">Oldest updated</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option></select></label>
+                      <label class="crm-filter-field"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                      <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="q || status || sort !== 'newest' || pagination.limit !== 20" @click="clearFilters()">Clear</button></div>
+                    </form>
+
                     <div class="table-responsive">
                       <table class="table crm-table mb-0">
-                        <thead><tr><th>Name</th><th>Service Types</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
+                        <thead><tr><th>Category</th><th>Slug</th><th>Subcategories</th><th>Status</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
                         <tbody>
-                          <template x-if="loading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="loading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="category in categories" :key="category.categoryId || category.slug">
-                            <tr :class="selectedCategory?.categoryId === category.categoryId ? 'table-active' : ''">
-                              <td><div class="fw-semibold" x-text="category.name"></div><small class="text-muted" x-text="category.description || category.slug"></small></td>
-                              <td><button class="btn btn-light btn-sm" type="button" @click="selectCategory(category)"><span x-text="category.serviceTypeCount || 0"></span> managed</button></td>
+                            <tr>
+                              <td><div class="fw-semibold" x-text="category.name"></div><small class="text-muted" x-text="category.description || 'No description added'"></small></td>
+                              <td><code x-text="category.slug"></code></td>
+                              <td><a class="btn btn-light btn-sm" :href="subcategoriesUrl(category)"><span x-text="category.serviceTypeCount || 0"></span> managed</a></td>
                               <td><span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span></td>
                               <td x-text="formatDate(category.updatedAt || category.createdAt)"></td>
-                              <td class="text-end"><button class="btn btn-light btn-sm" type="button" @click="editCategory(category)">Edit</button></td>
+                              <td class="text-end crm-table-actions">
+                                <a class="btn btn-light btn-sm" :href="subcategoriesUrl(category)">Subcategories</a>
+                                <% if (canManageCatalog) { %><button class="btn btn-light btn-sm" type="button" @click="editCategory(category)">Edit</button><% } %>
+                              </td>
                             </tr>
                           </template>
-                          <tr x-show="!categories.length && !loading"><td colspan="5" class="text-center text-muted py-4">No categories found</td></tr>
+                          <tr x-show="!categories.length && !loading"><td colspan="6" class="text-center py-5"><strong>No Categories found</strong><div class="text-muted mt-1" x-text="q || status ? 'Clear the filters and try again.' : 'Create your first Category to start adding Subcategories.'"></div></td></tr>
                         </tbody>
                       </table>
                     </div>
-                    <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page<=1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
-                  </div>
-
-                  <div class="card mt-3" x-show="selectedCategory" x-cloak>
-                    <div class="card-header"><div><h5 class="mb-1">Service Types</h5><p class="text-muted mb-0" x-text="selectedCategory ? selectedCategory.name + ' · ' + serviceTypes.length + ' Service Types' : ''"></p></div></div>
-                    <div class="table-responsive">
-                      <table class="table crm-table mb-0"><thead><tr><th>Name</th><th>Slug</th><th>Order</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
-                        <template x-if="serviceLoading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
-                        <template x-for="item in serviceTypes" :key="item.serviceTypeId"><tr><td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.description || 'No description'"></small></td><td><code x-text="item.slug"></code></td><td x-text="item.displayOrder || 0"></td><td><span class="badge" :class="item.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false ? 'Active' : 'Inactive'"></span></td><td x-text="formatDate(item.updatedAt || item.createdAt)"></td><td class="text-end"><button type="button" class="btn btn-light btn-sm" @click="editServiceType(item)">Edit</button></td></tr></template>
-                        <tr x-show="!serviceLoading && !serviceTypes.length"><td colspan="6" class="text-center text-muted py-4">No Service Types yet. Add the first Service Type using the form.</td></tr>
-                      </tbody></table>
-                    </div>
+                    <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong> · <span x-text="pagination.returned"></span> shown</div><div class="crm-pagination"><button type="button" :disabled="pagination.page<=1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button type="button" :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
                   </div>
                 </div>
               </div>
@@ -98,28 +129,48 @@
             <script>
               function categoryManager() {
                 return {
-                  categories: [], serviceTypes: [], selectedCategory: null,
-                  editingId: '', serviceEditingId: '', loading: true, serviceLoading: false,
-                  saving: false, serviceSaving: false, error: '', success: '', q: '', startDate: '', endDate: '', sortOrder: 'newest',
+                  categories: [], editingId: '', loading: true, saving: false,
+                  error: '', success: '', q: '', status: '', sort: 'newest',
                   pagination: createCursorPagination(20),
-                  form: { name:'', slug:'', description:'', active:true },
-                  serviceForm: { name:'', slug:'', description:'', displayOrder:0, active:true },
-                  slugTouched:false, serviceSlugTouched:false,
-                  slugify(value){ return String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); },
-                  syncSlug(){ if(!this.editingId && !this.slugTouched) this.form.slug=this.slugify(this.form.name); },
-                  syncServiceSlug(){ if(!this.serviceEditingId && !this.serviceSlugTouched) this.serviceForm.slug=this.slugify(this.serviceForm.name); },
-                  query(){ const q=new URLSearchParams({paginate:'true',includeInactive:'true',q:this.q,startDate:this.startDate,endDate:this.endDate,dateField:'updatedAt',sortOrder:this.sortOrder,limit:this.pagination.limit,cursor:this.pagination.cursor}); [...q].forEach(([k,v])=>{if(!v)q.delete(k)}); return q.toString(); },
-                  async load(){ this.loading=true; this.error=''; try{const body=await apiFetch('/api/catalog/categories?'+this.query());this.categories=body.data||[];applyCursorPagination(this.pagination,body.pagination||{});if(this.selectedCategory){const fresh=this.categories.find(c=>c.categoryId===this.selectedCategory.categoryId);if(fresh)this.selectedCategory=fresh;}}catch(e){this.error=e.message}finally{this.loading=false}},
-                  search(){resetCursorPagination(this.pagination);this.load()}, next(){if(cursorNext(this.pagination))this.load()}, previous(){if(cursorPrevious(this.pagination))this.load()},
-                  clearFilters(){this.q='';this.startDate='';this.endDate='';this.sortOrder='newest';this.search()},
-                  editCategory(category){this.editingId=category.categoryId;this.form={name:category.name||'',slug:category.slug||'',description:category.description||'',active:category.active!==false};this.error='';this.success='';window.scrollTo({top:0,behavior:'smooth'})},
-                  resetCategoryForm(){this.editingId='';this.form={name:'',slug:'',description:'',active:true};this.slugTouched=false},
-                  async saveCategory(){if(this.saving)return;this.saving=true;this.error='';this.success='';try{const url=this.editingId?'/api/catalog/categories/'+this.editingId:'/api/catalog/categories';await apiFetch(url,{method:this.editingId?'PUT':'POST',body:JSON.stringify(this.form)});this.success=this.editingId?'Category updated':'Category created';this.resetCategoryForm();this.search()}catch(e){this.error=e.message}finally{this.saving=false}},
-                  async selectCategory(category){this.selectedCategory=category;this.resetServiceForm();await this.loadServiceTypes()},
-                  async loadServiceTypes(){if(!this.selectedCategory)return;this.serviceLoading=true;this.error='';try{const body=await apiFetch('/api/catalog/categories/'+encodeURIComponent(this.selectedCategory.categoryId)+'/service-types?includeInactive=true');this.serviceTypes=body.data||[]}catch(e){this.error=e.message}finally{this.serviceLoading=false}},
-                  editServiceType(item){this.serviceEditingId=item.serviceTypeId;this.serviceForm={name:item.name||'',slug:item.slug||'',description:item.description||'',displayOrder:Number(item.displayOrder||0),active:item.active!==false};this.serviceSlugTouched=true;window.scrollTo({top:0,behavior:'smooth'})},
-                  resetServiceForm(){this.serviceEditingId='';this.serviceSlugTouched=false;this.serviceForm={name:'',slug:'',description:'',displayOrder:0,active:true}},
-                  async saveServiceType(){if(this.serviceSaving||!this.selectedCategory)return;this.serviceSaving=true;this.error='';this.success='';try{const url=this.serviceEditingId?'/api/catalog/service-types/'+this.serviceEditingId:'/api/catalog/categories/'+this.selectedCategory.categoryId+'/service-types';await apiFetch(url,{method:this.serviceEditingId?'PUT':'POST',body:JSON.stringify(this.serviceForm)});this.success=this.serviceEditingId?'Service Type updated':'Service Type created';this.resetServiceForm();await this.loadServiceTypes();await this.load()}catch(e){this.error=e.message}finally{this.serviceSaving=false}}
+                  form: { name: '', slug: '', description: '', active: true },
+                  slugTouched: false,
+                  slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); },
+                  syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
+                  query() {
+                    const params = new URLSearchParams({ paginate: 'true', includeInactive: 'true', q: this.q, active: this.status, sort: this.sort, limit: this.pagination.limit, cursor: this.pagination.cursor });
+                    [...params].forEach(([key, value]) => { if (value === '') params.delete(key); });
+                    return params.toString();
+                  },
+                  async load() {
+                    this.loading = true; this.error = '';
+                    try {
+                      const body = await apiFetch('/api/catalog/categories?' + this.query());
+                      this.categories = body.data || [];
+                      applyCursorPagination(this.pagination, body.pagination || {});
+                    } catch (error) { this.error = error.message; } finally { this.loading = false; }
+                  },
+                  search() { resetCursorPagination(this.pagination); this.load(); },
+                  next() { if (cursorNext(this.pagination)) this.load(); },
+                  previous() { if (cursorPrevious(this.pagination)) this.load(); },
+                  clearFilters() { this.q = ''; this.status = ''; this.sort = 'newest'; this.pagination.limit = 20; this.search(); },
+                  subcategoriesUrl(category) { return '/service-types?categorySlug=' + encodeURIComponent(category.slug || ''); },
+                  editCategory(category) {
+                    this.editingId = category.categoryId;
+                    this.form = { name: category.name || '', slug: category.slug || '', description: category.description || '', active: category.active !== false };
+                    this.slugTouched = true; this.error = ''; this.success = '';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  },
+                  resetCategoryForm() { this.editingId = ''; this.form = { name: '', slug: '', description: '', active: true }; this.slugTouched = false; },
+                  async saveCategory() {
+                    if (this.saving) return;
+                    this.saving = true; this.error = ''; this.success = '';
+                    try {
+                      const url = this.editingId ? '/api/catalog/categories/' + encodeURIComponent(this.editingId) : '/api/catalog/categories';
+                      await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(this.form) });
+                      this.success = this.editingId ? 'Category updated successfully.' : 'Category created successfully. You can now add its Subcategories.';
+                      this.resetCategoryForm(); this.search();
+                    } catch (error) { this.error = error.message; } finally { this.saving = false; }
+                  }
                 };
               }
             </script>

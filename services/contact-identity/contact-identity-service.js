@@ -20,13 +20,9 @@ const ENTITY_CONFIG = Object.freeze({
 
 function duplicateContactError(conflict = {}) {
   const label = conflict.kind === "email" ? "email address" : "mobile or WhatsApp number";
-  const entity = {
-    agent: "Agent",
-    provider: "Provider",
-    employee: "Employee",
-    provider_join_request: "Provider joining request",
-  }[conflict.entityType] || "record";
-  const error = new Error(`This ${label} is already assigned to an existing ${entity}.`);
+  const error = new Error(
+    `This ${label} is already associated with an existing Employee, Agent, Provider, or Provider joining request.`,
+  );
   error.status = 409;
   error.code = "CONTACT_ALREADY_EXISTS";
   error.conflict = {

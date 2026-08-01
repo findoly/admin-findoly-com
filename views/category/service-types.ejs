@@ -1,0 +1,189 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+  const canManageCatalog = canAccess('categories.manage');
+%>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Catalog / Subcategories</div>
+                <h1 class="page-title mb-1"><%= title %></h1>
+                <p class="crm-page-subtitle mb-0">Manage the specific Service Types available under each Category.</p>
+              </div>
+              <div class="crm-page-actions"><a href="/categories" class="btn btn-light">Manage categories</a></div>
+            </div>
+          </div>
+
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+            <div x-data="serviceTypeManager()" x-init="init()">
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
+
+              <div class="crm-catalog-definition-grid mb-3">
+                <div class="crm-catalog-definition-card"><span class="crm-catalog-definition-number">1</span><div><strong>Select a Category</strong><p>Choose the broad group this service belongs to.</p></div></div>
+                <div class="crm-catalog-definition-card"><span class="crm-catalog-definition-number">2</span><div><strong>Add a Subcategory</strong><p>Example: Interior Painting under Painting.</p></div></div>
+                <div class="crm-catalog-definition-card"><span class="crm-catalog-definition-number">3</span><div><strong>Set display order</strong><p>Lower numbers appear first in lead forms.</p></div></div>
+              </div>
+
+              <div class="row g-3">
+                <% if (canManageCatalog) { %>
+                  <div class="col-xl-4">
+                    <form class="card crm-catalog-form-card" @submit.prevent="saveServiceType()">
+                      <div class="card-header"><div><h5 class="mb-1" x-text="editingId ? 'Edit subcategory' : 'Add subcategory'"></h5><p class="text-muted mb-0">Subcategories are stored as Service Types in the database.</p></div></div>
+                      <div class="card-body">
+                        <div class="mb-3">
+                          <label class="form-label" for="service-category">Parent Category</label>
+                          <select id="service-category" class="form-select" x-model="form.categoryId" :disabled="Boolean(editingId)" required>
+                            <option value="">Select a Category</option>
+                            <template x-for="category in categories" :key="category.categoryId"><option :value="category.categoryId" x-text="category.name + (category.active === false ? ' (Inactive)' : '')"></option></template>
+                          </select>
+                          <div class="form-text" x-show="editingId">The parent Category cannot be changed after creation.</div>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="service-name">Subcategory name</label>
+                          <input id="service-name" class="form-control" x-model="form.name" @input="syncSlug()" maxlength="120" placeholder="Example: Interior Painting" required>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="service-slug">Slug</label>
+                          <input id="service-slug" class="form-control" x-model="form.slug" @input="slugTouched=true" :disabled="Boolean(editingId)" maxlength="80" pattern="[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*" placeholder="interior-painting" required>
+                          <div class="form-text">Used by leads and providers. It cannot be changed after creation.</div>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="service-description">Description</label>
+                          <textarea id="service-description" class="form-control" rows="3" x-model="form.description" maxlength="1000" placeholder="Explain when this Subcategory should be selected"></textarea>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="service-order">Display order</label>
+                          <input id="service-order" type="number" class="form-control" min="0" max="100000" step="1" x-model.number="form.displayOrder">
+                          <div class="form-text">Use 0 for the first item, then 10, 20, 30 to leave room between items.</div>
+                        </div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="service-active" x-model="form.active"><label class="form-check-label" for="service-active">Active and selectable in new lead forms</label></div>
+                      </div>
+                      <div class="card-footer d-flex gap-2"><button type="button" class="btn btn-light" x-show="editingId" @click="resetForm()">Cancel</button><button class="btn btn-primary ms-auto" :disabled="saving || !form.categoryId" x-text="saving ? 'Saving…' : (editingId ? 'Update subcategory' : 'Add subcategory')"></button></div>
+                    </form>
+                  </div>
+                <% } %>
+
+                <div class="<%= canManageCatalog ? 'col-xl-8' : 'col-12' %>">
+                  <div class="card" :class="loading && 'crm-loading'">
+                    <div class="card-header crm-card-heading crm-list-heading"><div><h5 class="mb-1">Subcategory list</h5><p class="text-muted mb-0"><span x-text="pagination.returned"></span> Subcategories on this page</p></div></div>
+
+                    <form class="crm-filter-bar crm-filter-bar-embedded" @submit.prevent="search()">
+                      <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" maxlength="100" placeholder="Search Subcategories" aria-label="Search Subcategories"></label>
+                      <label class="crm-filter-field"><span>Category</span><select x-model="categorySlug" @change="categoryFilterChanged()"><option value="">All Categories</option><template x-for="category in categories" :key="category.categoryId"><option :value="category.slug" x-text="category.name"></option></template></select></label>
+                      <label class="crm-filter-field"><span>Status</span><select x-model="status"><option value="">All statuses</option><option value="true">Active</option><option value="false">Inactive</option></select></label>
+                      <label class="crm-filter-field"><span>Sort</span><select x-model="sort"><option value="order_asc">Display order</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option><option value="newest">Recently updated</option><option value="oldest">Oldest updated</option></select></label>
+                      <label class="crm-filter-field"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                      <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="q || categorySlug || status || sort !== 'order_asc' || pagination.limit !== 20" @click="clearFilters()">Clear</button></div>
+                    </form>
+
+                    <div class="table-responsive">
+                      <table class="table crm-table mb-0">
+                        <thead><tr><th>Category</th><th>Subcategory</th><th>Slug</th><th>Order</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
+                        <tbody>
+                          <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-for="item in serviceTypes" :key="item.serviceTypeId">
+                            <tr>
+                              <td><span class="badge bg-primary bg-opacity-10 text-primary" x-text="categoryName(item)"></span></td>
+                              <td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.description || 'No description added'"></small></td>
+                              <td><code x-text="item.slug"></code></td>
+                              <td x-text="Number(item.displayOrder || 0)"></td>
+                              <td><span class="badge" :class="item.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false ? 'Active' : 'Inactive'"></span></td>
+                              <td x-text="formatDate(item.updatedAt || item.createdAt)"></td>
+                              <td class="text-end"><% if (canManageCatalog) { %><button type="button" class="btn btn-light btn-sm" @click="editServiceType(item)">Edit</button><% } else { %><span class="text-muted">View only</span><% } %></td>
+                            </tr>
+                          </template>
+                          <tr x-show="!loading && !serviceTypes.length"><td colspan="7" class="text-center py-5"><strong>No Subcategories found</strong><div class="text-muted mt-1" x-text="categorySlug ? 'No Subcategories are configured for the selected Category.' : (q || status ? 'Clear the filters and try again.' : 'Add your first Subcategory after creating a Category.')"></div></td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong> · <span x-text="pagination.returned"></span> shown</div><div class="crm-pagination"><button type="button" :disabled="pagination.page<=1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button type="button" :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <script>
+              function serviceTypeManager() {
+                return {
+                  categories: [], serviceTypes: [], editingId: '', loading: true, saving: false,
+                  error: '', success: '', q: '', categorySlug: queryValue('categorySlug'), status: '', sort: 'order_asc',
+                  pagination: createCursorPagination(20), slugTouched: false,
+                  form: { categoryId: '', name: '', slug: '', description: '', displayOrder: 0, active: true },
+                  slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); },
+                  syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
+                  categoryBySlug(slug) { return this.categories.find((category) => category.slug === slug); },
+                  categoryName(item) { return this.categories.find((category) => category.categoryId === item.categoryId)?.name || humanize(item.categorySlug || 'Unassigned'); },
+                  query() {
+                    const params = new URLSearchParams({ paginate: 'true', includeInactive: 'true', q: this.q, categorySlug: this.categorySlug, active: this.status, sort: this.sort, limit: this.pagination.limit, cursor: this.pagination.cursor });
+                    [...params].forEach(([key, value]) => { if (value === '') params.delete(key); });
+                    return params.toString();
+                  },
+                  async init() {
+                    this.loading = true;
+                    try {
+                      const categoryBody = await apiFetch('/api/catalog/categories?includeInactive=true');
+                      this.categories = categoryBody.data || [];
+                      const selected = this.categoryBySlug(this.categorySlug);
+                      if (selected) this.form.categoryId = selected.categoryId;
+                      await this.load();
+                    } catch (error) { this.error = error.message; this.loading = false; }
+                  },
+                  async load() {
+                    this.loading = true; this.error = '';
+                    try {
+                      const body = await apiFetch('/api/catalog/service-types?' + this.query());
+                      this.serviceTypes = body.data || [];
+                      applyCursorPagination(this.pagination, body.pagination || {});
+                    } catch (error) { this.error = error.message; } finally { this.loading = false; }
+                  },
+                  search() { resetCursorPagination(this.pagination); this.load(); },
+                  next() { if (cursorNext(this.pagination)) this.load(); },
+                  previous() { if (cursorPrevious(this.pagination)) this.load(); },
+                  categoryFilterChanged() {
+                    if (!this.editingId) this.form.categoryId = this.categoryBySlug(this.categorySlug)?.categoryId || '';
+                    this.search();
+                  },
+                  clearFilters() { this.q = ''; this.categorySlug = ''; this.status = ''; this.sort = 'order_asc'; this.pagination.limit = 20; if (!this.editingId) this.form.categoryId = ''; this.search(); },
+                  editServiceType(item) {
+                    this.editingId = item.serviceTypeId;
+                    this.form = { categoryId: item.categoryId || '', name: item.name || '', slug: item.slug || '', description: item.description || '', displayOrder: Number(item.displayOrder || 0), active: item.active !== false };
+                    this.slugTouched = true; this.error = ''; this.success = '';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  },
+                  resetForm(categoryId = '') {
+                    this.editingId = ''; this.slugTouched = false;
+                    this.form = { categoryId: categoryId || this.categoryBySlug(this.categorySlug)?.categoryId || '', name: '', slug: '', description: '', displayOrder: 0, active: true };
+                  },
+                  async saveServiceType() {
+                    if (this.saving || !this.form.categoryId) return;
+                    this.saving = true; this.error = ''; this.success = '';
+                    try {
+                      const selectedCategoryId = this.form.categoryId;
+                      const payload = { name: this.form.name, slug: this.form.slug, description: this.form.description, displayOrder: this.form.displayOrder, active: this.form.active };
+                      const url = this.editingId ? '/api/catalog/service-types/' + encodeURIComponent(this.editingId) : '/api/catalog/categories/' + encodeURIComponent(selectedCategoryId) + '/service-types';
+                      await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+                      this.success = this.editingId ? 'Subcategory updated successfully.' : 'Subcategory created successfully.';
+                      this.resetForm(selectedCategoryId); this.search();
+                    } catch (error) { this.error = error.message; } finally { this.saving = false; }
+                  }
+                };
+              }
+            </script>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

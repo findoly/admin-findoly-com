@@ -303,6 +303,7 @@
       sidebarOpen: false,
       sidebarCollapsed: readSidebarCollapsed(),
       communicationMenuOpen: location.pathname === '/communications' || location.pathname.startsWith('/communications/'),
+      catalogMenuOpen: location.pathname === '/categories' || location.pathname.startsWith('/categories/') || location.pathname === '/service-types' || location.pathname.startsWith('/service-types/'),
       async initShell() {
         syncSidebarDocumentState(this.sidebarCollapsed);
         enableSidebarTransitionsAfterInitialLayout();

@@ -5427,3 +5427,72 @@ th .d-flex {
   .crm-rule-guide { grid-template-columns: 1fr; }
   .crm-channel-picker-card .crm-status { margin-left: 0; }
 }
+
+/* Catalog management — separate Category and Subcategory workspace */
+.crm-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .55rem;
+}
+.crm-catalog-definition-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+}
+.crm-catalog-definition-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .75rem;
+  align-items: start;
+  min-width: 0;
+  padding: .9rem 1rem;
+  border: 1px solid var(--crm-user-card-border, #dfe5ee);
+  border-radius: 12px;
+  background: var(--crm-user-card-bg, #fff);
+}
+.crm-catalog-definition-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--crm-user-accent-soft, #eff6ff);
+  color: var(--crm-user-accent, #2563eb);
+  font-size: .75rem;
+  font-weight: 800;
+}
+.crm-catalog-definition-card strong {
+  display: block;
+  margin-bottom: .15rem;
+  color: var(--crm-user-main-text, #1d2939);
+  font-size: .82rem;
+}
+.crm-catalog-definition-card p {
+  margin: 0;
+  color: var(--crm-user-muted-text, #667085);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+.crm-catalog-form-card {
+  position: sticky;
+  top: 80px;
+}
+.crm-catalog-form-card .card-header p {
+  max-width: 36rem;
+  font-size: .72rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 1199.98px) {
+  .crm-catalog-definition-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .crm-catalog-form-card { position: static; }
+}
+@media (max-width: 767.98px) {
+  .crm-page-actions { width: 100%; justify-content: stretch; }
+  .crm-page-actions .btn { flex: 1 1 auto; }
+  .crm-catalog-definition-grid { grid-template-columns: 1fr; }
+  .crm-catalog-definition-card { padding: .8rem; }
+}

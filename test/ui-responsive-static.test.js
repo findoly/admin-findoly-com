@@ -12,6 +12,7 @@ const responsiveFilterViews = [
   "views/agent/index.ejs",
   "views/billing/provider-subscriptions.ejs",
   "views/category/index.ejs",
+  "views/category/service-types.ejs",
   "views/communication/logs.ejs",
   "views/communication/templates.ejs",
   "views/provider-unlock/index.ejs",
@@ -44,7 +45,7 @@ test("real shell keeps a single-row header and a full-viewport mobile drawer", (
   const sidebar = read("views/partials/sidebar.ejs");
   const css = read("public/css/app.css");
 
-  assert.match(head, /app\.css\?v=20260801-communication-submenu-1/);
+  assert.match(head, /app\.css\?v=20260801-catalog-submenu-1/);
   assert.match(navbar, /crm-brand-copy d-none d-xl-flex/);
   assert.match(navbar, /crm-global-search d-none d-xl-flex/);
   assert.match(navbar, /crm-admin-copy d-none d-xl-flex/);
@@ -86,7 +87,6 @@ test("filter date controls have visible labels and actions stay grouped", () => 
   const dateViews = [
     "views/agent/index.ejs",
     "views/billing/provider-subscriptions.ejs",
-    "views/category/index.ejs",
     "views/communication/logs.ejs",
     "views/employee/index.ejs",
     "views/follow-up/index.ejs",

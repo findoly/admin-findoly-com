@@ -28,7 +28,17 @@
         <% if (canAccess('provider_requests.view')) { %><li class="nav-item"><a href="/provider-requests" title="Provider requests" class="nav-link" :class="{active:pathIs('/provider-requests')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M16 3v3M8 3v3"/></svg><span>Provider requests</span></a></li><% } %>
         <% if (canAccess('agents.view')) { %><li class="nav-item"><a href="/agents" title="Agents" class="nav-link" :class="{active:pathIs('/agents')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M3 20a5 5 0 0 1 10 0M16 7h5M18.5 4.5v5"/><path d="M15 20a4 4 0 0 1 6 0"/></svg><span>Agents</span></a></li><% } %>
         <% if (canAccess('partnerPayouts.view')) { %><li class="nav-item"><a href="/partner-withdrawals" title="Partner withdrawals" class="nav-link" :class="{active:pathIs('/partner-withdrawals')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v11H4z"/><path d="M4 10h16M8 15h4M16 14.5h.01"/></svg><span>Partner payouts</span></a></li><% } %>
-        <% if (canAccess('categories.view')) { %><li class="nav-item"><a href="/categories" title="Categories" class="nav-link" :class="{active:pathIs('/categories')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg><span>Categories</span></a></li><% } %>
+        <% if (canAccess('categories.view')) { %>
+          <li class="nav-item nav-item-submenu crm-sidebar-group" :class="{'nav-item-expanded': catalogMenuOpen || pathIs('/categories') || pathIs('/service-types')}">
+            <button type="button" class="nav-link crm-sidebar-group-toggle" :class="{active:pathIs('/categories') || pathIs('/service-types')}" @click="catalogMenuOpen = !catalogMenuOpen" :aria-expanded="(catalogMenuOpen || pathIs('/categories') || pathIs('/service-types')).toString()" aria-controls="catalogSubmenu" title="Catalog">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg><span>Catalog</span>
+            </button>
+            <ul id="catalogSubmenu" class="nav nav-group-sub crm-sidebar-submenu" x-show="catalogMenuOpen || pathIs('/categories') || pathIs('/service-types')" x-cloak>
+              <li class="nav-item"><a href="/categories" class="nav-link" :class="{active:pathIs('/categories')}" :aria-current="pathIs('/categories') ? 'page' : null" @click="sidebarOpen=false"><span>Manage categories</span></a></li>
+              <li class="nav-item"><a href="/service-types" class="nav-link" :class="{active:pathIs('/service-types')}" :aria-current="pathIs('/service-types') ? 'page' : null" @click="sidebarOpen=false"><span>Manage subcategories</span></a></li>
+            </ul>
+          </li>
+        <% } %>
         <% if (canAccess('provider_unlocks.view')) { %><li class="nav-item"><a href="/provider-unlocks" title="Provider unlocks" class="nav-link" :class="{active:pathIs('/provider-unlocks')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>Provider unlocks</span></a></li><% } %>
 
         <% if (showOperations) { %><li class="nav-item-header"><span>Operations</span></li><% } %>

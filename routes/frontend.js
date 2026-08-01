@@ -32,6 +32,7 @@ router.get("/agents/:agentId", ...protectedPage("agents.view"), page.agentShow);
 router.get("/partner-withdrawals", ...protectedPage("partnerPayouts.view"), page.partnerWithdrawals);
 router.get("/partner-withdrawals/:withdrawalId", ...protectedPage("partnerPayouts.view"), page.partnerWithdrawalShow);
 router.get("/categories", ...protectedPage("categories.view"), page.categories);
+router.get("/service-types", ...protectedPage("categories.view"), page.serviceTypes);
 router.get("/follow-ups", ...protectedPage("followUps.view"), page.followUps);
 router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followUpCreate);
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);

@@ -27,6 +27,7 @@ const frontendController = {
   partnerWithdrawals: render("partner-payout/index", "Partner withdrawals"),
   partnerWithdrawalShow: render("partner-payout/show", "Partner withdrawal"),
   categories: render("category/index", "Categories"),
+  serviceTypes: render("category/service-types", "Subcategories"),
   providerCreate: render("provider/form", "Create provider"),
   providerEdit: render("provider/form", "Edit provider"),
   providerShow: render("provider/show", "Provider details"),

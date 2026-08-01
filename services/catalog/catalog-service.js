@@ -183,11 +183,14 @@ async function listCategories(options = {}) {
 async function listCategoryPage(options = {}) {
   const { limit, cursor } = getPagination(options);
   const query = {};
+  const activeFilter = String(options.active || "").trim().toLowerCase();
   const includeInactive = booleanValue(options.includeInactive, {
     label: "Include inactive",
     fallback: false,
   });
-  if (!includeInactive) query.active = { $ne: false };
+  if (activeFilter === "true") query.active = { $ne: false };
+  else if (activeFilter === "false") query.active = false;
+  else if (!includeInactive) query.active = { $ne: false };
   const q = queryTextValue(options.q, {
     label: "Category search",
     maxLength: 100,
@@ -200,7 +203,13 @@ async function listCategoryPage(options = {}) {
     fields: { createdAt: "Created date", updatedAt: "Updated date" },
     defaultField: "updatedAt",
   });
-  const sort = dateSort(options, {
+  const sortMode = String(options.sort || "").trim().toLowerCase();
+  const sort = {
+    name_asc: { name: 1, _id: 1 },
+    name_desc: { name: -1, _id: -1 },
+    oldest: { updatedAt: 1, _id: 1 },
+    newest: { updatedAt: -1, _id: -1 },
+  }[sortMode] || dateSort(options, {
     fields: ["createdAt", "updatedAt"],
     defaultField: "updatedAt",
   });
@@ -277,11 +286,14 @@ async function getCategory(categoryId) {
 
 async function listServiceTypes(options = {}) {
   const query = {};
+  const activeFilter = String(options.active || "").trim().toLowerCase();
   const includeInactive = booleanValue(options.includeInactive, {
     label: "Include inactive Service Types",
     fallback: false,
   });
-  if (!includeInactive) query.active = { $ne: false };
+  if (activeFilter === "true") query.active = { $ne: false };
+  else if (activeFilter === "false") query.active = false;
+  else if (!includeInactive) query.active = { $ne: false };
   if (options.categorySlug) {
     query.categorySlug = tokenValue(options.categorySlug, {
       label: "Category",
@@ -304,16 +316,24 @@ async function listServiceTypes(options = {}) {
       fields: { createdAt: "Created date", updatedAt: "Updated date" },
       defaultField: "updatedAt",
     });
-    const sortOrder = String(options.sortOrder || "").toLowerCase();
-    const direction = sortOrder === "oldest" ? 1 : -1;
-    return cursorPaginate(ServiceType, {
+    const sortMode = String(options.sort || "").trim().toLowerCase();
+    const sort = {
+      order_asc: { displayOrder: 1, name: 1, _id: 1 },
+      order_desc: { displayOrder: -1, name: -1, _id: -1 },
+      name_asc: { name: 1, _id: 1 },
+      name_desc: { name: -1, _id: -1 },
+      newest: { updatedAt: -1, _id: -1 },
+      oldest: { updatedAt: 1, _id: 1 },
+    }[sortMode] || (options.dateField
+      ? dateSort(options, { fields: ["createdAt", "updatedAt"], defaultField: "updatedAt" })
+      : { displayOrder: 1, name: 1, _id: 1 });
+    const result = await cursorPaginate(ServiceType, {
       query,
-      sort: options.dateField
-        ? dateSort(options, { fields: ["createdAt", "updatedAt"], defaultField: "updatedAt" })
-        : { displayOrder: 1, name: 1, _id: 1 },
+      sort,
       limit,
       cursor,
-    }).then((result) => ({ ...result, data: result.data.map(presentServiceType), direction }));
+    });
+    return { ...result, data: result.data.map(presentServiceType) };
   }
 
   const rows = await ServiceType.find(query)
