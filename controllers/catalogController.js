@@ -8,7 +8,10 @@ async function categories(req, res, next) {
     }
     return res.json({
       success: true,
-      data: await service.listCategories({ includeInactive: req.query.includeInactive }),
+      data: await service.listCategories({
+        includeInactive: req.query.includeInactive,
+        includeLegacy: req.query.includeLegacy,
+      }),
     });
   } catch (error) {
     return next(error);

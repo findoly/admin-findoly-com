@@ -1,6 +1,14 @@
 const ProviderSubscription = require("../../models/ProviderSubscription");
 const Provider = require("../../models/Provider");
-const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const {
+  getPagination,
+  cursorPaginate,
+  normalizeSort,
+  decodeCursor,
+  buildCursorCondition,
+  encodeCursor,
+  mergeQuery,
+} = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   enumValue,
@@ -14,6 +22,64 @@ const BILLING_CYCLES = Object.freeze(["monthly", "quarterly", "half_yearly", "ye
 
 function escapeRegex(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function searchPattern(value) {
+  const normalized = String(value || "").trim();
+  const exactContact = /^[6-9]\d{9}$/.test(normalized) || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(normalized);
+  return new RegExp(`${exactContact ? "^" : "^"}${escapeRegex(normalized)}${exactContact ? "$" : ""}`, "i");
+}
+
+async function searchedList({ query, q, sort, limit, cursor }) {
+  const normalizedSort = normalizeSort(sort);
+  const cursorValues = decodeCursor(cursor, normalizedSort);
+  const cursorCondition = buildCursorCondition(normalizedSort, cursorValues);
+  const search = searchPattern(q);
+  const pipeline = [
+    { $match: query },
+    {
+      $lookup: {
+        from: Provider.collection.collectionName,
+        localField: "providerId",
+        foreignField: "providerId",
+        as: "providerRows",
+      },
+    },
+    { $set: { provider: { $arrayElemAt: ["$providerRows", 0] } } },
+    {
+      $match: {
+        $or: [
+          { providerSubscriptionId: search },
+          { paymentOrderId: search },
+          { planName: search },
+          { planCode: search },
+          { "provider.providerId": search },
+          { "provider.name": search },
+          { "provider.businessName": search },
+          { "provider.mobile": search },
+          { "provider.email": search },
+        ],
+      },
+    },
+    ...(cursorCondition ? [{ $match: cursorCondition }] : []),
+    { $sort: normalizedSort },
+    { $limit: limit + 1 },
+    { $unset: "providerRows" },
+  ];
+  const rows = await ProviderSubscription.aggregate(pipeline)
+    .allowDiskUse(false)
+    .option({ maxTimeMS: Math.min(Math.max(Number(process.env.CRM_QUERY_MAX_TIME_MS || 10000), 1000), 60000) });
+  const hasNext = rows.length > limit;
+  const data = hasNext ? rows.slice(0, limit) : rows;
+  return {
+    data: data.map((row) => ({ ...row, status: effectiveStatus(row), provider: row.provider || null })),
+    pagination: {
+      limit,
+      returned: data.length,
+      hasNext,
+      nextCursor: hasNext && data.length ? encodeCursor(data[data.length - 1], normalizedSort) : "",
+    },
+  };
 }
 
 function effectiveStatus(row, now = new Date()) {
@@ -51,27 +117,6 @@ async function list(filters = {}) {
     query.planCode = tokenValue(filters.planCode, { label: "Plan code", maxLength: 80, lowercase: true });
   }
   const q = queryTextValue(filters.q, { label: "Subscription search", maxLength: 100 });
-  let providerIds = null;
-  if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    const providers = await Provider.find({
-      $or: [
-        { providerId: search },
-        { name: search },
-        { businessName: search },
-        { mobile: search },
-        { email: search },
-      ],
-    }).select({ providerId: 1 }).limit(500).lean();
-    providerIds = providers.map((row) => row.providerId);
-    query.$or = [
-      { providerSubscriptionId: search },
-      { paymentOrderId: search },
-      { planName: search },
-      { planCode: search },
-      ...(providerIds.length ? [{ providerId: { $in: providerIds } }] : []),
-    ];
-  }
   applyDateRange(query, filters, {
     fields: {
       purchasedAt: "Purchase date",
@@ -86,6 +131,7 @@ async function list(filters = {}) {
     fields: ["purchasedAt", "startsAt", "expiresAt", "createdAt", "updatedAt"],
     defaultField: "purchasedAt",
   });
+  if (q) return searchedList({ query, q, sort, limit, cursor });
   const result = await cursorPaginate(ProviderSubscription, { query, sort, limit, cursor });
   const ids = [...new Set(result.data.map((row) => row.providerId).filter(Boolean))];
   const providers = ids.length

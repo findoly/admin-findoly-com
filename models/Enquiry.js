@@ -118,6 +118,8 @@ const enquirySchema = new mongoose.Schema(
     partnerPayoutAmountPaise: { type: Number, default: 0, min: 0 },
     partnerPaidAt: { type: Date, default: null },
     partnerPayoutReference: { type: String, default: "" },
+    partnerPayoutLockedAt: { type: Date, default: null },
+    partnerPayoutLockWithdrawalId: { type: String, default: "", index: true },
     isActive: { type: Boolean, default: true, index: true },
     deactivatedAt: { type: Date, default: null },
     deactivatedBy: { type: String, default: "" },
@@ -136,8 +138,9 @@ enquirySchema.index({ marketplaceAvailable: 1, categorySlug: 1, priority: 1, mar
 enquirySchema.index({ marketplaceStatus: 1, marketplaceExpiresAt: 1, _id: 1 });
 enquirySchema.index({ agentId: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ referralId: 1, createdAt: -1 });
-enquirySchema.index({ agentId: 1, agentReferralValidation: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, createdAt: 1 });
+enquirySchema.index({ agentId: 1, agentReferralValidation: 1, partnerEligibilityDate: 1, partnerPayoutStatus: 1, createdAt: 1, _id: 1 });
 enquirySchema.index({ partnerWithdrawalId: 1, partnerPayoutStatus: 1 });
+enquirySchema.index({ partnerPayoutLockWithdrawalId: 1, partnerPayoutStatus: 1 });
 enquirySchema.index({ createdAt: -1, _id: -1 });
 enquirySchema.index({ isActive: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ status: 1, isActive: 1, createdAt: -1, _id: -1 });

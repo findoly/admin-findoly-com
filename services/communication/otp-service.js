@@ -4,6 +4,7 @@ const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("./communication-service");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { buildSearchAlternatives } = require("../../utils/search-query");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
   textValue,
@@ -213,8 +214,12 @@ const list = async function (filters) {
   }
   const q = queryTextValue(source.q, { label: "OTP search", maxLength: 100 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [{ recipient: search }, { otpId: search }, { purpose: search }];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["otpId"],
+      phoneFields: ["recipient"],
+      emailFields: ["recipient"],
+      prefixFields: ["purpose"],
+    });
   }
   applyDateRange(query, source, {
     fields: { createdAt: "Created date" },

@@ -20,7 +20,14 @@ function requestToken(req) {
 
 function optionalIntakeToken(req, res, next) {
   const configured = String(process.env.PUBLIC_INTAKE_API_TOKEN || "").trim();
-  if (!configured) return next();
+  if (!configured) {
+    if (process.env.NODE_ENV !== "production") return next();
+    return res.status(503).json({
+      success: false,
+      code: "PUBLIC_INTAKE_NOT_CONFIGURED",
+      message: "Public intake authentication is not configured",
+    });
+  }
   if (!safeEqual(requestToken(req), configured)) {
     return res.status(401).json({
       success: false,

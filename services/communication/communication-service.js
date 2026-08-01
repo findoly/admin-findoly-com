@@ -6,6 +6,8 @@ const { renderText, normalizeVariables } = require("./template-renderer");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { boundedJsonValue } = require("../../utils/bounded-json");
 const {
   textValue,
   emailValue,
@@ -16,6 +18,23 @@ const {
   booleanValue,
   validationError,
 } = require("../../utils/validation");
+
+const COMMUNICATION_HISTORY_LIMIT = 200;
+const COMMUNICATION_DASHBOARD_CACHE_TTL_MS = Math.min(
+  300_000,
+  Math.max(5_000, Number(process.env.COMMUNICATION_DASHBOARD_CACHE_TTL_MS || 30_000) || 30_000),
+);
+const COMMUNICATION_QUERY_MAX_TIME_MS = Math.min(
+  60_000,
+  Math.max(1_000, Number(process.env.CRM_QUERY_MAX_TIME_MS || 10_000) || 10_000),
+);
+let communicationDashboardCache = null;
+let communicationDashboardExpiresAt = 0;
+let communicationDashboardBuildPromise = null;
+
+const historyPush = function (entry) {
+  return { $each: [entry], $slice: -COMMUNICATION_HISTORY_LIMIT };
+};
 
 const COMMUNICATION_CHANNELS = Object.freeze(["call", "whatsapp", "email", "sms", "slack"]);
 const COMMUNICATION_DIRECTIONS = Object.freeze(["outbound", "inbound"]);
@@ -168,18 +187,12 @@ const list = async function (filters) {
   }
   const q = queryTextValue(source.q, { label: "Communication search", maxLength: 100 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { recipientName: search },
-      { recipientContact: search },
-      { message: search },
-      { subject: search },
-      { enquiryId: search },
-      { communicationId: search },
-      { providerMessageId: search },
-      { purpose: search },
-      { trigger: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["communicationId", "enquiryId", "providerMessageId"],
+      phoneFields: ["recipientContact"],
+      emailFields: ["recipientContact"],
+      prefixFields: ["recipientName", "subject", "purpose", "trigger"],
+    });
   }
   applyDateRange(query, source, { fields: { createdAt: "Created date", updatedAt: "Updated date", sentAt: "Sent date" } });
   return cursorPaginate(Communication, {
@@ -360,12 +373,12 @@ const send = async function (input, actor) {
           deliveryMode: result.mode || "local",
           deliveryProvider: result.provider || "manual",
           providerMessageId: result.providerMessageId || "",
-          externalResponse: result.response || null,
+          externalResponse: boundedJsonValue(result.response || null),
           sentAt: new Date(),
           failureReason: "",
           updatedAt: new Date(),
         },
-        $push: { statusHistory: { status, at: new Date(), actor: actor || "system" } },
+        $push: { statusHistory: historyPush({ status, at: new Date(), actor: actor || "system" }) },
       },
     );
   } catch (error) {
@@ -376,10 +389,10 @@ const send = async function (input, actor) {
           status: "failed",
           failedAt: new Date(),
           failureReason: String(error.message || "Message delivery failed").slice(0, 3000),
-          externalResponse: error.providerResponse || null,
+          externalResponse: boundedJsonValue(error.providerResponse || null),
           updatedAt: new Date(),
         },
-        $push: { statusHistory: { status: "failed", at: new Date(), reason: error.message || "Message delivery failed" } },
+        $push: { statusHistory: historyPush({ status: "failed", at: new Date(), reason: error.message || "Message delivery failed" }) },
       },
     );
     throw error;
@@ -475,11 +488,11 @@ const updateDeliveryStatus = async function (providerMessageId, status, details)
     {
       $set: fields,
       $push: {
-        statusHistory: {
+        statusHistory: historyPush({
           status: normalizedStatus,
           at: now,
-          details: details || {},
-        },
+          details: boundedJsonValue(details || {}),
+        }),
       },
     },
   );
@@ -508,14 +521,15 @@ const createInbound = async function (input) {
     deliveryMode: "local",
     deliveryProvider: "meta",
     providerMessageId,
-    externalResponse: source.externalResponse || null,
+    externalResponse: boundedJsonValue(source.externalResponse || null),
     statusHistory: [{ status: "received", at: new Date() }],
   });
 };
 
-const dashboard = async function () {
+async function buildDashboard() {
   // Aggregate counts inside MongoDB instead of streaming every communication
-  // document into Node. This keeps the dashboard usable as the log grows.
+  // document into Node. Cache the result briefly so multiple browser requests
+  // and multiple dashboard widgets do not rescan the retained log repeatedly.
   const [statuses, channelTotals] = await Promise.all([
     Communication.aggregate([
       {
@@ -528,7 +542,7 @@ const dashboard = async function () {
         },
       },
       { $sort: { "_id.channel": 1, "_id.status": 1 } },
-    ]),
+    ]).option({ maxTimeMS: COMMUNICATION_QUERY_MAX_TIME_MS }),
     Communication.aggregate([
       {
         $group: {
@@ -537,21 +551,43 @@ const dashboard = async function () {
         },
       },
       { $sort: { _id: 1 } },
-    ]),
+    ]).option({ maxTimeMS: COMMUNICATION_QUERY_MAX_TIME_MS }),
   ]);
   const recent = await Communication.find({})
     .sort({ createdAt: -1, _id: -1 })
     .limit(10)
+    .maxTimeMS(COMMUNICATION_QUERY_MAX_TIME_MS)
     .lean();
   const failed = await Communication.find({ status: { $in: ["failed", "bounced", "complained", "rejected"] } })
     .sort({ updatedAt: -1, _id: -1 })
     .limit(10)
+    .maxTimeMS(COMMUNICATION_QUERY_MAX_TIME_MS)
     .lean();
   const recentSlack = await Communication.find({ channel: "slack" })
     .sort({ createdAt: -1, _id: -1 })
     .limit(10)
+    .maxTimeMS(COMMUNICATION_QUERY_MAX_TIME_MS)
     .lean();
   return { statuses, channelTotals, recent, recentSlack, failed };
+}
+
+const dashboard = async function (options = {}) {
+  const now = Date.now();
+  if (!options.refresh && communicationDashboardCache && communicationDashboardExpiresAt > now) {
+    return communicationDashboardCache;
+  }
+  if (!communicationDashboardBuildPromise) {
+    communicationDashboardBuildPromise = buildDashboard()
+      .then((result) => {
+        communicationDashboardCache = result;
+        communicationDashboardExpiresAt = Date.now() + COMMUNICATION_DASHBOARD_CACHE_TTL_MS;
+        return result;
+      })
+      .finally(() => {
+        communicationDashboardBuildPromise = null;
+      });
+  }
+  return communicationDashboardBuildPromise;
 };
 
 module.exports = {
@@ -562,6 +598,7 @@ module.exports = {
   send,
   retry,
   dashboard,
+  buildDashboard,
   updateDeliveryStatus,
   createInbound,
   normalizeCommunicationInput,

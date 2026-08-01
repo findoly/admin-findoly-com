@@ -4,6 +4,14 @@ const communicationService = require("./communication-service");
 const whatsappService = require("./whatsapp-service");
 const { truthy } = require("./communication-config");
 const { textValue, validationError } = require("../../utils/validation");
+const { boundedJsonValue } = require("../../utils/bounded-json");
+
+const COMMUNICATION_HISTORY_LIMIT = 200;
+
+const historyPush = function (entry) {
+  return { $each: [entry], $slice: -COMMUNICATION_HISTORY_LIMIT };
+};
+
 
 const parseJsonBuffer = function (rawBody, label) {
   try {
@@ -192,7 +200,7 @@ const processLambdaDelivery = async function (body, authHeader) {
   }
   const result = await Communication.updateOne(
     { communicationId },
-    { $set: fields, $push: { statusHistory: { status, at: now, details: body } } },
+    { $set: fields, $push: { statusHistory: historyPush({ status, at: now, details: boundedJsonValue(body) }) } },
   );
   return { matched: result.matchedCount || 0, modified: result.modifiedCount || 0 };
 };

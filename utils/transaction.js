@@ -9,7 +9,7 @@ function transactionUnavailable(error) {
   );
 }
 
-async function withTransaction(work) {
+async function withTransaction(work, options = {}) {
   const session = await mongoose.startSession();
   let result;
 
@@ -29,7 +29,7 @@ async function withTransaction(work) {
     if (transactionUnavailable(error)) {
       throw Object.assign(
         new Error(
-          "Credit operations require MongoDB Atlas or a replica set with transactions enabled",
+          `${options.operationLabel || "Credit operations"} require MongoDB Atlas or a replica set with transactions enabled`,
         ),
         { status: 503, code: "MONGODB_TRANSACTIONS_REQUIRED" },
       );

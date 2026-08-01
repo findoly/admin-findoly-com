@@ -75,6 +75,25 @@ function normalizedError(error = {}) {
   };
 }
 
+
+function redactErrorText(value) {
+  return String(value || "")
+    .replace(/(mongodb(?:\+srv)?:\/\/)([^\s/@:]+)(?::[^\s/@]*)?@/gi, "$1[REDACTED]@")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
+    .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[REDACTED_AWS_ACCESS_KEY]")
+    .slice(0, 12000);
+}
+
+function safeErrorForLog(error = {}) {
+  return {
+    name: String(error.name || "Error").slice(0, 120),
+    message: redactErrorText(error.message || "Unexpected error"),
+    ...(typeof error.code === "string" ? { code: error.code.slice(0, 120) } : {}),
+    ...(error.path ? { path: String(error.path).slice(0, 1000) } : {}),
+    ...(error.stack ? { stack: redactErrorText(error.stack) } : {}),
+  };
+}
+
 function errorHandler(error, req, res, next) {
   const normalized = normalizedError(error);
   if (normalized.status >= 500 && error?.logged !== true) {
@@ -85,7 +104,7 @@ function errorHandler(error, req, res, next) {
       path: req.originalUrl,
       status: normalized.status,
       code: normalized.code,
-      error,
+      error: safeErrorForLog(error),
     });
   }
   if (req.originalUrl.startsWith("/api")) {
@@ -102,4 +121,4 @@ function errorHandler(error, req, res, next) {
   });
 }
 
-module.exports = { notFound, errorHandler, normalizedError, SAFE_OPERATIONAL_CODES };
+module.exports = { notFound, errorHandler, normalizedError, SAFE_OPERATIONAL_CODES, redactErrorText, safeErrorForLog };

@@ -14,7 +14,7 @@
               <p class="crm-page-subtitle mb-0">Manage WhatsApp, email, internal Slack notifications, OTP and delivery activity.</p>
             </div>
             <div class="d-flex gap-2">
-              <a href="/communications/send" class="btn btn-primary crm-primary-action">Send customer message</a>
+              <a href="/communications/send" class="btn btn-primary crm-primary-action">Send message</a>
               <a href="/communications/templates/new" class="btn btn-light crm-primary-action">Create template</a>
             </div>
           </div>
@@ -23,6 +23,13 @@
           <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
           <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
           <%- include('_navigation', { active: 'overview' }) %>
+          <section class="crm-communication-start mb-3" aria-label="Communication Center quick actions">
+            <a href="/communications/send"><span>Send</span><strong>Send a message</strong><small>Choose WhatsApp or email and a reusable template.</small></a>
+            <a href="/communications/templates?channel=whatsapp"><span>WA</span><strong>WhatsApp templates</strong><small>Create, submit and sync Meta templates.</small></a>
+            <a href="/communications/templates?channel=email"><span>EM</span><strong>Email templates</strong><small>Manage SES subjects, text and HTML content.</small></a>
+            <a href="/communications/rules"><span>Rules</span><strong>Automation rules</strong><small>Connect CRM events to recipients and channels.</small></a>
+            <a href="/communications/settings"><span>Setup</span><strong>Channel management</strong><small>Review WhatsApp, email, Slack and OTP readiness.</small></a>
+          </section>
 
           <div class="alert alert-info py-2 mb-3">
             Communication and OTP activity logs are automatically deleted by MongoDB after
@@ -61,7 +68,7 @@
             </article>
           </section>
 
-          <section class="row g-3 mb-3">
+          <section id="slack-tools" class="row g-3 mb-3">
             <div class="col-lg-5">
               <div class="card h-100">
                 <div class="card-header crm-card-heading">

@@ -72,7 +72,9 @@ test("request status transitions reject converted records and require a rejectio
   assert.match(service, /conversionLockAt/);
   assert.match(service, /conversionLockBy/);
   assert.match(service, /CONVERSION_LOCK_TTL_MS/);
-  assert.match(service, /\{ mobile: request\.mobile \}/);
+  assert.match(service, /normalizedWhatsappNumber/);
+  assert.match(service, /normalizedEmail/);
+  assert.match(service, /allowedProviderJoinRequestId/);
   const providerService = read("services/provider/provider-service.js");
   assert.match(providerService, /assertAvailableProviderCategories/);
 });

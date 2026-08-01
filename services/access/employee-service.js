@@ -1,4 +1,5 @@
 const Employee = require("../../models/Employee");
+const uuid = require("../../utils/uuid");
 const Role = require("../../models/Role");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
@@ -13,6 +14,9 @@ const {
 } = require("../../utils/validation");
 const { ensureDefaultRoles } = require("./access-service");
 const accountRegistrationService = require("../communication/account-registration-service");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { withTransaction } = require("../../utils/transaction");
+const { syncEntityContacts } = require("../contact-identity/contact-identity-service");
 
 const STATUSES = Object.freeze(["active", "inactive", "suspended"]);
 
@@ -58,16 +62,12 @@ async function list(filters = {}) {
   if (filters.roleId) query.roleId = identifierValue(filters.roleId, { label: "Role" });
   const q = queryTextValue(filters.q, { label: "Employee search", maxLength: 100 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { employeeId: search },
-      { employeeCode: search },
-      { name: search },
-      { mobile: search },
-      { email: search },
-      { designation: search },
-      { department: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["employeeId", "employeeCode"],
+      phoneFields: ["normalizedMobile", "mobile"],
+      emailFields: ["email"],
+      prefixFields: ["name", "designation", "department"],
+    });
   }
   applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date", lastLoginAt: "Last login" } });
   const result = await cursorPaginate(Employee, {
@@ -96,26 +96,42 @@ async function get(employeeId) {
 async function create(input = {}, actor) {
   await ensureDefaultRoles();
   const mobile = employeeMobile(input.mobile);
+  const email = emailValue(input.email, { label: "Employee email", required: false });
   const role = await activeRole(input.roleId);
+  const employeeId = uuid();
   let employee;
   try {
-    employee = await Employee.create({
-      name: textValue(input.name, { label: "Employee name", required: true, maxLength: 120 }),
-      mobile,
-      normalizedMobile: mobile,
-      email: emailValue(input.email, { label: "Employee email", required: false }),
-      employeeCode: textValue(input.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
-      designation: textValue(input.designation, { label: "Designation", maxLength: 120 }),
-      department: textValue(input.department, { label: "Department", maxLength: 120 }),
-      roleId: role.roleId,
-      status: enumValue(input.status, STATUSES, { label: "Employee status", fallback: "active" }),
-      notes: textValue(input.notes, { label: "Employee notes", maxLength: 5000 }),
-      createdBy: actorValue(actor),
-      updatedBy: actorValue(actor),
-    });
+    await withTransaction(async (session) => {
+      await syncEntityContacts({
+        entityType: "employee",
+        entityId: employeeId,
+        contacts: { mobile, email },
+        session,
+      });
+      const rows = await Employee.create([{
+        employeeId,
+        name: textValue(input.name, { label: "Employee name", required: true, maxLength: 120 }),
+        mobile,
+        normalizedMobile: mobile,
+        email,
+        normalizedEmail: email,
+        employeeCode: textValue(input.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
+        designation: textValue(input.designation, { label: "Designation", maxLength: 120 }),
+        department: textValue(input.department, { label: "Department", maxLength: 120 }),
+        roleId: role.roleId,
+        status: enumValue(input.status, STATUSES, { label: "Employee status", fallback: "active" }),
+        notes: textValue(input.notes, { label: "Employee notes", maxLength: 5000 }),
+        createdBy: actorValue(actor),
+        updatedBy: actorValue(actor),
+      }], { session });
+      employee = rows[0];
+    }, { operationLabel: "Employee account creation" });
   } catch (error) {
-    if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) {
-      throw Object.assign(new Error("An employee already uses this mobile number"), { status: 409 });
+    if (error?.code === 11000 || error?.code === "CONTACT_ALREADY_EXISTS") {
+      throw Object.assign(new Error("An Agent, Provider, Employee, or provider request already uses these contact details"), {
+        status: 409,
+        code: "CONTACT_ALREADY_EXISTS",
+      });
     }
     throw error;
   }
@@ -143,30 +159,44 @@ async function update(employeeId, input = {}, actor) {
     if (nextRole.roleId !== current.roleId) throw validationError("You cannot change your own role");
   }
   const mobile = employeeMobile(input.mobile ?? current.mobile);
+  const email = emailValue(input.email ?? current.email, { label: "Employee email", required: false });
   let updated;
   try {
-    updated = await Employee.findOneAndUpdate(
-      { employeeId: current.employeeId },
-      {
-        $set: {
-          name: textValue(input.name ?? current.name, { label: "Employee name", required: true, maxLength: 120 }),
-          mobile,
-          normalizedMobile: mobile,
-          email: emailValue(input.email ?? current.email, { label: "Employee email", required: false }),
-          employeeCode: textValue(input.employeeCode ?? current.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
-          designation: textValue(input.designation ?? current.designation, { label: "Designation", maxLength: 120 }),
-          department: textValue(input.department ?? current.department, { label: "Department", maxLength: 120 }),
-          roleId: nextRole.roleId,
-          status: nextStatus,
-          notes: textValue(input.notes ?? current.notes, { label: "Employee notes", maxLength: 5000 }),
-          updatedBy: actorValue(actor),
+    await withTransaction(async (session) => {
+      await syncEntityContacts({
+        entityType: "employee",
+        entityId: current.employeeId,
+        contacts: { mobile, email },
+        session,
+      });
+      updated = await Employee.findOneAndUpdate(
+        { employeeId: current.employeeId },
+        {
+          $set: {
+            name: textValue(input.name ?? current.name, { label: "Employee name", required: true, maxLength: 120 }),
+            mobile,
+            normalizedMobile: mobile,
+            email,
+            normalizedEmail: email,
+            employeeCode: textValue(input.employeeCode ?? current.employeeCode, { label: "Employee code", maxLength: 40 }).toUpperCase(),
+            designation: textValue(input.designation ?? current.designation, { label: "Designation", maxLength: 120 }),
+            department: textValue(input.department ?? current.department, { label: "Department", maxLength: 120 }),
+            roleId: nextRole.roleId,
+            status: nextStatus,
+            notes: textValue(input.notes ?? current.notes, { label: "Employee notes", maxLength: 5000 }),
+            updatedBy: actorValue(actor),
+          },
         },
-      },
-      { new: true, runValidators: true },
-    ).lean();
+        { new: true, runValidators: true, session },
+      ).lean();
+      if (!updated) throw Object.assign(new Error("Employee changed while it was being updated"), { status: 409 });
+    }, { operationLabel: "Employee account update" });
   } catch (error) {
-    if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) {
-      throw Object.assign(new Error("An employee already uses this mobile number"), { status: 409 });
+    if (error?.code === 11000 || error?.code === "CONTACT_ALREADY_EXISTS") {
+      throw Object.assign(new Error("An Agent, Provider, Employee, or provider request already uses these contact details"), {
+        status: 409,
+        code: "CONTACT_ALREADY_EXISTS",
+      });
     }
     throw error;
   }

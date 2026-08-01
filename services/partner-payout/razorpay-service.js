@@ -44,7 +44,16 @@ async function createPayout(input = {}) {
       new Error(error?.name === "TimeoutError" || error?.name === "AbortError"
         ? "Razorpay payout request timed out"
         : "Unable to connect to Razorpay"),
-      { status: 503, code: "RAZORPAY_UNAVAILABLE", cause: error },
+      {
+        status: 503,
+        code: "RAZORPAY_UNAVAILABLE",
+        // Once the request has been handed to fetch, a timeout or connection
+        // reset does not prove that Razorpay did not create the payout. Keep
+        // the withdrawal locked for reconciliation rather than allowing a
+        // second payout attempt with a new idempotency key.
+        requestMayHaveSucceeded: true,
+        cause: error,
+      },
     );
   }
 
@@ -53,7 +62,12 @@ async function createPayout(input = {}) {
   try { body = raw ? JSON.parse(raw) : {}; } catch (_error) { body = { message: raw.slice(0, 1000) }; }
   if (!response.ok) {
     const description = body?.error?.description || body?.error?.reason || body?.message || "Razorpay payout request failed";
-    const error = Object.assign(new Error(description), { status: 502, providerBody: body });
+    const error = Object.assign(new Error(description), {
+      status: 502,
+      providerBody: body,
+      // A 5xx response is not a reliable statement that no payout exists.
+      requestMayHaveSucceeded: response.status >= 500,
+    });
     throw error;
   }
   return body;

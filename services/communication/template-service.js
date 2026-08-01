@@ -1,6 +1,7 @@
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const whatsappService = require("./whatsapp-service");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { buildSearchAlternatives } = require("../../utils/search-query");
 const {
   textValue,
   enumValue,
@@ -156,8 +157,10 @@ const list = async function (filters) {
   }
   if (source.q) {
     const q = textValue(source.q, { label: "Template search", maxLength: 100 });
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [{ name: search }, { displayName: search }, { body: search }, { subject: search }];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["templateId", "name"],
+      prefixFields: ["displayName", "subject"],
+    });
   }
 
   const sortOrder = source.sortOrder

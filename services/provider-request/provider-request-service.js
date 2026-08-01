@@ -3,6 +3,9 @@ const ProviderJoinRequest = require("../../models/ProviderJoinRequest");
 const Provider = require("../../models/Provider");
 const Category = require("../../models/Category");
 const providerService = require("../provider/provider-service");
+const { withTransaction } = require("../../utils/transaction");
+const { releaseEntityContacts } = require("../contact-identity/contact-identity-service");
+const { buildSearchAlternatives } = require("../../utils/search-query");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const {
@@ -56,17 +59,12 @@ async function list(filters = {}) {
   }
   const q = queryTextValue(filters.q, { label: "Provider request search", maxLength: 120 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { providerJoinRequestId: search },
-      { name: search },
-      { businessName: search },
-      { mobile: search },
-      { whatsappNumber: search },
-      { email: search },
-      { city: search },
-      { servicePincode: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["providerJoinRequestId"],
+      phoneFields: ["normalizedMobile", "mobile", "normalizedWhatsappNumber", "whatsappNumber"],
+      emailFields: ["normalizedEmail", "email"],
+      prefixFields: ["name", "businessName", "city", "servicePincode"],
+    });
   }
   applyDateRange(query, filters, {
     fields: { createdAt: "Submitted date", updatedAt: "Updated date" },
@@ -143,26 +141,32 @@ async function updateStatus(providerJoinRequestId, input = {}, actor) {
 }
 
 async function markConverted(providerJoinRequestId, providerId, actor, lockToken) {
-  const now = new Date();
-  const updated = await ProviderJoinRequest.findOneAndUpdate(
-    {
-      ...requestQuery(providerJoinRequestId),
-      status: { $in: OPEN_STATUSES },
-      conversionLockBy: lockToken,
-    },
-    {
-      $set: {
-        status: "converted",
-        convertedProviderId: providerId,
-        convertedAt: now,
-        processedBy: actorValue(actor),
-        conversionLockAt: null,
-        conversionLockBy: "",
-        updatedAt: now,
+  const updated = await withTransaction(async (session) => {
+    const now = new Date();
+    const row = await ProviderJoinRequest.findOneAndUpdate(
+      {
+        ...requestQuery(providerJoinRequestId),
+        status: { $in: OPEN_STATUSES },
+        conversionLockBy: lockToken,
       },
-    },
-    { new: true, runValidators: true },
-  ).lean();
+      {
+        $set: {
+          status: "converted",
+          convertedProviderId: providerId,
+          convertedAt: now,
+          processedBy: actorValue(actor),
+          conversionLockAt: null,
+          conversionLockBy: "",
+          updatedAt: now,
+        },
+      },
+      { new: true, runValidators: true, session },
+    ).lean();
+    if (row) {
+      await releaseEntityContacts("provider_join_request", providerJoinRequestId, session);
+    }
+    return row;
+  }, { operationLabel: "Provider request conversion" });
   if (updated) return present(updated);
   const current = await get(providerJoinRequestId);
   if (current.status === "converted" && current.convertedProviderId === providerId) return current;
@@ -203,18 +207,31 @@ async function convert(providerJoinRequestId, input = {}, actor) {
   }
 
   try {
-    const existing = await Provider.findOne({
-      $or: [
-        { normalizedMobile: request.normalizedMobile },
-        { mobile: request.mobile },
-      ],
-    }).lean();
+    const phoneValues = [...new Set([
+      request.normalizedMobile,
+      request.mobile,
+      request.normalizedWhatsappNumber,
+      request.whatsappNumber,
+    ].filter(Boolean))];
+    const emailValue = String(request.normalizedEmail || request.email || "").trim().toLowerCase();
+    const providerMatches = [];
+    if (phoneValues.length) {
+      for (const field of ["normalizedMobile", "mobile", "normalizedWhatsappNumber", "whatsappNumber"]) {
+        providerMatches.push({ [field]: { $in: phoneValues } });
+      }
+    }
+    if (emailValue) providerMatches.push({ $or: [{ normalizedEmail: emailValue }, { email: emailValue }] });
+    const existing = providerMatches.length
+      ? await Provider.findOne({ $or: providerMatches }).lean()
+      : null;
     if (existing) {
       const updatedRequest = await markConverted(providerJoinRequestId, existing.providerId, actor, lockToken);
       return { provider: providerService.presentProvider(existing), request: updatedRequest, existing: true };
     }
 
-    const provider = await providerService.create(input, actorValue(actor));
+    const provider = await providerService.create(input, actorValue(actor), {
+      allowedProviderJoinRequestId: request.providerJoinRequestId,
+    });
     const updatedRequest = await markConverted(providerJoinRequestId, provider.providerId, actor, lockToken);
     console.log(`Provider joining request ${providerJoinRequestId} converted to provider ${provider.providerId}`);
     return { provider, request: updatedRequest, existing: false };

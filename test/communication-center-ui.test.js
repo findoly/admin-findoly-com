@@ -8,32 +8,33 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Communication Center uses one accessible active navigation", () => {
-  const navigation = read("views/communication/_navigation.ejs");
+test("Communication Center uses a clear permission-aware sidebar submenu", () => {
+  const sidebar = read("views/partials/sidebar.ejs");
+  const scripts = read("views/partials/scripts.ejs");
+  const context = read("views/communication/_navigation.ejs");
   const css = read("public/css/app.css");
-  for (const label of ["Overview", "Message logs", "Templates", "Automation rules", "OTP activity", "Settings"]) {
-    assert.match(navigation, new RegExp(label));
-  }
-  assert.match(navigation, /aria-current="page"/);
-  assert.match(navigation, /crm-communication-nav-link/);
-  assert.match(css, /\.crm-communication-nav-link\.is-active/);
-  assert.match(css, /\.crm-communication-nav-link:focus-visible/);
-  assert.match(css, /overflow-x:\s*auto/);
 
-  const pages = [
-    "index.ejs",
-    "logs.ejs",
-    "templates.ejs",
-    "rules.ejs",
-    "otp.ejs",
-    "settings.ejs",
-    "send.ejs",
-    "template-form.ejs",
-    "form.ejs",
-  ];
-  for (const page of pages) {
-    assert.match(read(`views/communication/${page}`), /include\('_navigation'/, `${page} must use shared navigation`);
+  for (const label of [
+    "Overview",
+    "Message logs",
+    "Send message",
+    "Manage templates",
+    "Manage rules",
+    "Channel management",
+    "OTP activity",
+  ]) {
+    assert.match(sidebar, new RegExp(label));
   }
+  assert.match(sidebar, /communicationMenuOpen/);
+  assert.match(sidebar, /aria-controls="communicationCenterSubmenu"/);
+  assert.match(sidebar, /communications\.send/);
+  assert.match(sidebar, /communications\.manage/);
+  assert.match(scripts, /communicationMenuOpen:\s*location\.pathname/);
+  assert.match(context, /crm-communication-breadcrumb/);
+  assert.match(context, /Communication Center/);
+  assert.doesNotMatch(context, /crm-communication-nav-link/);
+  assert.match(css, /\.crm-sidebar-submenu/);
+  assert.match(css, /\.crm-communication-context/);
 });
 
 test("Communication lists provide consistent search filters and pagination", () => {
@@ -77,13 +78,27 @@ test("Communication APIs expose filtered cursor pagination", () => {
   assert.match(controller, /pagination:\s*result\.pagination/);
 });
 
-test("Overview quick search and settings issue filter are available", () => {
+test("Communication Center separates channel and automation management", () => {
   const overview = read("views/communication/index.ejs");
   const settings = read("views/communication/settings.ejs");
-  assert.match(overview, /crm-communication-quick-search/);
-  assert.match(overview, /openLogs\(\)/);
-  assert.match(overview, /filteredRecent/);
-  assert.match(settings, /Configuration issues only/);
-  assert.match(settings, /showIssuesOnly/);
-  assert.match(settings, /issueCount/);
+  const templates = read("views/communication/templates.ejs");
+  const templateForm = read("views/communication/template-form.ejs");
+  const rules = read("views/communication/rules.ejs");
+
+  assert.match(overview, /crm-communication-start/);
+  assert.match(overview, /id="slack-tools"/);
+  for (const channel of ["WhatsApp", "Email", "Slack", "OTP", "Delivery &amp; retention"]) {
+    assert.match(settings, new RegExp(channel));
+  }
+  assert.match(settings, /activeChannel/);
+  assert.match(settings, /crm-channel-picker-card/);
+  assert.match(templates, /WhatsApp templates/);
+  assert.match(templates, /Email templates/);
+  assert.match(templates, /queryValue\('channel'\)/);
+  assert.match(templateForm, /selectChannel\('whatsapp'\)/);
+  assert.match(templateForm, /selectChannel\('email'\)/);
+  assert.match(rules, /Create automation rule/);
+  assert.match(rules, /crm-rule-channel-grid/);
+  assert.match(rules, /method:\s*this\.mode === 'create' \? 'POST' : 'PUT'/);
+  assert.match(rules, /Enable only the channels needed/);
 });

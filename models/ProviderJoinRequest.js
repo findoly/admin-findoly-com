@@ -11,6 +11,7 @@ const providerJoinRequestSchema = new mongoose.Schema(
     whatsappNumber: { type: String, required: true, trim: true, maxlength: 10 },
     normalizedWhatsappNumber: { type: String, required: true, trim: true, index: true, maxlength: 10 },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, index: true },
+    normalizedEmail: { type: String, default: "", trim: true, lowercase: true, maxlength: 254 },
     categoryId: { type: String, required: true, trim: true, index: true, maxlength: 100 },
     categorySlug: { type: String, required: true, trim: true, index: true, maxlength: 80 },
     categoryNameSnapshot: { type: String, required: true, trim: true, maxlength: 120 },
@@ -54,6 +55,9 @@ providerJoinRequestSchema.index(
   },
 );
 providerJoinRequestSchema.index({ categorySlug: 1, status: 1, createdAt: -1 });
+providerJoinRequestSchema.index({ normalizedEmail: 1, status: 1, createdAt: -1 });
+providerJoinRequestSchema.index({ updatedAt: -1, _id: -1 });
+providerJoinRequestSchema.index({ status: 1, updatedAt: -1, _id: -1 });
 
 module.exports = mongoose.models.ProviderJoinRequest
   || mongoose.model("ProviderJoinRequest", providerJoinRequestSchema, "providerjoinrequests");

@@ -2,6 +2,8 @@ const Invoice = require("../../models/Invoice");
 const uuid = require("../../utils/uuid");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { formatIndiaDateOnly, parseIndiaDateOnly } = require("../../utils/india-datetime");
 const {
   textValue,
   enumValue,
@@ -108,16 +110,20 @@ function generateInvoiceNumber() {
   return `INV-${Date.now()}-${uuid().slice(0, 6).toUpperCase()}`;
 }
 
+function invoiceDateValue(value, label) {
+  const normalized = dateOnlyValue(value instanceof Date ? formatIndiaDateOnly(value) : value, { label });
+  if (!normalized) return null;
+  const parsed = parseIndiaDateOnly(normalized);
+  if (!parsed) throw validationError(`${label} is invalid`);
+  return parsed;
+}
+
 function normalizeInvoiceInput(input = {}, current = {}) {
   const requestedInvoiceNo = String(input.invoiceNo ?? "").trim();
   const invoiceNo = requestedInvoiceNo || current.invoiceNo || generateInvoiceNumber();
-  const issueDate = dateOnlyValue(input.issueDate ?? current.issueDate, {
-    label: "Invoice issue date",
-  });
-  const dueDate = dateOnlyValue(input.dueDate ?? current.dueDate, {
-    label: "Invoice due date",
-  });
-  if (issueDate && dueDate && dueDate < issueDate) {
+  const issueDate = invoiceDateValue(input.issueDate ?? current.issueDate, "Invoice issue date");
+  const dueDate = invoiceDateValue(input.dueDate ?? current.dueDate, "Invoice due date");
+  if (issueDate && dueDate && dueDate.getTime() < issueDate.getTime()) {
     throw validationError("Invoice due date cannot be before the issue date");
   }
 
@@ -183,13 +189,10 @@ async function list(filters = {}) {
     maxLength: 100,
   });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { invoiceNo: search },
-      { customerName: search },
-      { providerName: search },
-      { enquiryId: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["invoiceId", "invoiceNo", "enquiryId"],
+      prefixFields: ["customerName", "providerName"],
+    });
   }
   applyDateRange(query, filters, { fields: { issueDate: "Issue date", dueDate: "Due date", createdAt: "Created date", updatedAt: "Updated date" }, defaultField: "issueDate" });
   return cursorPaginate(Invoice, {
@@ -270,4 +273,5 @@ module.exports = {
   generateInvoiceNumber,
   assertInvoiceNumberAvailable,
   INVOICE_STATUSES,
+  invoiceDateValue,
 };

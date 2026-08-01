@@ -4,6 +4,7 @@ const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
+const { prefixRegex } = require("../../utils/search-query");
 const { normalizeServiceTypeIdentifiers } = require("../../utils/service-types");
 const {
   humanTextValue,
@@ -131,6 +132,10 @@ async function listCategories(options = {}) {
     label: "Include inactive",
     fallback: false,
   });
+  const includeLegacy = booleanValue(options.includeLegacy, {
+    label: "Include legacy categories",
+    fallback: false,
+  });
   const allSaved = await Category.find({}).sort({ name: 1 }).lean();
   const managedSlugs = new Set(allSaved.map((category) => category.slug));
   const saved = includeInactive
@@ -148,7 +153,7 @@ async function listCategories(options = {}) {
     ]),
   );
 
-  if (!includeInactive) {
+  if (!includeInactive && includeLegacy) {
     const [leadSlugs, providerSlugs] = await Promise.all([
       Enquiry.distinct("categorySlug"),
       Provider.distinct("categorySlugs"),
@@ -188,7 +193,7 @@ async function listCategoryPage(options = {}) {
     maxLength: 100,
   });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
+    const search = prefixRegex(q);
     query.$or = [{ name: search }, { slug: search }, { description: search }];
   }
   applyDateRange(query, options, {
@@ -289,7 +294,7 @@ async function listServiceTypes(options = {}) {
   }
   const q = queryTextValue(options.q, { label: "Service Type search", maxLength: 100 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
+    const search = prefixRegex(q);
     query.$or = [{ name: search }, { slug: search }, { description: search }];
   }
 

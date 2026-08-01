@@ -4,10 +4,16 @@
   <body x-data="crmShell()" x-init="initShell()">
     <%- include('../partials/navbar') %>
     <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
-      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Use lowercase Meta template names and numbered WhatsApp variables such as {{1}}.</p></div><a href="/communications/templates" class="btn btn-light crm-primary-action">Back to templates</a></div></div>
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Choose a channel first, then complete only the fields required for that channel.</p></div><a href="/communications/templates" class="btn btn-light crm-primary-action">Back to templates</a></div></div>
       <div class="content" x-data="templateForm()" x-init="init()">
         <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
         <%- include('_navigation', { active: 'templates' }) %>
+        <section class="crm-template-channel-cards mb-3" x-show="mode === 'create'" x-cloak aria-label="Choose template channel">
+          <button type="button" class="crm-template-channel-card" :class="{ 'is-active': form.channel === 'whatsapp' }" @click="selectChannel('whatsapp')"><span class="crm-channel-picker-icon">WA</span><span><strong>WhatsApp template</strong><small>Requires Meta approval before a rule can send it</small></span></button>
+          <button type="button" class="crm-template-channel-card" :class="{ 'is-active': form.channel === 'email' }" @click="selectChannel('email')"><span class="crm-channel-picker-icon">EM</span><span><strong>Email template</strong><small>Becomes active immediately after it is saved</small></span></button>
+        </section>
+        <div class="alert alert-info" x-show="form.channel === 'whatsapp'">WhatsApp templates use numbered variables such as <code>{{1}}</code> and must be approved by Meta before automation rules can use them.</div>
+        <div class="alert alert-info" x-show="form.channel === 'email'">Email templates support named variables such as <code>{{provider_name}}</code> and may include an optional HTML body.</div>
         <form class="card" @submit.prevent="save()">
           <div class="card-body"><div class="row g-3">
             <div class="col-md-4"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel" :disabled="mode==='edit'"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
@@ -36,8 +42,9 @@
         return {
           mode: location.pathname.endsWith('/new') ? 'create' : 'edit',
           templateId: location.pathname.endsWith('/new') ? '' : pathParts()[2],
-          form: { channel:'whatsapp', name:'', displayName:'', category:'utility', language:'en_US', subject:'', headerType:'none', headerText:'', body:'', bodyHtml:'', footer:'', buttons:[], sampleVariables:[], otpExpiryMinutes:5, isActive:true, status:'draft' },
+          form: { channel: queryValue('channel') === 'email' ? 'email' : 'whatsapp', name:'', displayName:'', category: queryValue('channel') === 'email' ? 'transactional' : 'utility', language:'en_US', subject:'', headerType:'none', headerText:'', body:'', bodyHtml:'', footer:'', buttons:[], sampleVariables:[], otpExpiryMinutes:5, isActive:true, status:'draft' },
           buttonsJson:'', samples:'', testForm:{recipientContact:''}, testVariables:'{}', error:'', message:'', saving:false, testing:false,
+          selectChannel(channel) { this.form.channel = channel; this.form.category = channel === 'email' ? 'transactional' : 'utility'; this.form.subject = channel === 'email' ? this.form.subject : ''; },
           async init() { if(this.mode==='edit'){ try { this.form=(await apiFetch('/api/communication/templates/'+this.templateId)).data; this.buttonsJson=JSON.stringify(this.form.buttons||[],null,2); this.samples=(this.form.sampleVariables||[]).join(', '); } catch(error){ this.error=error.message; } } },
           payload() { let buttons=[]; if(this.buttonsJson.trim()) buttons=JSON.parse(this.buttonsJson); return {...this.form,buttons,sampleVariables:this.samples.split(',').map((value)=>value.trim()).filter(Boolean)}; },
           async save() { if(this.saving)return; this.saving=true; this.error=''; this.message=''; try { const url=this.mode==='edit'?'/api/communication/templates/'+this.templateId:'/api/communication/templates'; const body=await apiFetch(url,{method:this.mode==='edit'?'PUT':'POST',body:JSON.stringify(this.payload())}); this.message='Template saved.'; if(this.mode==='create') location.href='/communications/templates/'+body.data.templateId+'/edit'; else this.form=body.data; } catch(error){ this.error=error.message; } finally { this.saving=false; } },

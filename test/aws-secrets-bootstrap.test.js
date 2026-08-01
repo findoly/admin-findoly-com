@@ -154,15 +154,20 @@ test("start.js remains a minimal Hostinger launcher and bin/www owns server star
   assert.match(serverSource, /const secretResult = await loadSecrets\(\)/);
   assert.match(serverSource, /const app = loadApp\(\)/);
   assert.match(serverSource, /await app\.locals\.databasePromise/);
-  assert.match(serverSource, /server\.listen\(port/);
+  assert.match(serverSource, /await listen\(server, port\)/);
   assert.ok(
     serverSource.indexOf("await loadSecrets()") < serverSource.indexOf("const app = loadApp()"),
     "Secrets Manager must load before app.js",
   );
   assert.ok(
-    serverSource.indexOf("await app.locals.databasePromise") < serverSource.indexOf("server.listen(port"),
-    "MongoDB readiness must complete before CRM begins listening",
+    serverSource.indexOf("await listen(server, port)") < serverSource.indexOf("await loadSecrets()"),
+    "Hostinger listener must bind before remote bootstrap work",
   );
+  assert.ok(
+    serverSource.indexOf("await loadSecrets()") < serverSource.indexOf("const app = loadApp()"),
+    "Secrets Manager must still load before Express",
+  );
+  assert.match(serverSource, /CRM_STARTING/);
 });
 
 test("dotenv is loaded once by bin/www and is not reloaded by app.js", () => {

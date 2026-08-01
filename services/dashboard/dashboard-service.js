@@ -9,13 +9,16 @@ const CACHE_TTL_MS = Math.max(15_000, Number(process.env.DASHBOARD_CACHE_TTL_MS 
 const COUNT_CAP = Math.min(100_000, Math.max(1_000, Number(process.env.DASHBOARD_COUNT_CAP || 10_000)));
 let dashboardCache = null;
 let dashboardCacheExpiresAt = 0;
+let dashboardBuildPromise = null;
 
 async function boundedCount(Model, query, cap = COUNT_CAP) {
-  const rows = await Model.find(query)
-    .select({ _id: 1 })
-    .limit(cap + 1)
-    .lean();
-  return { value: Math.min(rows.length, cap), capped: rows.length > cap };
+  const rows = await Model.aggregate([
+    { $match: query },
+    { $limit: cap + 1 },
+    { $count: "value" },
+  ]).option({ maxTimeMS: 5000 });
+  const count = Number(rows[0]?.value || 0);
+  return { value: Math.min(count, cap), capped: count > cap };
 }
 
 async function buildDashboard() {
@@ -88,14 +91,24 @@ async function getDashboard(options = {}) {
   if (!options.refresh && dashboardCache && dashboardCacheExpiresAt > now) {
     return dashboardCache;
   }
-  dashboardCache = await buildDashboard();
-  dashboardCacheExpiresAt = now + CACHE_TTL_MS;
-  return dashboardCache;
+  if (!dashboardBuildPromise) {
+    dashboardBuildPromise = buildDashboard()
+      .then((result) => {
+        dashboardCache = result;
+        dashboardCacheExpiresAt = Date.now() + CACHE_TTL_MS;
+        return result;
+      })
+      .finally(() => {
+        dashboardBuildPromise = null;
+      });
+  }
+  return dashboardBuildPromise;
 }
 
 function clearDashboardCache() {
   dashboardCache = null;
   dashboardCacheExpiresAt = 0;
+  dashboardBuildPromise = null;
 }
 
 module.exports = {

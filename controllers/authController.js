@@ -12,6 +12,9 @@ const {
 const {
   claimSendSlot,
   releaseSendSlot,
+  claimIpSendSlot,
+  claimIpVerifySlot,
+  releaseIpSendSlot,
 } = require("../services/access/otp-rate-limit-service");
 
 const {
@@ -33,22 +36,47 @@ async function assertLoginAllowed(mobile) {
   const employee = await findActiveEmployeeByMobile(mobile);
   if (employee) return employee;
   if (await canUseBootstrap(mobile)) return null;
-  throw Object.assign(new Error("No active employee is registered with this mobile number"), { status: 403 });
+  throw Object.assign(new Error("OTP verification failed or employee access is unavailable"), {
+    status: 401,
+    code: "CRM_LOGIN_NOT_AVAILABLE",
+  });
+}
+
+function genericSendMessage() {
+  return "If this mobile number is authorized, an OTP will be sent.";
+}
+
+function requestAddress(req) {
+  return String(req.ip || req.socket?.remoteAddress || "unknown").slice(0, 200);
+}
+
+function shortDelay(milliseconds = 450) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function sendOtp(req, res, next) {
   let mobile = "";
   let rateLimitClaim = null;
+  let ipRateLimitClaim = null;
   try {
     mobile = employeeMobile(req.body?.mobile);
-    await assertLoginAllowed(mobile);
+    ipRateLimitClaim = await claimIpSendSlot(requestAddress(req));
+    const employee = await findActiveEmployeeByMobile(mobile);
+    const bootstrapAllowed = employee ? false : await canUseBootstrap(mobile);
+    if (!employee && !bootstrapAllowed) {
+      await shortDelay(400 + Math.floor(Math.random() * 250));
+      return res.json({
+        success: true,
+        data: { sessionId: "", message: genericSendMessage(), mobile },
+      });
+    }
     rateLimitClaim = await claimSendSlot(mobile);
     const response = await requestOtpApi(SEND_OTP_URL, { mobile });
     return res.json({
       success: true,
       data: {
         sessionId: response?.data?.sessionId || response?.sessionId || "",
-        message: response?.data?.message || response?.message || "OTP sent successfully",
+        message: genericSendMessage(),
         mobile,
       },
     });
@@ -56,6 +84,18 @@ async function sendOtp(req, res, next) {
     const deliveryUncertain = [502, 504].includes(Number(error?.status)) && error?.requestMayHaveSucceeded;
     if (rateLimitClaim && error?.code !== "CRM_OTP_SEND_RATE_LIMIT" && !deliveryUncertain) {
       await releaseSendSlot(mobile, rateLimitClaim.requestId).catch(() => {});
+    }
+    if (ipRateLimitClaim && !["CRM_OTP_IP_RATE_LIMIT", "CRM_OTP_SEND_RATE_LIMIT"].includes(error?.code) && !deliveryUncertain) {
+      await releaseIpSendSlot(ipRateLimitClaim.keyHash, ipRateLimitClaim.requestId).catch(() => {});
+    }
+    if (error?.code === "CRM_OTP_IP_RATE_LIMIT") {
+      res.set("Retry-After", String(error.retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        code: "OTP_NETWORK_RATE_LIMIT",
+        message: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
     }
     if (error?.code === "CRM_OTP_SEND_RATE_LIMIT") {
       res.set("Retry-After", String(error.retryAfterSeconds));
@@ -88,7 +128,7 @@ async function sendOtp(req, res, next) {
             sessionId: "",
             mobile,
             deliveryUnconfirmed: true,
-            message: "OTP request submitted. Enter the code if it arrives; otherwise retry after the resend wait.",
+            message: genericSendMessage(),
           },
         });
       }
@@ -117,8 +157,9 @@ async function verifyOtp(req, res, next) {
       throw Object.assign(new Error("OTP must contain 4 to 8 digits"), { status: 400 });
     }
 
-    await assertLoginAllowed(mobile);
+    await claimIpVerifySlot(requestAddress(req));
     await requestOtpApi(VERIFY_OTP_URL, { mobile, otp });
+    await assertLoginAllowed(mobile);
 
     await ensureDefaultRoles();
     let employee = await findActiveEmployeeByMobile(mobile);
@@ -151,6 +192,13 @@ async function verifyOtp(req, res, next) {
       },
     });
   } catch (error) {
+    if (error?.code === "CRM_LOGIN_NOT_AVAILABLE" || [400, 401, 403].includes(Number(error?.status))) {
+      return res.status(401).json({
+        success: false,
+        code: "OTP_VERIFICATION_FAILED",
+        message: "OTP verification failed or employee access is unavailable",
+      });
+    }
     if (error?.status === 429) {
       const retryAfterSeconds = Number(error.retryAfterSeconds || 0);
       if (retryAfterSeconds > 0) res.set("Retry-After", String(retryAfterSeconds));
@@ -192,4 +240,7 @@ module.exports = {
   OTP_SERVICE_BASE_URL,
   SEND_OTP_URL,
   VERIFY_OTP_URL,
+  assertLoginAllowed,
+  genericSendMessage,
+  requestAddress,
 };

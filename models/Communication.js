@@ -66,8 +66,14 @@ const communicationSchema = new mongoose.Schema(
 
 communicationSchema.index({ createdAt: -1, _id: -1 });
 communicationSchema.index({ channel: 1, createdAt: -1, _id: -1 });
+communicationSchema.index({ channel: 1, status: 1 });
 communicationSchema.index({ enquiryId: 1, createdAt: -1, _id: -1 });
 communicationSchema.index({ status: 1, createdAt: -1 });
+communicationSchema.index({ updatedAt: -1, _id: -1 });
+communicationSchema.index({ sentAt: -1, _id: -1 });
+communicationSchema.index({ status: 1, sentAt: -1, _id: -1 });
+communicationSchema.index({ purpose: 1, createdAt: -1, _id: -1 });
+communicationSchema.index({ trigger: 1, createdAt: -1, _id: -1 });
 const communicationRetentionDays = Math.max(1, Number(process.env.COMMUNICATION_LOG_RETENTION_DAYS || 7) || 7);
 communicationSchema.index(
   { createdAt: 1 },

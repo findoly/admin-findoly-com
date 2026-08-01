@@ -77,7 +77,10 @@ const communicationTemplateSchema = new mongoose.Schema(
 );
 
 communicationTemplateSchema.index({ channel: 1, name: 1, language: 1 }, { unique: true });
-communicationTemplateSchema.index({ channel: 1, status: 1, updatedAt: -1 });
+communicationTemplateSchema.index({ channel: 1, status: 1, updatedAt: -1, _id: -1 });
+communicationTemplateSchema.index({ updatedAt: -1, _id: -1 });
+communicationTemplateSchema.index({ name: 1, _id: 1 });
+communicationTemplateSchema.index({ category: 1, channel: 1, updatedAt: -1, _id: -1 });
 
 module.exports = mongoose.model(
   "CommunicationTemplate",

@@ -1,7 +1,8 @@
 <%
   const canAccess = typeof can === 'function' ? can : () => true;
   const showWorkspace = canAccess('dashboard.view') || canAccess('requirements.view') || canAccess('providers.view') || canAccess('provider_requests.view') || canAccess('agents.view') || canAccess('partnerPayouts.view') || canAccess('categories.view') || canAccess('provider_unlocks.view');
-  const showOperations = canAccess('followUps.view') || canAccess('communications.view') || canAccess('billing.view') || canAccess('reports.view');
+  const showCommunications = canAccess('communications.view') || canAccess('communications.send') || canAccess('communications.manage');
+  const showOperations = canAccess('followUps.view') || showCommunications || canAccess('billing.view') || canAccess('reports.view');
   const showAdministration = canAccess('storage.view') || canAccess('employees.view') || canAccess('roles.view');
 %>
 <div id="crmPrimaryNavigation" class="sidebar sidebar-main sidebar-expand-lg crm-sidebar" :class="{'crm-sidebar-open': sidebarOpen, 'crm-sidebar-collapsed': sidebarCollapsed}" :aria-hidden="(!sidebarOpen && window.innerWidth < 992).toString()" x-effect="document.documentElement.classList.toggle('crm-mobile-drawer-open', sidebarOpen); document.body.classList.toggle('crm-mobile-drawer-open', sidebarOpen)" @keydown.escape.window="sidebarOpen=false">
@@ -32,7 +33,22 @@
 
         <% if (showOperations) { %><li class="nav-item-header"><span>Operations</span></li><% } %>
         <% if (canAccess('followUps.view')) { %><li class="nav-item"><a href="/follow-ups" title="Follow-ups" class="nav-link" :class="{active:pathIs('/follow-ups')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M4.5 5.5 3 8"/></svg><span>Follow-ups</span></a></li><% } %>
-        <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications" title="Communication Center" class="nav-link" :class="{active:pathIs('/communications')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg><span>Communication Center</span></a></li><% } %>
+        <% if (showCommunications) { %>
+          <li class="nav-item nav-item-submenu crm-sidebar-group" :class="{'nav-item-expanded': communicationMenuOpen || pathIs('/communications')}">
+            <button type="button" class="nav-link crm-sidebar-group-toggle" :class="{active:pathIs('/communications')}" @click="communicationMenuOpen = !communicationMenuOpen" :aria-expanded="(communicationMenuOpen || pathIs('/communications')).toString()" aria-controls="communicationCenterSubmenu" title="Communication Center">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg><span>Communication Center</span>
+            </button>
+            <ul id="communicationCenterSubmenu" class="nav nav-group-sub crm-sidebar-submenu" x-show="communicationMenuOpen || pathIs('/communications')" x-cloak>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications" class="nav-link" :class="{active:location.pathname === '/communications'}" @click="sidebarOpen=false"><span>Overview</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/logs" class="nav-link" :class="{active:pathIs('/communications/logs') || location.pathname === '/communications/new' || /^\/communications\/[^/]+\/edit$/.test(location.pathname)}" @click="sidebarOpen=false"><span>Message logs</span></a></li><% } %>
+              <% if (canAccess('communications.send')) { %><li class="nav-item"><a href="/communications/send" class="nav-link" :class="{active:pathIs('/communications/send')}" @click="sidebarOpen=false"><span>Send message</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/templates" class="nav-link" :class="{active:pathIs('/communications/templates')}" @click="sidebarOpen=false"><span>Manage templates</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/rules" class="nav-link" :class="{active:pathIs('/communications/rules')}" @click="sidebarOpen=false"><span>Manage rules</span></a></li><% } %>
+              <% if (canAccess('communications.manage')) { %><li class="nav-item"><a href="/communications/settings" class="nav-link" :class="{active:pathIs('/communications/settings')}" @click="sidebarOpen=false"><span>Channel management</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/otp" class="nav-link" :class="{active:pathIs('/communications/otp')}" @click="sidebarOpen=false"><span>OTP activity</span></a></li><% } %>
+            </ul>
+          </li>
+        <% } %>
         <% if (canAccess('billing.view')) { %><li class="nav-item"><a href="/billing" title="Billing" class="nav-link" :class="{active:location.pathname==='/billing' || pathIs('/billing/new')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Billing</span></a></li><li class="nav-item"><a href="/billing/provider-subscriptions" title="Provider subscriptions" class="nav-link" :class="{active:pathIs('/billing/provider-subscriptions')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16M8 14h4"/></svg><span>Provider subscriptions</span></a></li><% } %>
         <% if (canAccess('reports.view')) { %><li class="nav-item"><a href="/reports" title="Reports" class="nav-link" :class="{active:pathIs('/reports')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg><span>Reports</span></a></li><% } %>
 

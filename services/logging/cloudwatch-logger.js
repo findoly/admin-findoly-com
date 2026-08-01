@@ -235,16 +235,14 @@ function createCloudWatchLogger({
     warn: consoleObject.warn.bind(consoleObject),
     error: consoleObject.error.bind(consoleObject),
   };
-  const streamDate = now().toISOString().slice(0, 10);
   const safeHost = String(hostname || "host").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
   const safeService = String(service).replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
-  const defaultStreamName = `${safeService}/${streamDate}/${safeHost}-${pid}-${randomId}`;
 
   let installed = false;
   let timer = null;
   let queue = [];
   let flushPromise = null;
-  let streamReady = false;
+  const readyStreams = new Set();
   let droppedCount = 0;
   let lastInternalWarningAt = 0;
   let config = {};
@@ -253,10 +251,10 @@ function createCloudWatchLogger({
     const prefix = credentialPrefix;
     const productionDefault = String(source.NODE_ENV || "").trim() === "production";
     const logGroup = String(source.CLOUDWATCH_LOG_GROUP || defaultLogGroup).trim();
-    const streamPrefix = String(source.CLOUDWATCH_LOG_STREAM_PREFIX || "").trim();
-    const configuredStreamName = streamPrefix
-      ? `${streamPrefix.replace(/[:*]/g, "-").replace(/\/$/, "")}/${streamDate}/${safeHost}-${pid}-${randomId}`
-      : defaultStreamName;
+    const streamPrefix = String(source.CLOUDWATCH_LOG_STREAM_PREFIX || safeService)
+      .trim()
+      .replace(/[:*]/g, "-")
+      .replace(/^\/+|\/+$/g, "") || safeService;
     return {
       enabled: parseBoolean(source.CLOUDWATCH_LOGS_ENABLED, productionDefault),
       region: String(source.CLOUDWATCH_LOGS_REGION || source[`${prefix}REGION`] || "").trim(),
@@ -264,7 +262,7 @@ function createCloudWatchLogger({
       secretAccessKey: String(source[`${prefix}SECRET_ACCESS_KEY`] || "").trim(),
       sessionToken: String(source[`${prefix}SESSION_TOKEN`] || "").trim(),
       logGroup: validLogGroup(logGroup) ? logGroup : defaultLogGroup,
-      logStream: configuredStreamName.slice(0, 512),
+      streamPrefix: streamPrefix.slice(0, 180),
       level: normalizeLogLevel(source.CLOUDWATCH_LOG_LEVEL),
       flushMs: clampNumber(source.CLOUDWATCH_LOG_FLUSH_MS, 2000, 250, 60000),
       maxQueue: clampNumber(source.CLOUDWATCH_LOG_MAX_QUEUE, 1000, 100, 10000),
@@ -280,7 +278,7 @@ function createCloudWatchLogger({
       present(config.accessKeyId) &&
       present(config.secretAccessKey) &&
       validLogGroup(config.logGroup) &&
-      present(config.logStream)
+      present(config.streamPrefix)
     );
   }
 
@@ -307,10 +305,10 @@ function createCloudWatchLogger({
   }
 
   function configureFromEnv(source = env) {
-    const previousIdentity = `${config.region || ""}|${config.logGroup || ""}|${config.logStream || ""}|${config.accessKeyId || ""}`;
+    const previousIdentity = `${config.region || ""}|${config.logGroup || ""}|${config.streamPrefix || ""}|${config.accessKeyId || ""}`;
     config = readConfig(source);
-    const nextIdentity = `${config.region}|${config.logGroup}|${config.logStream}|${config.accessKeyId}`;
-    if (previousIdentity && previousIdentity !== nextIdentity) streamReady = false;
+    const nextIdentity = `${config.region}|${config.logGroup}|${config.streamPrefix}|${config.accessKeyId}`;
+    if (previousIdentity && previousIdentity !== nextIdentity) readyStreams.clear();
     if (!config.enabled) {
       clearTimer();
       queue = [];
@@ -325,7 +323,7 @@ function createCloudWatchLogger({
       enabled: config.enabled,
       region: config.region,
       logGroup: config.logGroup,
-      logStream: config.logStream,
+      logStream: streamNameFor(now().getTime()),
       level: config.level,
       credentialsAvailable: present(config.accessKeyId) && present(config.secretAccessKey),
     };
@@ -347,7 +345,7 @@ function createCloudWatchLogger({
       queue.shift();
       droppedCount += 1;
     }
-    queue.push({ timestamp, message });
+    queue.push({ timestamp, message, streamName: streamNameFor(timestamp) });
     void flush();
     return true;
   }
@@ -428,24 +426,35 @@ function createCloudWatchLogger({
     return responseBody;
   }
 
-  async function ensureStream() {
-    if (streamReady) return;
+  function streamNameFor(timestamp) {
+    const date = new Date(timestamp);
+    const minuteBucket = Math.floor(date.getUTCMinutes() / 15) * 15;
+    const day = date.toISOString().slice(0, 10);
+    const hour = String(date.getUTCHours()).padStart(2, "0");
+    const minute = String(minuteBucket).padStart(2, "0");
+    return `${config.streamPrefix || safeService}/${day}/${hour}-${minute}/${safeHost}`.slice(0, 512);
+  }
+
+  async function ensureStream(streamName) {
+    if (readyStreams.has(streamName)) return;
     try {
       await sendAwsRequest("Logs_20140328.CreateLogStream", {
         logGroupName: config.logGroup,
-        logStreamName: config.logStream,
+        logStreamName: streamName,
       });
     } catch (error) {
       if (error.awsType !== "ResourceAlreadyExistsException") throw error;
     }
-    streamReady = true;
+    readyStreams.add(streamName);
   }
 
   function takeBatch() {
     const batch = [];
     let bytes = 0;
+    const streamName = queue[0]?.streamName || "";
     while (queue.length && batch.length < MAX_BATCH_EVENTS) {
       const candidate = queue[0];
+      if (candidate.streamName !== streamName) break;
       const candidateBytes = Buffer.byteLength(candidate.message, "utf8") + EVENT_OVERHEAD_BYTES;
       if (batch.length && bytes + candidateBytes > MAX_BATCH_BYTES) break;
       queue.shift();
@@ -453,26 +462,27 @@ function createCloudWatchLogger({
       bytes += candidateBytes;
     }
     batch.sort((left, right) => left.timestamp - right.timestamp);
-    return batch;
+    return { batch, streamName };
   }
 
   async function performFlush() {
     clearTimer();
     if (!canSend() || queue.length === 0) return { sent: 0, pending: queue.length };
-    await ensureStream();
     let sent = 0;
 
     while (queue.length) {
-      const batch = takeBatch();
+      const { batch, streamName } = takeBatch();
       if (!batch.length) break;
       try {
+        await ensureStream(streamName);
         await sendAwsRequest("Logs_20140328.PutLogEvents", {
           logGroupName: config.logGroup,
-          logStreamName: config.logStream,
+          logStreamName: streamName,
           logEvents: batch,
         });
         sent += batch.length;
       } catch (error) {
+        if (error.awsType === "ResourceNotFoundException") readyStreams.delete(streamName);
         queue = [...batch, ...queue].slice(0, config.maxQueue);
         throw error;
       }
@@ -520,12 +530,13 @@ function createCloudWatchLogger({
       enabled: Boolean(config.enabled),
       region: config.region || "",
       logGroup: config.logGroup || "",
-      logStream: config.logStream || "",
+      logStream: streamNameFor(now().getTime()),
       level: config.level || "info",
       queueLength: queue.length,
       maxQueue: config.maxQueue || 0,
       droppedCount,
-      streamReady,
+      streamReady: readyStreams.has(streamNameFor(now().getTime())),
+      readyStreamCount: readyStreams.size,
       credentialsAvailable: present(config.accessKeyId) && present(config.secretAccessKey),
     };
   }
@@ -538,6 +549,7 @@ function createCloudWatchLogger({
     install,
     shutdown,
     uninstall,
+    streamNameFor,
   };
   return api;
 }

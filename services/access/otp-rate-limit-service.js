@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const CrmOtpRateLimit = require("../../models/CrmOtpRateLimit");
+const CrmOtpIpRateLimit = require("../../models/CrmOtpIpRateLimit");
 
 function integerSetting(value, fallback, min, max) {
   const number = Number(value);
@@ -12,6 +13,25 @@ function settings() {
     resendSeconds: integerSetting(process.env.CRM_OTP_RESEND_SECONDS, 30, 1, 3600),
     maxSendsPerWindow: integerSetting(process.env.CRM_OTP_MAX_SENDS_PER_MINUTE, 2, 1, 20),
     windowSeconds: integerSetting(process.env.CRM_OTP_RATE_WINDOW_SECONDS, 60, 10, 3600),
+    maxIpSendsPerWindow: integerSetting(
+      process.env.CRM_OTP_MAX_IP_REQUESTS_PER_HOUR || process.env.OTP_MAX_IP_REQUESTS_PER_HOUR,
+      30,
+      5,
+      1000,
+    ),
+    ipWindowSeconds: integerSetting(process.env.CRM_OTP_IP_RATE_WINDOW_SECONDS, 3600, 60, 86400),
+    maxIpVerificationsPerWindow: integerSetting(
+      process.env.CRM_OTP_MAX_IP_VERIFY_ATTEMPTS_PER_HOUR,
+      60,
+      5,
+      5000,
+    ),
+    ipVerifyWindowSeconds: integerSetting(
+      process.env.CRM_OTP_IP_VERIFY_WINDOW_SECONDS,
+      3600,
+      60,
+      86400,
+    ),
   };
 }
 
@@ -141,6 +161,117 @@ async function releaseSendSlot(mobile, requestId, now = new Date()) {
   );
 }
 
+function ipKey(value, scope = "send") {
+  const address = `${String(scope || "send").trim().slice(0, 20)}:${String(value || "unknown").trim().slice(0, 200)}`;
+  const secret = String(
+    process.env.AUTH_COOKIE_SECRET || process.env.SESSION_SECRET || process.env.OTP_SECRET || "crm-otp-ip-rate-limit",
+  );
+  return crypto.createHmac("sha256", secret).update(address).digest("hex");
+}
+
+function ipRateLimitError(waitSeconds) {
+  const seconds = Math.max(1, Number(waitSeconds) || 1);
+  const error = new Error("Too many OTP requests from this network. Please try again later.");
+  error.status = 429;
+  error.code = "CRM_OTP_IP_RATE_LIMIT";
+  error.retryAfterSeconds = seconds;
+  return error;
+}
+
+async function claimIpSlot({ address, scope, maxRequests, windowSeconds, now = new Date() }) {
+  const keyHash = ipKey(address, scope);
+  const requestId = crypto.randomUUID();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const state = await CrmOtpIpRateLimit.findOne({ keyHash }).lean();
+    const windowStartedAt = state ? new Date(state.windowStartedAt) : now;
+    const windowEndsAt = new Date(windowStartedAt.getTime() + windowSeconds * 1000);
+    const expired = !state || windowEndsAt <= now;
+    const count = expired ? 0 : Number(state.sendCount || 0);
+    if (!expired && count >= maxRequests) {
+      throw ipRateLimitError(secondsUntil(windowEndsAt, now));
+    }
+    const nextCount = count + 1;
+    const expiresAt = new Date(now.getTime() + windowSeconds * 2 * 1000);
+    if (!state) {
+      try {
+        await CrmOtpIpRateLimit.create({
+          keyHash,
+          windowStartedAt: now,
+          sendCount: nextCount,
+          lastRequestId: requestId,
+          version: 1,
+          expiresAt,
+        });
+        return { requestId, keyHash, retryAfterSeconds: windowSeconds };
+      } catch (error) {
+        if (error?.code === 11000) continue;
+        throw error;
+      }
+    }
+    const result = await CrmOtpIpRateLimit.updateOne(
+      { _id: state._id, version: Number(state.version || 0) },
+      {
+        $set: {
+          windowStartedAt: expired ? now : windowStartedAt,
+          sendCount: nextCount,
+          lastRequestId: requestId,
+          expiresAt,
+        },
+        $inc: { version: 1 },
+      },
+    );
+    if (result.modifiedCount === 1) {
+      return { requestId, keyHash, retryAfterSeconds: windowSeconds };
+    }
+  }
+  throw ipRateLimitError(windowSeconds);
+}
+
+async function claimIpSendSlot(address, now = new Date()) {
+  const config = settings();
+  return claimIpSlot({
+    address,
+    scope: "send",
+    maxRequests: config.maxIpSendsPerWindow,
+    windowSeconds: config.ipWindowSeconds,
+    now,
+  });
+}
+
+async function claimIpVerifySlot(address, now = new Date()) {
+  const config = settings();
+  return claimIpSlot({
+    address,
+    scope: "verify",
+    maxRequests: config.maxIpVerificationsPerWindow,
+    windowSeconds: config.ipVerifyWindowSeconds,
+    now,
+  });
+}
+
+async function releaseIpSendSlot(keyHash, requestId, now = new Date()) {
+  if (!keyHash || !requestId) return;
+  const state = await CrmOtpIpRateLimit.findOne({ keyHash, lastRequestId: requestId }).lean();
+  if (!state) return;
+  const sendCount = Math.max(0, Number(state.sendCount || 0) - 1);
+  if (sendCount === 0) {
+    await CrmOtpIpRateLimit.deleteOne({ _id: state._id, lastRequestId: requestId });
+    return;
+  }
+  await CrmOtpIpRateLimit.updateOne(
+    { _id: state._id, lastRequestId: requestId },
+    {
+      $set: {
+        sendCount,
+        lastRequestId: "",
+        expiresAt: new Date(now.getTime() + settings().ipWindowSeconds * 2 * 1000),
+      },
+      $inc: { version: 1 },
+    },
+  );
+}
+
 module.exports = {
   settings,
   secondsUntil,
@@ -148,4 +279,10 @@ module.exports = {
   rateLimitError,
   claimSendSlot,
   releaseSendSlot,
+  ipKey,
+  ipRateLimitError,
+  claimIpSlot,
+  claimIpSendSlot,
+  claimIpVerifySlot,
+  releaseIpSendSlot,
 };

@@ -11,6 +11,7 @@ const agentSchema = new mongoose.Schema(
     mobile: { type: String, required: true, trim: true, match: /^[6-9]\d{9}$/ },
     normalizedMobile: { type: String, required: true, trim: true, unique: true, index: true, match: /^[6-9]\d{9}$/ },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254 },
+    normalizedEmail: { type: String, default: "", trim: true, lowercase: true, maxlength: 254 },
     addressLine: { type: String, default: "", trim: true, maxlength: 500 },
     city: { type: String, default: "", trim: true, index: true, maxlength: 100 },
     state: { type: String, default: "", trim: true, maxlength: 100 },
@@ -36,4 +37,12 @@ const agentSchema = new mongoose.Schema(
 
 agentSchema.index({ status: 1, portalAccessEnabled: 1, categorySlug: 1 });
 agentSchema.index({ createdAt: -1, _id: -1 });
+agentSchema.index({ updatedAt: -1, _id: -1 });
+agentSchema.index({ status: 1, createdAt: -1, _id: -1 });
+agentSchema.index({ status: 1, updatedAt: -1, _id: -1 });
+agentSchema.index({ categorySlug: 1, createdAt: -1, _id: -1 });
+agentSchema.index(
+  { normalizedEmail: 1 },
+  { unique: true, partialFilterExpression: { normalizedEmail: { $exists: true, $gt: "" } }, name: "agent_email_unique" },
+);
 module.exports = mongoose.model("Agent", agentSchema, "agents");

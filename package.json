@@ -15,9 +15,18 @@
     "migrate:marketplace-location": "node scripts/run-with-runtime.js scripts/backfill-marketplace-locations.js",
     "qa:static": "node scripts/qa-static.js",
     "qa:critical": "node --test test/validation-utilities-expanded.test.js test/customer-portal-integration.test.js test/marketplace-publication-static.test.js test/provider-manual-credit-static.test.js test/registration-storage-static.test.js test/otp-proxy-routing.test.js test/production-readiness.test.js test/service-type-subscription-validation.test.js test/ui-responsive-static.test.js",
-    "qa:production": "npm run qa:static && npm run qa:critical",
+    "qa:production": "npm run qa:static && npm run qa:critical && npm run qa:hardening",
     "ensure:indexes": "node scripts/run-with-runtime.js scripts/ensure-indexes.js",
-    "cleanup:marketplace-leads": "node scripts/run-with-runtime.js scripts/expire-marketplace-leads.js"
+    "cleanup:marketplace-leads": "node scripts/run-with-runtime.js scripts/expire-marketplace-leads.js",
+    "verify:indexes": "node scripts/run-with-runtime.js scripts/ensure-indexes.js --verify-only",
+    "migrate:follow-up-dates": "node scripts/run-with-runtime.js scripts/migrate-follow-up-dates.js",
+    "migrate:invoice-dates": "node scripts/run-with-runtime.js scripts/migrate-invoice-dates.js",
+    "migrate:provider-contacts": "node scripts/run-with-runtime.js scripts/backfill-provider-contacts.js",
+    "migrate:withdrawal-slots": "node scripts/run-with-runtime.js scripts/backfill-active-withdrawal-slots.js",
+    "preflight:production": "npm run qa:production && npm run verify:indexes && npm run verify:query-plans",
+    "migrate:contact-identities": "node scripts/run-with-runtime.js scripts/backfill-contact-identities.js",
+    "qa:hardening": "node --test test/production-hardening-expanded.test.js test/production-hardening-runtime.test.js",
+    "verify:query-plans": "node scripts/run-with-runtime.js scripts/verify-query-plans.js"
   },
   "engines": {
     "node": ">=20"

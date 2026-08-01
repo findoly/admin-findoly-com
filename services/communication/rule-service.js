@@ -1,6 +1,7 @@
 const CommunicationRule = require("../../models/CommunicationRule");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
+const { buildSearchAlternatives } = require("../../utils/search-query");
 const {
   textValue,
   booleanValue,
@@ -151,8 +152,10 @@ const list = async function (filters) {
   }
   const q = queryTextValue(source.q, { label: "Rule search", maxLength: 100 });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [{ name: search }, { event: search }, { description: search }];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["ruleId", "event"],
+      prefixFields: ["name", "description"],
+    });
   }
   const sortOrder = source.sortOrder
     ? enumValue(source.sortOrder, ["name", "event", "newest", "oldest"], { label: "Rule sort order" })

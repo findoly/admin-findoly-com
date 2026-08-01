@@ -7,8 +7,11 @@ const providerSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, maxlength: 120 },
     businessName: { type: String, default: "", trim: true, maxlength: 160 },
     mobile: { type: String, default: "", trim: true, match: /^[6-9]\d{9}$/ },
-    normalizedMobile: { type: String, default: "", trim: true, index: true, match: /^[6-9]\d{9}$/ },
+    normalizedMobile: { type: String, default: "", trim: true, match: /^[6-9]\d{9}$/ },
+    whatsappNumber: { type: String, default: "", trim: true, match: /^[6-9]\d{9}$/ },
+    normalizedWhatsappNumber: { type: String, default: "", trim: true, match: /^[6-9]\d{9}$/ },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, validate: { validator: (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value), message: "Provider email is invalid" } },
+    normalizedEmail: { type: String, default: "", trim: true, lowercase: true, maxlength: 254 },
     status: { type: String, default: "active", index: true },
     onboardingStage: { type: String, default: "new" },
     categorySlugs: { type: [String], default: [], index: true },
@@ -61,5 +64,33 @@ const providerSchema = new mongoose.Schema(
 providerSchema.index({ status: 1, portalAccessEnabled: 1, categorySlugs: 1 });
 providerSchema.index({ createdAt: -1, _id: -1 });
 providerSchema.index({ status: 1, createdAt: -1, _id: -1 });
+providerSchema.index({ updatedAt: -1, _id: -1 });
+providerSchema.index({ status: 1, updatedAt: -1, _id: -1 });
+providerSchema.index({ categorySlugs: 1, createdAt: -1, _id: -1 });
+providerSchema.index({ city: 1, createdAt: -1, _id: -1 });
+providerSchema.index(
+  { normalizedMobile: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { normalizedMobile: { $exists: true, $gt: "" } },
+    name: "provider_mobile_unique",
+  },
+);
+providerSchema.index(
+  { normalizedWhatsappNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { normalizedWhatsappNumber: { $exists: true, $gt: "" } },
+    name: "provider_whatsapp_unique",
+  },
+);
+providerSchema.index(
+  { normalizedEmail: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { normalizedEmail: { $exists: true, $gt: "" } },
+    name: "provider_email_unique",
+  },
+);
 
 module.exports = mongoose.model("Provider", providerSchema, "providers");
