@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const util = require("node:util");
 
 const {
   buildSignedRequest,
@@ -89,7 +90,7 @@ test("redaction removes credentials, tokens, cookies, request bodies and MongoDB
   );
 });
 
-test("console output is preserved and redacted events are batched to CloudWatch", async () => {
+test("console output is preserved and exact plain text is forwarded to CloudWatch", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -110,19 +111,32 @@ test("console output is preserved and redacted events are batched to CloudWatch"
 
   logger.install();
   consoleObject.error("Unlock failed", {
-    token: "should-not-leak",
+    token: "same-console-value",
     uri: "mongodb://user:pass@localhost/db",
   });
 
   assert.equal(consoleObject.calls.error.length, 1);
-  assert.deepEqual(consoleObject.calls.error[0][0], "Unlock failed");
+  assert.deepEqual(consoleObject.calls.error[0], [
+    "Unlock failed",
+    {
+      token: "same-console-value",
+      uri: "mongodb://user:pass@localhost/db",
+    },
+  ]);
+
   const result = await logger.flush();
   assert.equal(result.sent, 1);
   assert.equal(requests.length, 2);
   assert.equal(requests[0].logGroupName, "/findoly/test/production");
   assert.equal(requests[1].logEvents.length, 1);
-  assert.doesNotMatch(requests[1].logEvents[0].message, /should-not-leak|user:pass/);
-  assert.match(requests[1].logEvents[0].message, /Unlock failed/);
+  assert.equal(
+    requests[1].logEvents[0].message,
+    util.format("Unlock failed", {
+      token: "same-console-value",
+      uri: "mongodb://user:pass@localhost/db",
+    }),
+  );
+  assert.doesNotMatch(requests[1].logEvents[0].message, /^\{\"timestamp\"/);
   logger.uninstall();
 });
 

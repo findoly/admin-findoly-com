@@ -199,22 +199,9 @@ function truncateUtf8(value, maxBytes = MAX_EVENT_BYTES) {
   return `${text.slice(0, low)}${suffix}`;
 }
 
-function serializeLogMessage({ service, level, args, metadata, timestamp, hostname, pid }) {
-  const safeArgs = args.map((entry) => redactForLog(entry));
-  const formatted = redactString(util.format(...safeArgs));
-  return truncateUtf8(
-    JSON.stringify({
-      timestamp: new Date(timestamp).toISOString(),
-      level,
-      service,
-      hostname,
-      pid,
-      message: formatted,
-      ...(metadata && Object.keys(metadata).length
-        ? { metadata: redactForLog(metadata) }
-        : {}),
-    }),
-  );
+function serializeLogMessage({ args }) {
+  const values = Array.isArray(args) ? args : [args];
+  return truncateUtf8(util.format(...values));
 }
 
 function normalizeLogLevel(value) {
@@ -353,13 +340,7 @@ function createCloudWatchLogger({
     if (!shouldCapture(normalizedLevel)) return false;
     const timestamp = now().getTime();
     const message = serializeLogMessage({
-      service,
-      level: normalizedLevel,
       args: Array.isArray(args) ? args : [args],
-      metadata,
-      timestamp,
-      hostname: safeHost,
-      pid,
     });
 
     while (queue.length >= config.maxQueue) {
@@ -367,7 +348,7 @@ function createCloudWatchLogger({
       droppedCount += 1;
     }
     queue.push({ timestamp, message });
-    scheduleFlush();
+    void flush();
     return true;
   }
 
