@@ -5,6 +5,14 @@ require("dotenv").config();
 
 const http = require("http");
 const { loadAwsSecrets } = require("../config/load-aws-secrets");
+const { createCloudWatchLogger } = require("../services/logging/cloudwatch-logger");
+
+const cloudwatchLogger = createCloudWatchLogger({
+  service: "crm",
+  credentialPrefix: "CRM_SECRETS_",
+  defaultLogGroup: "/findoly/crm/production",
+});
+cloudwatchLogger.install();
 
 let server = null;
 let mongoose = null;
@@ -43,6 +51,7 @@ async function shutdown(signal) {
   }
 
   clearTimeout(forceTimer);
+  await cloudwatchLogger.shutdown({ timeoutMs: 2000 });
   process.exit(0);
 }
 
@@ -60,6 +69,7 @@ async function start({
   httpModule = http,
 } = {}) {
   const secretResult = await loadSecrets();
+  cloudwatchLogger.configureFromEnv();
   if (!secretResult.skipped) {
     console.log(`CRM configuration loaded from AWS Secrets Manager (${secretResult.loaded} values)`);
   }
@@ -94,9 +104,10 @@ async function start({
 function run() {
   if (runPromise) return runPromise;
   installSignalHandlers();
-  runPromise = start().catch((error) => {
+  runPromise = start().catch(async (error) => {
     console.error("CRM startup failed:", error.message);
     process.exitCode = 1;
+    await cloudwatchLogger.flush({ timeoutMs: 2000 });
     throw error;
   });
   return runPromise;
@@ -105,6 +116,7 @@ function run() {
 run().catch(() => {});
 
 module.exports = {
+  cloudwatchLogger,
   installSignalHandlers,
   resolvePort,
   run,

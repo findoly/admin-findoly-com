@@ -145,50 +145,32 @@ test("AWS access failures stop startup without applying partial configuration", 
   assert.equal(env.MONGODB_URI, undefined);
 });
 
-test("start.js loads the application only after runtime bootstrap completes", async () => {
-  const { start } = require("../start");
-  const events = [];
-  const app = {
-    locals: { databasePromise: Promise.resolve() },
-    set() {},
-  };
-  const fakeServer = new EventEmitter();
-  fakeServer.listening = false;
-  fakeServer.listen = (_port, callback) => {
-    events.push("listen");
-    fakeServer.listening = true;
-    callback();
-  };
+test("start.js remains a minimal Hostinger launcher and bin/www owns server startup", () => {
+  const startSource = fs.readFileSync(path.join(__dirname, "..", "start.js"), "utf8");
+  const serverSource = fs.readFileSync(path.join(__dirname, "..", "bin", "www"), "utf8");
 
-  await start({
-    bootstrap: async () => {
-      events.push("bootstrap");
-      return { loaded: 2, protectedCount: 0, skipped: false };
-    },
-    loadApp: () => {
-      events.push("app");
-      return app;
-    },
-    loadMongoose: () => ({ connection: { readyState: 0 } }),
-    httpModule: { createServer: () => fakeServer },
-  });
-
-  assert.deepEqual(events, ["bootstrap", "app", "listen"]);
+  assert.match(startSource, /require\(["']\.\/bin\/www["']\)/);
+  assert.doesNotMatch(startSource, /require\(["']\.\/app["']\)/);
+  assert.match(serverSource, /const secretResult = await loadSecrets\(\)/);
+  assert.match(serverSource, /const app = loadApp\(\)/);
+  assert.match(serverSource, /await app\.locals\.databasePromise/);
+  assert.match(serverSource, /server\.listen\(port/);
+  assert.ok(
+    serverSource.indexOf("await loadSecrets()") < serverSource.indexOf("const app = loadApp()"),
+    "Secrets Manager must load before app.js",
+  );
+  assert.ok(
+    serverSource.indexOf("await app.locals.databasePromise") < serverSource.indexOf("server.listen(port"),
+    "MongoDB readiness must complete before CRM begins listening",
+  );
 });
 
-test("dotenv is owned by the runtime bootstrap and is not reloaded by app.js or bin/www", () => {
+test("dotenv is loaded once by bin/www and is not reloaded by app.js", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
-  const wrapperSource = fs.readFileSync(path.join(__dirname, "..", "bin", "www"), "utf8");
-  const bootstrapSource = fs.readFileSync(path.join(__dirname, "..", "config", "bootstrap-runtime.js"), "utf8");
+  const serverSource = fs.readFileSync(path.join(__dirname, "..", "bin", "www"), "utf8");
   assert.doesNotMatch(appSource, /require\(["']dotenv["']\)/);
-  assert.doesNotMatch(wrapperSource, /require\(["']dotenv["']\)/);
-  assert.match(bootstrapSource, /require\(["']dotenv["']\)/);
-});
-
-test("bin/www remains a backward-compatible wrapper around start.js", () => {
-  const wrapperSource = fs.readFileSync(path.join(__dirname, "..", "bin", "www"), "utf8");
-  assert.match(wrapperSource, /require\(["']\.\.\/start["']\)\.run\(\)/);
-  assert.doesNotMatch(wrapperSource, /require\(["']\.\.\/app["']\)/);
+  assert.match(serverSource, /require\(["']dotenv["']\)\.config\(\)/);
+  assert.equal((serverSource.match(/require\(["']dotenv["']\)/g) || []).length, 1);
 });
 
 test("package scripts use start.js and bootstrap production maintenance commands", () => {
@@ -207,50 +189,9 @@ test("package scripts use start.js and bootstrap production maintenance commands
   }
 });
 
-
-test("bootstrap and database failures prevent the HTTP server from listening", async () => {
-  const { start } = require("../start");
-  let appLoaded = false;
-  let listenCalled = false;
-
-  await assert.rejects(
-    start({
-      bootstrap: async () => { throw new Error("secret unavailable"); },
-      loadApp: () => { appLoaded = true; },
-    }),
-    /secret unavailable/,
-  );
-  assert.equal(appLoaded, false);
-
-  const fakeServer = new EventEmitter();
-  fakeServer.listen = () => { listenCalled = true; };
-  await assert.rejects(
-    start({
-      bootstrap: async () => ({ loaded: 0, protectedCount: 0, skipped: true }),
-      loadApp: () => ({
-        locals: { databasePromise: Promise.reject(new Error("database unavailable")) },
-        set() {},
-      }),
-      loadMongoose: () => ({ connection: { readyState: 0 } }),
-      httpModule: { createServer: () => fakeServer },
-    }),
-    /database unavailable/,
-  );
-  assert.equal(listenCalled, false);
-});
-
-test("port binding failures reject CRM startup", async () => {
-  const { start } = require("../start");
-  const fakeServer = new EventEmitter();
-  fakeServer.listen = () => queueMicrotask(() => fakeServer.emit("error", new Error("address in use")));
-
-  await assert.rejects(
-    start({
-      bootstrap: async () => ({ loaded: 0, protectedCount: 0, skipped: true }),
-      loadApp: () => ({ locals: { databasePromise: Promise.resolve() }, set() {} }),
-      loadMongoose: () => ({ connection: { readyState: 0 } }),
-      httpModule: { createServer: () => fakeServer },
-    }),
-    /address in use/,
-  );
+test("CRM startup failures are logged and CloudWatch is flushed without importing app early", () => {
+  const serverSource = fs.readFileSync(path.join(__dirname, "..", "bin", "www"), "utf8");
+  assert.doesNotMatch(serverSource, /^const app = require\(["']\.\.\/app["']\)/m);
+  assert.match(serverSource, /console\.error\(["']CRM startup failed:/);
+  assert.match(serverSource, /await cloudwatchLogger\.flush\(\{ timeoutMs: 2000 \}\)/);
 });

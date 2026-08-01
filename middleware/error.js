@@ -75,7 +75,15 @@ function normalizedError(error = {}) {
 function errorHandler(error, req, res, next) {
   const normalized = normalizedError(error);
   if (normalized.status >= 500) {
-    console.error(`[${normalized.code}] ${req.method} ${req.originalUrl}:`, error);
+    console.error({
+      event: "http_request_error",
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl,
+      status: normalized.status,
+      code: normalized.code,
+      error,
+    });
   }
   if (req.originalUrl.startsWith("/api")) {
     return res.status(normalized.status).json({
