@@ -1,27 +1,30 @@
 #!/usr/bin/env node
+"use strict";
+
+require("dotenv").config();
+
 const http = require("http");
-const mongoose = require("mongoose");
-const app = require("../app");
+const { loadAwsSecrets } = require("../config/load-aws-secrets");
 
-const port = Number(process.env.PORT || 3000);
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  console.error("PORT must be a whole number between 1 and 65535");
-  process.exit(1);
-}
-
-app.set("port", port);
-const server = http.createServer(app);
+let server = null;
+let mongoose = null;
 let shuttingDown = false;
+let runPromise = null;
+let signalHandlersInstalled = false;
 
-server.on("error", (error) => {
-  console.error("HTTP server error:", error);
-  process.exitCode = 1;
-});
+function resolvePort(env = process.env) {
+  const port = Number(env.PORT || 3000);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("PORT must be a whole number between 1 and 65535");
+  }
+  return port;
+}
 
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`${signal} received. Shutting down CRM gracefully...`);
+
   const configuredTimeout = Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
   const shutdownTimeoutMs = Number.isFinite(configuredTimeout)
     ? Math.min(Math.max(configuredTimeout, 1000), 120000)
@@ -32,23 +35,79 @@ async function shutdown(signal) {
   }, shutdownTimeoutMs);
   forceTimer.unref();
 
-  await new Promise((resolve) => server.close(resolve));
-  if (mongoose.connection.readyState !== 0) {
+  if (server && server.listening) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  if (mongoose && mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch((error) => console.error("MongoDB disconnect error:", error.message));
   }
+
   clearTimeout(forceTimer);
   process.exit(0);
 }
 
-process.once("SIGTERM", () => shutdown("SIGTERM"));
-process.once("SIGINT", () => shutdown("SIGINT"));
+function installSignalHandlers() {
+  if (signalHandlersInstalled) return;
+  signalHandlersInstalled = true;
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+}
 
-(async () => {
-  try {
-    await app.locals.databasePromise;
-    server.listen(port, () => console.log(`Findoly CRM listening on port ${port}`));
-  } catch (error) {
-    console.error("CRM startup failed:", error.message);
-    process.exit(1);
+async function start({
+  loadSecrets = loadAwsSecrets,
+  loadApp = () => require("../app"),
+  loadMongoose = () => require("mongoose"),
+  httpModule = http,
+} = {}) {
+  const secretResult = await loadSecrets();
+  if (!secretResult.skipped) {
+    console.log(`CRM configuration loaded from AWS Secrets Manager (${secretResult.loaded} values)`);
   }
-})();
+
+  const app = loadApp();
+  mongoose = loadMongoose();
+  const port = resolvePort();
+  app.set("port", port);
+  server = httpModule.createServer(app);
+
+  await app.locals.databasePromise;
+  await new Promise((resolve, reject) => {
+    const onError = (error) => {
+      server.off("error", onError);
+      reject(error);
+    };
+    server.once("error", onError);
+    server.listen(port, () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+
+  server.on("error", (error) => {
+    console.error("HTTP server error:", error);
+    process.exitCode = 1;
+  });
+  console.log(`Findoly CRM listening on port ${port}`);
+  return server;
+}
+
+function run() {
+  if (runPromise) return runPromise;
+  installSignalHandlers();
+  runPromise = start().catch((error) => {
+    console.error("CRM startup failed:", error.message);
+    process.exitCode = 1;
+    throw error;
+  });
+  return runPromise;
+}
+
+run().catch(() => {});
+
+module.exports = {
+  installSignalHandlers,
+  resolvePort,
+  run,
+  shutdown,
+  start,
+};
