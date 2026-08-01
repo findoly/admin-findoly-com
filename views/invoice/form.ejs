@@ -196,12 +196,15 @@
                   error: "",
                   saving: false,
                   async init() {
-                    if (this.mode === "edit")
+                    if (this.mode === "edit") {
+                      const record = (await apiFetch("/api/invoice/" + this.recordId)).data;
                       this.form = {
                         ...this.form,
-                        ...(await apiFetch("/api/invoice/" + this.recordId))
-                          .data,
+                        ...record,
+                        issueDate: formatIndiaDateInput(record.issueDate),
+                        dueDate: formatIndiaDateInput(record.dueDate),
                       };
+                    }
                   },
                   async save() {
                     if (this.saving) return;

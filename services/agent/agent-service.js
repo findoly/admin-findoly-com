@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const uuid = require("../../utils/uuid");
 const Agent = require("../../models/Agent");
 const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
@@ -7,6 +8,9 @@ const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { textValue, emailValue, enumValue, booleanValue, numberValue, tokenValue, queryTextValue, identifierValue, validationError, pincodeValue } = require("../../utils/validation");
 const accountRegistrationService = require("../communication/account-registration-service");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { withTransaction } = require("../../utils/transaction");
+const { syncEntityContacts } = require("../contact-identity/contact-identity-service");
 
 const AGENT_TYPES = Object.freeze(["individual", "shop"]);
 const AGENT_STATUSES = Object.freeze(["active", "inactive", "pending", "blocked"]);
@@ -50,13 +54,15 @@ async function normalizeInput(input = {}, current = {}, actor = "crm-admin") {
   const state = textValue(input.state ?? current.state, { label: "State", maxLength: 100 });
   const pincode = pincodeValue(input.pincode ?? current.pincode, { label: "Pincode", required: false });
   if (pincode && (!city || !state)) throw validationError("City and state are required when an agent pincode is provided");
+  const email = emailValue(input.email ?? current.email, { label: "Agent email", required: false });
   return {
     agentType,
     name: textValue(input.name ?? current.name, { label: "Agent name", required: true, maxLength: 120 }),
     businessName,
     mobile,
     normalizedMobile: mobile,
-    email: emailValue(input.email ?? current.email, { label: "Agent email", required: false }),
+    email,
+    normalizedEmail: email,
     addressLine,
     city,
     state,
@@ -85,7 +91,14 @@ async function list(filters = {}) {
   if (filters.agentType) query.agentType = enumValue(filters.agentType, AGENT_TYPES, { label: "Agent type filter" });
   if (filters.categorySlug) query.categorySlug = tokenValue(filters.categorySlug, { label: "Category filter", maxLength: 80 });
   const q = queryTextValue(filters.q, { label: "Agent search", maxLength: 100 });
-  if (q) { const search = new RegExp(escapeRegex(q), "i"); query.$or = [{ agentId: search }, { referralId: search }, { name: search }, { businessName: search }, { mobile: search }, { email: search }, { city: search }]; }
+  if (q) {
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["agentId", "referralId"],
+      phoneFields: ["normalizedMobile", "mobile"],
+      emailFields: ["email"],
+      prefixFields: ["name", "businessName", "city"],
+    });
+  }
   applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date" } });
   const result = await cursorPaginate(Agent, { query, sort: dateSort(filters, { fields: ["createdAt", "updatedAt"] }), limit, cursor });
   return { ...result, data: result.data.map(presentAgent) };
@@ -101,9 +114,19 @@ async function create(input = {}, actor = "crm-admin") {
   const data = await normalizeInput(input, {}, actor);
   if (data.payoutEnabled && !data.razorpayFundAccountId) throw validationError("Razorpay fund account ID is required when payouts are enabled");
   for (let attempt = 0; attempt < 20; attempt += 1) {
+    const agentId = uuid();
+    const referralId = generateReferralId();
     try {
-      const row = await Agent.create({ ...data, referralId: generateReferralId(), createdBy: actorValue(actor) });
-      const created = await get(row.agentId);
+      await withTransaction(async (session) => {
+        await syncEntityContacts({
+          entityType: "agent",
+          entityId: agentId,
+          contacts: { mobile: data.normalizedMobile, email: data.normalizedEmail },
+          session,
+        });
+        await Agent.create([{ ...data, agentId, referralId, createdBy: actorValue(actor) }], { session });
+      }, { operationLabel: "Agent account creation" });
+      const created = await get(agentId);
       await accountRegistrationService.dispatch(
         "agent_created",
         { agent: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
@@ -112,7 +135,12 @@ async function create(input = {}, actor = "crm-admin") {
       return created;
     } catch (error) {
       if (error?.code === 11000 && error?.keyPattern?.referralId) continue;
-      if (error?.code === 11000 && (error?.keyPattern?.normalizedMobile || error?.keyPattern?.mobile)) throw Object.assign(new Error("An agent already uses this mobile number"), { status: 409 });
+      if (error?.code === 11000 || error?.code === "CONTACT_ALREADY_EXISTS") {
+        throw Object.assign(new Error("An Agent, Provider, Employee, or provider request already uses these contact details"), {
+          status: 409,
+          code: "CONTACT_ALREADY_EXISTS",
+        });
+      }
       throw error;
     }
   }
@@ -127,8 +155,26 @@ async function update(agentId, input = {}, actor = "crm-admin") {
   }
   const data = await normalizeInput(input, existing, actor);
   if (data.payoutEnabled && !data.razorpayFundAccountId) throw validationError("Razorpay fund account ID is required when payouts are enabled");
-  try { await Agent.updateOne({ agentId: existing.agentId }, { $set: data }); }
-  catch (error) { if (error?.code === 11000) throw Object.assign(new Error("An agent already uses this mobile number"), { status: 409 }); throw error; }
+  try {
+    await withTransaction(async (session) => {
+      await syncEntityContacts({
+        entityType: "agent",
+        entityId: existing.agentId,
+        contacts: { mobile: data.normalizedMobile, email: data.normalizedEmail },
+        session,
+      });
+      const result = await Agent.updateOne({ agentId: existing.agentId }, { $set: data }, { session });
+      if (result.matchedCount !== 1) throw Object.assign(new Error("Agent changed while it was being updated"), { status: 409 });
+    }, { operationLabel: "Agent account update" });
+  } catch (error) {
+    if (error?.code === 11000 || error?.code === "CONTACT_ALREADY_EXISTS") {
+      throw Object.assign(new Error("An Agent, Provider, Employee, or provider request already uses these contact details"), {
+        status: 409,
+        code: "CONTACT_ALREADY_EXISTS",
+      });
+    }
+    throw error;
+  }
   return get(existing.agentId);
 }
 

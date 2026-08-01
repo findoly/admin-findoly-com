@@ -1,4 +1,5 @@
 const Provider = require("../../models/Provider");
+const uuid = require("../../utils/uuid");
 const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const WalletTransaction = require("../../models/WalletTransaction");
 const { validateMobile } = require("../../utils/mobile");
@@ -18,8 +19,11 @@ const {
   pincodeValue,
 } = require("../../utils/validation");
 const { geocodePincode } = require("../location/geocoding-service");
+const { buildSearchAlternatives, prefixRegex } = require("../../utils/search-query");
 const accountRegistrationService = require("../communication/account-registration-service");
 const catalogService = require("../catalog/catalog-service");
+const { withTransaction } = require("../../utils/transaction");
+const { assertContactsAvailable, syncEntityContacts } = require("../contact-identity/contact-identity-service");
 
 const PROVIDER_STATUSES = Object.freeze([
   "active",
@@ -58,6 +62,10 @@ function normalizeProviderInput(input = {}, current = {}) {
   if (!/^[6-9]\d{9}$/.test(mobile)) {
     throw validationError("Provider mobile number must be a valid Indian mobile number");
   }
+  const email = emailValue(input.email ?? current.email, {
+    label: "Provider email",
+    required: false,
+  });
   return {
     name: textValue(input.name ?? current.name, {
       label: "Provider name",
@@ -70,10 +78,14 @@ function normalizeProviderInput(input = {}, current = {}) {
     }),
     mobile,
     normalizedMobile: mobile,
-    email: emailValue(input.email ?? current.email, {
-      label: "Provider email",
-      required: false,
+    whatsappNumber: validateMobile(input.whatsappNumber ?? current.whatsappNumber ?? mobile, {
+      label: "Provider WhatsApp number",
     }),
+    normalizedWhatsappNumber: validateMobile(input.whatsappNumber ?? current.whatsappNumber ?? mobile, {
+      label: "Provider WhatsApp number",
+    }),
+    email,
+    normalizedEmail: email,
     status: enumValue(input.status, PROVIDER_STATUSES, {
       label: "Provider status",
       fallback: current.status || "active",
@@ -197,21 +209,18 @@ async function list(filters = {}) {
     label: "Provider city filter",
     maxLength: 100,
   });
-  if (city) query.city = new RegExp(escapeRegex(city), "i");
+  if (city) query.city = prefixRegex(city);
   const q = queryTextValue(filters.q, {
     label: "Provider search",
     maxLength: 100,
   });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { providerId: search },
-      { name: search },
-      { businessName: search },
-      { mobile: search },
-      { email: search },
-      { city: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["providerId"],
+      phoneFields: ["normalizedMobile", "mobile"],
+      emailFields: ["normalizedEmail", "email"],
+      prefixFields: ["name", "businessName", "city"],
+    });
   }
 
   applyDateRange(query, filters, { fields: { createdAt: "Created date", updatedAt: "Updated date" } });
@@ -393,16 +402,18 @@ async function applyProviderLocation(data, current = {}) {
   }
 }
 
-async function assertUniqueProviderMobile(mobile, excludingProviderId = "") {
-  const query = { normalizedMobile: mobile };
-  if (excludingProviderId) query.providerId = { $ne: excludingProviderId };
-  if (await Provider.exists(query)) {
-    throw Object.assign(new Error("A provider already uses this mobile number"), { status: 409 });
-  }
+async function assertUniqueProviderContacts({ mobile, whatsappNumber = "", email = "" }, excludingProviderId = "", options = {}) {
+  await assertContactsAvailable({
+    entityType: "provider",
+    entityId: excludingProviderId,
+    contacts: { mobile, whatsappNumber, email },
+    allowedProviderJoinRequestId: options.allowedProviderJoinRequestId || "",
+    session: options.session || null,
+  });
 }
 
 async function assertAvailableProviderCategories(categorySlugs = []) {
-  const available = await catalogService.listCategories({ includeInactive: false });
+  const available = await catalogService.listCategories({ includeInactive: false, includeLegacy: false });
   const allowed = new Set(available.map((category) => String(category.slug || "")));
   const unavailable = categorySlugs.filter((slug) => !allowed.has(slug));
   if (unavailable.length) {
@@ -410,21 +421,36 @@ async function assertAvailableProviderCategories(categorySlugs = []) {
   }
 }
 
-async function create(input, actor = "crm-admin") {
+async function create(input, actor = "crm-admin", options = {}) {
   const normalized = normalizeProviderInput(input);
   await assertAvailableProviderCategories(normalized.categorySlugs);
-  await assertUniqueProviderMobile(normalized.normalizedMobile);
   const data = await applyProviderLocation(normalized);
-  let provider;
+  const providerId = uuid();
   try {
-    provider = await Provider.create(data);
+    await withTransaction(async (session) => {
+      await syncEntityContacts({
+        entityType: "provider",
+        entityId: providerId,
+        contacts: {
+          mobile: data.normalizedMobile,
+          whatsappNumber: data.normalizedWhatsappNumber,
+          email: data.normalizedEmail,
+        },
+        allowedProviderJoinRequestId: options.allowedProviderJoinRequestId || "",
+        session,
+      });
+      await Provider.create([{ ...data, providerId }], { session });
+    }, { operationLabel: "Provider account creation" });
   } catch (error) {
     if (error?.code === 11000) {
-      throw Object.assign(new Error("A provider with the same unique details already exists"), { status: 409 });
+      throw Object.assign(new Error("A provider, agent, employee, or joining request already uses these contact details"), {
+        status: 409,
+        code: "CONTACT_ALREADY_EXISTS",
+      });
     }
     throw error;
   }
-  const created = await get(provider.providerId);
+  const created = await get(providerId);
   await accountRegistrationService.dispatch(
     "provider_created",
     { provider: created, registrationDate: created.createdAt, idempotencySuffix: created.createdAt },
@@ -443,11 +469,34 @@ async function update(providerId, input = {}, actor = "crm-admin") {
 
   const normalized = normalizeProviderInput(input, current);
   await assertAvailableProviderCategories(normalized.categorySlugs);
-  await assertUniqueProviderMobile(normalized.normalizedMobile, current.providerId || current.id);
   const data = await applyProviderLocation(normalized, current);
-  await Provider.updateOne(query, { $set: data });
-  const provider = await get(providerId);
-  return provider;
+  try {
+    await withTransaction(async (session) => {
+      await syncEntityContacts({
+        entityType: "provider",
+        entityId: current.providerId || current.id,
+        contacts: {
+          mobile: data.normalizedMobile,
+          whatsappNumber: data.normalizedWhatsappNumber,
+          email: data.normalizedEmail,
+        },
+        session,
+      });
+      const result = await Provider.updateOne(query, { $set: data }, { session });
+      if (result.matchedCount !== 1) {
+        throw Object.assign(new Error("Provider changed while it was being updated"), { status: 409 });
+      }
+    }, { operationLabel: "Provider account update" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw Object.assign(new Error("A provider, agent, employee, or joining request already uses these contact details"), {
+        status: 409,
+        code: "CONTACT_ALREADY_EXISTS",
+      });
+    }
+    throw error;
+  }
+  return get(providerId);
 }
 
 async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {}, actor = "admin") {
@@ -536,4 +585,5 @@ module.exports = {
   PROVIDER_REVIEW_ACTIONS,
   reviewProviderOutcome,
   assertAvailableProviderCategories,
+  assertUniqueProviderContacts,
 };

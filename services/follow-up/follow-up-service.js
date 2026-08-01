@@ -1,6 +1,8 @@
 const FollowUp = require("../../models/FollowUp");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { parseIndiaDateTime } = require("../../utils/india-datetime");
 const {
   textValue,
   enumValue,
@@ -32,6 +34,21 @@ function optionalIdentifier(value, label) {
   return identifierValue(value, { label, required: false });
 }
 
+function followUpDateValue(value) {
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw validationError("Follow-up due date is invalid");
+    return new Date(value.getTime());
+  }
+  const normalized = dateTimeValue(value, {
+    label: "Follow-up due date",
+    required: false,
+  });
+  if (!normalized) return null;
+  const parsed = parseIndiaDateTime(normalized);
+  if (!parsed) throw validationError("Follow-up due date is invalid");
+  return parsed;
+}
+
 function normalizeFollowUpInput(input = {}, current = {}) {
   return {
     enquiryId: optionalIdentifier(
@@ -47,10 +64,7 @@ function normalizeFollowUpInput(input = {}, current = {}) {
       required: true,
       maxLength: 200,
     }),
-    dueAt: dateTimeValue(input.dueAt ?? current.dueAt, {
-      label: "Follow-up due date",
-      required: false,
-    }),
+    dueAt: followUpDateValue(input.dueAt ?? current.dueAt),
     owner: textValue(input.owner ?? current.owner, {
       label: "Follow-up owner",
       fallback: "admin",
@@ -106,13 +120,10 @@ async function list(filters = {}) {
     maxLength: 100,
   });
   if (q) {
-    const search = new RegExp(escapeRegex(q), "i");
-    query.$or = [
-      { title: search },
-      { customerName: search },
-      { notes: search },
-      { enquiryId: search },
-    ];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["followUpId", "enquiryId"],
+      prefixFields: ["title", "customerName"],
+    });
   }
   applyDateRange(query, filters, { fields: { dueAt: "Due date", createdAt: "Created date", updatedAt: "Updated date" }, defaultField: "dueAt" });
   return cursorPaginate(FollowUp, {
@@ -163,4 +174,5 @@ module.exports = {
   assertFollowUpIdUnchanged,
   FOLLOW_UP_STATUSES,
   FOLLOW_UP_CHANNELS,
+  followUpDateValue,
 };

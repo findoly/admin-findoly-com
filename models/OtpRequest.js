@@ -45,7 +45,7 @@ otpRequestSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: otpRetentionDays * 24 * 60 * 60, name: "otp_activity_ttl" },
 );
-otpRequestSchema.index({ recipient: 1, purpose: 1, createdAt: -1 });
-otpRequestSchema.index({ status: 1, createdAt: -1 });
+otpRequestSchema.index({ recipient: 1, purpose: 1, createdAt: -1, _id: -1 });
+otpRequestSchema.index({ status: 1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model("OtpRequest", otpRequestSchema, "otp_requests");

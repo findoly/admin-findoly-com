@@ -30,6 +30,14 @@ const providerSubscriptionSchema = new mongoose.Schema(
 
 providerSubscriptionSchema.index({ providerId: 1, purchasedAt: -1, _id: -1 });
 providerSubscriptionSchema.index({ status: 1, expiresAt: 1 });
+providerSubscriptionSchema.index({ purchasedAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ startsAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ expiresAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ createdAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ updatedAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ status: 1, purchasedAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ billingCycle: 1, purchasedAt: -1, _id: -1 });
+providerSubscriptionSchema.index({ planCode: 1, purchasedAt: -1, _id: -1 });
 
 module.exports = mongoose.model(
   "ProviderSubscription",

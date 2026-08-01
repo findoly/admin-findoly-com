@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 const connectDatabase = require("./db/connection");
 const { assertRuntimeConfig } = require("./utils/runtime-config");
 const { attachAdmin } = require("./middleware/auth");
+const { sameOriginAdminMutation } = require("./middleware/same-origin");
+const { requestIdMiddleware } = require("./middleware/request-id");
 const { notFound, errorHandler } = require("./middleware/error");
 const frontendRoutes = require("./routes/frontend");
 const apiRoutes = require("./routes/main");
@@ -22,6 +24,7 @@ else if (/^\d+$/.test(trustProxy)) app.set("trust proxy", Number(trustProxy));
 else app.set("trust proxy", trustProxy);
 
 app.disable("x-powered-by");
+app.use(requestIdMiddleware);
 app.locals.appName = process.env.APP_NAME || "Service CRM Admin";
 app.locals.apiBase = "/api";
 app.locals.databaseError = null;
@@ -80,6 +83,7 @@ app.use(express.static(path.join(__dirname, "public"), {
   index: false,
 }));
 app.use(attachAdmin);
+app.use(sameOriginAdminMutation);
 
 app.get("/api/health", (req, res) =>
   res.json({
@@ -88,7 +92,6 @@ app.get("/api/health", (req, res) =>
       service: "crm",
       status: "alive",
       databaseState: mongoose.connection.readyState,
-      database: mongoose.connection.name || null,
     },
   }),
 );

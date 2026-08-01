@@ -41,6 +41,7 @@ const withdrawalSchema = new mongoose.Schema(
       default: "submitted",
       index: true,
     },
+    activeSlot: { type: String, default: "", trim: true, maxlength: 64 },
     approvalHistory: { type: [mongoose.Schema.Types.Mixed], default: [] },
     submittedAt: { type: Date, default: Date.now, index: true },
     reviewedAt: { type: Date, default: null },
@@ -69,5 +70,20 @@ const withdrawalSchema = new mongoose.Schema(
 withdrawalSchema.index({ agentId: 1, status: 1, createdAt: -1 });
 withdrawalSchema.index({ status: 1, submittedAt: -1, _id: -1 });
 withdrawalSchema.index({ requirementIds: 1, status: 1 });
+withdrawalSchema.index({ submittedAt: -1, _id: -1 });
+withdrawalSchema.index({ createdAt: -1, _id: -1 });
+withdrawalSchema.index({ updatedAt: -1, _id: -1 });
+withdrawalSchema.index({ paidAt: -1, _id: -1 });
+withdrawalSchema.index({ agentId: 1, createdAt: -1, _id: -1 });
+withdrawalSchema.index({ status: 1, updatedAt: -1, _id: -1 });
+withdrawalSchema.index({ status: 1, paidAt: -1, _id: -1 });
+withdrawalSchema.index(
+  { activeSlot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { activeSlot: { $exists: true, $gt: "" } },
+    name: "agent_active_withdrawal_unique",
+  },
+);
 
 module.exports = mongoose.model("AgentWithdrawal", withdrawalSchema, "agent_withdrawals");

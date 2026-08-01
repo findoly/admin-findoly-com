@@ -79,6 +79,8 @@ test("login OTP send returns accepted state when delivery acknowledgement is unc
     "../services/access/otp-rate-limit-service": {
       claimSendSlot: async () => ({ requestId: "request-1" }),
       releaseSendSlot: async () => {},
+      claimIpSendSlot: async () => ({ key: "ip-key", windowStartedAt: new Date() }),
+      releaseIpSendSlot: async () => {},
     },
   });
   const req = { body: { mobile: "9876543210" } };
@@ -104,12 +106,13 @@ test("provider creation falls back to validated manual city/state without creati
   const Provider = {
     async exists() { return false; },
     async create(data) {
+      const value = Array.isArray(data) ? data[0] : data;
       saved = {
-        ...data,
-        providerId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ...value,
+        providerId: value.providerId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         createdAt: new Date("2026-07-25T10:00:00.000Z"),
       };
-      return saved;
+      return Array.isArray(data) ? [saved] : saved;
     },
     findOne() { return { lean: async () => saved }; },
     async updateOne() { return { matchedCount: 1 }; },
@@ -126,6 +129,15 @@ test("provider creation falls back to validated manual city/state without creati
       geocodePincode: async () => { throw Object.assign(new Error("maps unavailable"), { status: 503 }); },
     },
     "../communication/account-registration-service": { dispatch: async () => [] },
+    "../catalog/catalog-service": {
+      listCategories: async () => [{ slug: "painter", active: true }],
+    },
+    "../../utils/uuid": () => "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "../../utils/transaction": { withTransaction: async (work) => work({}) },
+    "../contact-identity/contact-identity-service": {
+      assertContactsAvailable: async () => [],
+      syncEntityContacts: async () => [],
+    },
   });
 
   const created = await providerService.create({
@@ -219,6 +231,9 @@ test("runtime configuration keeps optional incomplete S3 disabled without crashi
     AUTH_COOKIE_SECRET: "x".repeat(40),
     AWS_REGION: "ap-south-1",
     AWS_S3_BUCKET: "findoly-storage",
+    CORS_ORIGINS: "https://admin.findoly.com",
+    CRM_ADMIN_ORIGIN: "https://admin.findoly.com",
+    PUBLIC_INTAKE_API_TOKEN: "p".repeat(48),
   });
   assert.deepEqual(result.errors, []);
   assert.ok(result.warnings.some((message) => message.includes("S3 configuration is incomplete")));
@@ -233,6 +248,9 @@ test("S3 validator restricts paths, size and file types and creates short-lived 
   Object.assign(process.env, {
     AWS_REGION: "ap-south-1",
     AWS_S3_BUCKET: "findoly-storage",
+    CORS_ORIGINS: "https://admin.findoly.com",
+    CRM_ADMIN_ORIGIN: "https://admin.findoly.com",
+    PUBLIC_INTAKE_API_TOKEN: "p".repeat(48),
     AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
     AWS_SECRET_ACCESS_KEY: "secret-example",
     AWS_S3_PUBLIC_PREFIX: "public/",

@@ -1,222 +1,192 @@
 # Findoly CRM production deployment and manual QA checklist
 
-## 1. Deployment gate
+## 1. Release gate
 
-- [ ] Use **Node.js 20+** (`node --version`).
-- [ ] Take a MongoDB backup/snapshot.
-- [ ] Keep the previous working deployment package and environment configuration for rollback.
-- [ ] Extract the release into a new directory; do not overwrite the running release in place.
-- [ ] Run `npm ci`.
+- [ ] Use Node.js 20 or newer.
+- [ ] Confirm MongoDB is Atlas or another replica set with transactions enabled.
+- [ ] Take and verify a MongoDB snapshot/backup.
+- [ ] Keep the previous application release and environment configuration available for rollback.
+- [ ] Deploy into a new release directory; do not overwrite the running release in place.
+- [ ] Run `npm ci` from the committed lockfile.
 - [ ] Run `npm run qa:production`.
 - [ ] Run `npm run check`.
-- [ ] Run `npm test`.
-- [ ] Run the required migrations/backfills against staging first.
+- [ ] Run `npm test` and resolve every assertion or dependency failure.
+- [ ] Run all migrations against a production-like staging copy first.
+- [ ] Run the database query-plan gate against production-like data.
 - [ ] Confirm `/api/health` returns 200.
-- [ ] Confirm `/api/ready` returns 200 after MongoDB connects.
+- [ ] Confirm `/api/ready` returns 200 only after MongoDB is connected.
 
 ## 2. Required environment review
 
-Core:
+Hostinger bootstrap values remain outside Secrets Manager:
 
 ```env
 NODE_ENV=production
-PORT=3000
-TRUST_PROXY=1
-MONGODB_URI=
-AUTH_COOKIE_SECRET=
-CORS_ORIGINS=https://admin.findoly.com,https://findoly.com,https://provider.findoly.com,https://agent.findoly.com
+PORT=3200
+CRM_SECRETS_REGION=ap-south-1
+CRM_SECRETS_SECRET_ID=findoly/crm/production
+CRM_SECRETS_ACCESS_KEY_ID=
+CRM_SECRETS_SECRET_ACCESS_KEY=
+CRM_SECRETS_TIMEOUT_MS=10000
 ```
 
-`AUTH_COOKIE_SECRET` must be at least 32 random characters. Adjust `TRUST_PROXY` to the hosting provider; do not blindly use an untrusted proxy setting.
-
-CRM login OTP:
+Application values loaded from Secrets Manager:
 
 ```env
-CRM_OTP_BASE_URL=https://api.findoly.com/otp
-# Optional overrides
-CRM_OTP_SEND_URL=
-CRM_OTP_VERIFY_URL=
-CRM_OTP_REQUEST_TIMEOUT_MS=12000
-CRM_OTP_SEND_ALLOW_UNCONFIRMED=true
+TRUST_PROXY=1
+APP_NAME=Findoly Dashboard
+MONGODB_URI=mongodb+srv://.../findoly_prod?retryWrites=true&w=majority
+AUTH_COOKIE_SECRET=
+AUTH_COOKIE_NAME=service_crm_admin
+CORS_ORIGINS=https://admin.findoly.com,https://findoly.com,https://provider.findoly.com,https://agent.findoly.com
+CRM_ADMIN_ORIGIN=https://admin.findoly.com
+PUBLIC_INTAKE_API_TOKEN=
+CRM_QUERY_MAX_TIME_MS=10000
+```
+
+Security-sensitive requirements:
+
+- [ ] `AUTH_COOKIE_SECRET` is a non-placeholder random value of at least 32 characters.
+- [ ] `PUBLIC_INTAKE_API_TOKEN` is a non-placeholder random value of at least 32 characters.
+- [ ] `MONGODB_URI` includes the explicit database name.
+- [ ] `CORS_ORIGINS` contains only trusted HTTPS browser origins.
+- [ ] `CRM_ADMIN_ORIGIN` exactly matches the admin browser origin and contains no path.
+- [ ] Secrets Manager, S3, CloudWatch, Razorpay, WhatsApp, SES and Slack credentials are scoped with least privilege.
+
+Recommended database and OTP settings:
+
+```env
+MONGO_AUTO_INDEX=false
+MONGO_MAX_POOL_SIZE=30
+MONGO_MIN_POOL_SIZE=2
+MONGO_MAX_IDLE_TIME_MS=60000
+MONGO_SERVER_SELECTION_TIMEOUT_MS=10000
+
 CRM_OTP_RESEND_SECONDS=30
 CRM_OTP_MAX_SENDS_PER_MINUTE=2
 CRM_OTP_RATE_WINDOW_SECONDS=60
+CRM_OTP_MAX_IP_REQUESTS_PER_HOUR=30
+CRM_OTP_IP_RATE_WINDOW_SECONDS=3600
+CRM_OTP_MAX_IP_VERIFY_ATTEMPTS_PER_HOUR=60
+CRM_OTP_IP_VERIFY_WINDOW_SECONDS=3600
 ```
 
-Integration protection:
+Optional cache settings:
 
 ```env
-PUBLIC_INTAKE_API_TOKEN=
-CUSTOMER_PORTAL_API_TOKEN=
-COMMUNICATION_EVENT_API_TOKEN=
-COMMUNICATION_OTP_API_TOKEN=
-MESSAGE_LAMBDA_WEBHOOK_TOKEN=
+DASHBOARD_CACHE_TTL_MS=60000
+DASHBOARD_COUNT_CAP=10000
+COMMUNICATION_DASHBOARD_CACHE_TTL_MS=30000
 ```
 
-Registration links:
+## 3. Mandatory migration order
 
-```env
-SUPPORT_EMAIL=support@findoly.com
-PROVIDER_PORTAL_LOGIN_URL=https://provider.findoly.com/login
-AGENT_PORTAL_LOGIN_URL=https://agent.findoly.com/login
-EMPLOYEE_CRM_LOGIN_URL=https://admin.findoly.com/login
+Use a maintenance window and run one application writer while contact identities are built.
+
+### Dry run
+
+```bash
+npm run migrate:provider-contacts -- --dry-run
+npm run migrate:follow-up-dates -- --dry-run
+npm run migrate:invoice-dates -- --dry-run
+npm run migrate:withdrawal-slots -- --dry-run
+npm run migrate:contact-identities -- --dry-run
 ```
 
-Location:
+- [ ] Resolve every malformed date/contact value reported by a dry run.
+- [ ] Resolve every duplicate mobile, WhatsApp or email across Agents, Providers, Employees and joining requests.
+- [ ] Resolve multiple active withdrawals for the same Agent.
 
-```env
-GOOGLE_MAPS_API_KEY=
-GOOGLE_MAPS_TIMEOUT_MS=8000
+### Apply
+
+```bash
+npm run migrate:provider-contacts
+npm run migrate:follow-up-dates
+npm run migrate:invoice-dates
+npm run migrate:withdrawal-slots
+npm run migrate:contact-identities
 ```
 
-Agent payouts:
+### Index and query verification
 
-```env
-AGENT_WITHDRAWAL_MAX_REFERRALS=1000
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
-RAZORPAYX_ACCOUNT_NUMBER=
-RAZORPAY_PAYOUT_WEBHOOK_SECRET=
-RAZORPAY_HTTP_TIMEOUT_MS=15000
+```bash
+npm run ensure:indexes
+npm run verify:indexes
+npm run verify:query-plans
 ```
 
-S3, SES, WhatsApp and Slack are documented in `S3_FILE_MANAGER_SETUP.md` and `COMMUNICATION_ENV_KEYS.md`.
+- [ ] Every model reports its declared indexes as present.
+- [ ] No duplicate-key/index-build error is present.
+- [ ] Query-plan verification reports no `COLLSCAN` or blocking `SORT` for its representative cases.
+- [ ] Review Atlas Performance Advisor after realistic test traffic.
 
-## 3. Database checks
+## 4. Security smoke tests
 
-- [ ] Confirm no duplicate provider `normalizedMobile` values before adding any future unique index.
-- [ ] Confirm Agent and Employee unique mobile indexes are healthy.
-- [ ] Confirm named IDs are present and unique for every primary collection.
-- [ ] Confirm lead and distribution pagination indexes exist.
-- [ ] Confirm `PincodeLocation` rows contain finite latitude/longitude values.
-- [ ] Confirm MongoDB supports transactions for provider credit operations.
-- [ ] Review index build logs for errors or duplicate-key failures.
+- [ ] A valid admin-origin POST/PUT/PATCH/DELETE succeeds.
+- [ ] A cross-origin admin mutation is rejected with 403.
+- [ ] A malformed/external login return path falls back to the dashboard.
+- [ ] Missing or weak public-intake token stops production startup.
+- [ ] Unknown employee and known employee OTP requests use the same generic public message.
+- [ ] OTP send and verify network throttles return 429 with `Retry-After`.
+- [ ] Request IDs are present on responses and safe server errors.
+- [ ] `/api/health` does not expose the database name or credentials.
 
-Suggested duplicate-provider query:
+## 5. Contact uniqueness smoke tests
 
-```javascript
-db.providers.aggregate([
-  { $match: { normalizedMobile: { $type: "string", $ne: "" } } },
-  { $group: { _id: "$normalizedMobile", count: { $sum: 1 }, providerIds: { $push: "$providerId" } } },
-  { $match: { count: { $gt: 1 } } }
-])
-```
+- [ ] Create an Agent with unique mobile/email.
+- [ ] Attempt a Provider with the Agent's mobile; creation is rejected.
+- [ ] Attempt an Employee with the Provider's email; creation is rejected.
+- [ ] Attempt a Provider whose WhatsApp matches another entity's mobile; creation is rejected.
+- [ ] Update one entity while preserving its own contacts; update succeeds.
+- [ ] Update one entity to another entity's contact; update is rejected.
+- [ ] Convert a provider joining request; contact ownership transfers to the created Provider.
+- [ ] Repeat conversion; no duplicate Provider or duplicate welcome communication is created.
 
-## 4. Manual QA scripts
+## 6. Financial consistency smoke tests
 
-### Login and OTP
+- [ ] Submit two withdrawal requests concurrently for one Agent; only one becomes active.
+- [ ] Change referral eligibility while a payout is processing; the protected row cannot be reused.
+- [ ] Double-click payout; one external payout claim is created.
+- [ ] Simulate an uncertain Razorpay response; withdrawal remains reconcilable rather than incorrectly failed.
+- [ ] Apply a terminal failed webhook twice; state remains idempotent.
+- [ ] Complete payout and confirm all related enquiry rows become paid in the same transaction.
+- [ ] Reverse payout and confirm paid/reserved rows are released correctly.
 
-- [ ] Active employee receives OTP and can sign in.
-- [ ] OTP provider returns JSON success.
-- [ ] OTP provider returns plain-text success.
-- [ ] Simulate/observe gateway timeout after an OTP arrives; CRM should move to OTP entry with an accepted message.
-- [ ] Wrong OTP does not create a session.
-- [ ] Resend before wait ends returns 429 and `Retry-After`.
-- [ ] Inactive employee cannot request/login.
-- [ ] Logout clears the session and protected pages redirect to login.
+## 7. Date and list regression tests
 
-### Provider
+- [ ] Existing follow-ups display, edit and filter correctly after the date migration.
+- [ ] Existing invoices display and filter by issue/due date correctly after migration.
+- [ ] Cursor pagination preserves stable ordering under concurrent inserts.
+- [ ] Invalid or oversized cursors return 400 rather than 500.
+- [ ] Provider-subscription search returns results beyond the old 500-provider boundary.
+- [ ] Dashboard counters remain responsive on production-like volumes.
 
-- [ ] Create with valid Indian mobile, category and pincode.
-- [ ] Create while Google Maps is available; city/state and coordinates are verified.
-- [ ] Create while Google Maps is unavailable; manually entered city/state are saved and the account still succeeds.
-- [ ] Duplicate provider mobile returns a clear conflict.
-- [ ] Invalid pincode/mobile/email are rejected frontend and backend.
-- [ ] Edit categories, status and portal access.
-- [ ] Click **Sync leads** after a manually saved location is verified.
-- [ ] Disable registration rule: account creates with no email.
-- [ ] Enable rule with active Provider template: one email is logged/sent.
-- [ ] Break SES temporarily: provider still creates and failure is visible in communication logs.
+## 8. Existing feature smoke tests
 
-### Agent
+- [ ] Employee login/logout and role revocation.
+- [ ] Provider, Agent and Employee create/update.
+- [ ] Provider joining request review and conversion.
+- [ ] Lead creation, verification, publication and provider unlock.
+- [ ] Communication Center rules, templates, logs, OTP activity and provider-created notification.
+- [ ] S3 File Manager list/upload/download/error logging.
+- [ ] Razorpay webhook signature validation.
+- [ ] WhatsApp, SES and message-delivery webhook validation.
 
-- [ ] Create individual agent.
-- [ ] Shop agent without business name is blocked.
-- [ ] Pincode with missing city/state is blocked.
-- [ ] Invalid payout mode/rate is blocked.
-- [ ] Enabling payout without Razorpay fund account is blocked.
-- [ ] Duplicate mobile/referral ID returns a clear conflict.
-- [ ] Agent registration rule sends only once.
+## 9. Scale validation
 
-### Employee and roles
+- [ ] Load representative data volumes into staging.
+- [ ] Run `npm run verify:query-plans` against that dataset.
+- [ ] Capture p50, p95 and p99 latency for major list, search and write operations.
+- [ ] Monitor MongoDB documents examined/returned, blocking sorts, working set and connection pool saturation.
+- [ ] Test concurrent account creation, provider conversion, withdrawal and payout operations.
+- [ ] Confirm CloudWatch rotates streams every UTC 15 minutes and does not intentionally resend confirmed batches.
 
-- [ ] Create employee with active role and valid mobile.
-- [ ] Missing/inactive role is rejected.
-- [ ] Duplicate mobile is rejected.
-- [ ] Disable employee and confirm existing cookie loses access on next request.
-- [ ] Remove a permission and confirm API and page access are both denied.
-- [ ] Employee registration rule sends only once.
+Broad free-text search should move to Atlas Search or dedicated normalized search fields before sustained million-record use. Per-process caches/rate limits should move to a shared store before horizontal scaling.
 
-### Lead journey
+## 10. Go-live and rollback
 
-- [ ] Create lead with valid mobile, pincode, city/state and category.
-- [ ] Edit lead without changing its reference ID.
-- [ ] Agent lead requires the mandatory validation and status-change notes.
-- [ ] Invalid referral moves to Rejected as expected.
-- [ ] Valid lead advances through New → Verification → Approved → Distributed.
-- [ ] Publishing before Distributed is rejected.
-- [ ] Publishing without verified coordinates is rejected clearly.
-- [ ] Duplicate publish click produces one result.
-- [ ] Provider Confirmed changes sale conversion; removing all confirmations returns to Distributed.
-- [ ] Deactivate and reactivate retain the record and timeline.
-
-### Communication Center
-
-- [ ] Create active email templates for Provider, Agent and Employee.
-- [ ] Attach each template to the corresponding registration rule and enable it.
-- [ ] Save rule with inactive email template is rejected.
-- [ ] Send direct Email, WhatsApp and Slack test messages.
-- [ ] Retry a failed log once and check idempotency behaviour.
-- [ ] Verify WhatsApp webhook challenge and signed event.
-- [ ] Verify SES SNS delivery/bounce event.
-- [ ] Verify message-delivery integration rejects an invalid token.
-
-### Billing, follow-ups and categories
-
-- [ ] Create invoice with valid line items and totals.
-- [ ] Duplicate invoice number is rejected.
-- [ ] Negative/invalid quantity, rate or tax are rejected.
-- [ ] Due date before issue date is rejected.
-- [ ] Create/edit follow-up with valid local date-time.
-- [ ] Create duplicate category name/slug and confirm clear error.
-
-### Credits and payouts
-
-- [ ] Add provider credits with an authorised role.
-- [ ] Repeat the exact idempotency request and confirm balance changes once.
-- [ ] Confirm unauthorised role cannot add credits.
-- [ ] Validate agent eligibility counts with known test data.
-- [ ] Submit and approve withdrawal through all stages.
-- [ ] Double-click payout and confirm only one Razorpay request is claimed.
-- [ ] Use Razorpay test mode and a signed payout webhook.
-- [ ] Confirm failed payout can be safely reviewed/retried according to status rules.
-
-### S3 File Manager
-
-- [ ] Without S3 variables, CRM starts and File Manager shows configuration disabled.
-- [ ] List root/public/private prefixes.
-- [ ] Create a folder.
-- [ ] Upload allowed image and PDF.
-- [ ] Reject oversized file, forbidden extension and path traversal.
-- [ ] Preview/download a private file using the short-lived URL.
-- [ ] Copy public CloudFront URL.
-- [ ] Replace an existing file only after the UI confirmation.
-- [ ] Confirm a `storage.view`-only role cannot upload.
-
-### Pagination and load
-
-- [ ] Navigate next/previous on leads, providers, agents, distributions, communications, invoices and follow-ups.
-- [ ] Invalid/oversized cursor returns 400, not 500.
-- [ ] Verify filters use indexes with MongoDB `explain()` on staging-sized data.
-- [ ] Load Communication dashboard with a large log collection and monitor MongoDB/application memory.
-- [ ] Verify partner eligibility does not load all eligible referrals into application memory.
-
-## 5. Go-live and rollback
-
-- [ ] Put the application in a short maintenance/read-only window if migrations are required.
-- [ ] Deploy the new release directory and environment variables.
 - [ ] Start one instance and complete smoke tests before scaling out.
-- [ ] Watch logs for `INVALID_RUNTIME_CONFIG`, MongoDB, OTP, geocoding, SES, Razorpay and S3 errors.
-- [ ] Confirm provider create and OTP login first; these are the release-critical checks.
+- [ ] Watch CloudWatch/Hostinger logs for startup, migration, index, MongoDB, OTP, S3, communication and payout errors.
 - [ ] Enable traffic gradually.
-- [ ] If a blocker appears, restore the previous release and database snapshot/migration rollback plan.
+- [ ] Monitor transactions, duplicate-key errors, query timeouts and rate-limit responses.
+- [ ] If a release blocker appears, stop traffic, restore the previous release, and follow the verified database rollback/restore procedure.

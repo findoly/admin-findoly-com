@@ -4,124 +4,92 @@
   <body x-data="crmShell()" x-init="initShell()">
     <%- include('../partials/navbar') %>
     <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
-      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Secrets remain in environment variables; this page only reports readiness.</p></div></div></div>
-      <div class="content" x-data="settingsPage()" x-init="load()">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Review each delivery channel separately and see exactly what needs attention.</p></div>
+          <a href="/communications/logs" class="btn btn-light crm-primary-action">View delivery logs</a>
+        </div>
+      </div>
+      <div class="content" x-data="channelManagementPage()" x-init="load()">
         <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
         <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
         <%- include('_navigation', { active: 'settings' }) %>
-        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
-          <div><h5 class="mb-1">Configuration readiness</h5><p class="text-muted mb-0">Review all services or focus only on missing configuration.</p></div>
-          <div class="crm-communication-settings-filter" role="group" aria-label="Configuration filter">
-            <button type="button" class="btn btn-light btn-sm" :class="!showIssuesOnly ? 'is-active' : ''" @click="showIssuesOnly=false">Show all</button>
-            <button type="button" class="btn btn-light btn-sm" :class="showIssuesOnly ? 'is-active' : ''" @click="showIssuesOnly=true">Configuration issues only</button>
+
+        <section class="crm-channel-picker" aria-label="Communication channels">
+          <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'whatsapp' }" @click="selectChannel('whatsapp')" :aria-pressed="(activeChannel === 'whatsapp').toString()">
+            <span class="crm-channel-picker-icon">WA</span><span><strong>WhatsApp</strong><small>Meta templates and delivery</small></span><span class="crm-status" :class="channelReady('whatsapp') ? 'status-approved' : 'status-rejected'" x-text="channelReady('whatsapp') ? 'Ready' : 'Setup needed'"></span>
+          </button>
+          <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'email' }" @click="selectChannel('email')" :aria-pressed="(activeChannel === 'email').toString()">
+            <span class="crm-channel-picker-icon">EM</span><span><strong>Email</strong><small>Amazon SES templates</small></span><span class="crm-status" :class="channelReady('email') ? 'status-approved' : 'status-rejected'" x-text="channelReady('email') ? 'Ready' : 'Setup needed'"></span>
+          </button>
+          <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'slack' }" @click="selectChannel('slack')" :aria-pressed="(activeChannel === 'slack').toString()">
+            <span class="crm-channel-picker-icon">SL</span><span><strong>Slack</strong><small>Internal team alerts</small></span><span class="crm-status" :class="channelReady('slack') ? 'status-approved' : 'status-rejected'" x-text="channelReady('slack') ? 'Ready' : 'Setup needed'"></span>
+          </button>
+          <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'otp' }" @click="selectChannel('otp')" :aria-pressed="(activeChannel === 'otp').toString()">
+            <span class="crm-channel-picker-icon">OTP</span><span><strong>OTP</strong><small>Login verification security</small></span><span class="crm-status" :class="channelReady('otp') ? 'status-approved' : 'status-rejected'" x-text="channelReady('otp') ? 'Ready' : 'Setup needed'"></span>
+          </button>
+          <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'delivery' }" @click="selectChannel('delivery')" :aria-pressed="(activeChannel === 'delivery').toString()">
+            <span class="crm-channel-picker-icon">SYS</span><span><strong>Delivery &amp; retention</strong><small>Gateway, webhooks and log TTL</small></span><span class="crm-status" :class="channelReady('delivery') ? 'status-approved' : 'status-inactive'" x-text="channelReady('delivery') ? 'Ready' : 'Review'"></span>
+          </button>
+        </section>
+
+        <section class="card crm-channel-panel" x-show="activeChannel === 'whatsapp'" x-cloak>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">WhatsApp Cloud API</h5><p class="text-muted mb-0">Used for approved Meta templates, provider alerts, customer updates and OTP delivery.</p></div><a href="/communications/templates?channel=whatsapp" class="btn btn-primary btn-sm">Manage WhatsApp templates</a></div>
+          <div class="card-body crm-channel-panel-grid">
+            <div class="crm-channel-checklist"><template x-for="item in whatsappItems" :key="item.label"><div><span x-text="item.label"></span><span class="crm-status" :class="item.value ? 'status-approved':'status-rejected'" x-text="item.value ? 'Configured':'Missing'"></span></div></template></div>
+            <aside class="crm-channel-help"><h6>How this channel works</h6><ol><li>Configure the Meta credentials in Secrets Manager.</li><li>Create a WhatsApp template in Manage templates.</li><li>Submit it to Meta and wait for approval.</li><li>Select the approved template in an automation rule.</li></ol><div><strong>API version:</strong> <span x-text="config.whatsapp?.apiVersion || '—'"></span></div><div><strong>Country code:</strong> <span x-text="config.whatsapp?.defaultCountryCode || '—'"></span></div></aside>
           </div>
-        </div>
-        <div x-show="showIssuesOnly && issueCount === 0" x-cloak class="alert alert-success">All communication services required by the current delivery mode are configured.</div>
-        <div class="row g-3">
-          <div class="col-lg-6" x-show="visibleSection('whatsapp')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">WhatsApp Cloud API</h5></div>
-              <div class="card-body">
-                <template x-for="item in whatsappItems" :key="item.label"><div class="d-flex justify-content-between border-bottom py-2"><span x-text="item.label"></span><span class="crm-status" :class="item.value ? 'status-approved':'status-rejected'" x-text="item.value ? 'Configured':'Missing'"></span></div></template>
-                <div class="d-flex justify-content-between py-2"><span>API version</span><strong x-text="config.whatsapp?.apiVersion||'—'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Default country code</span><strong x-text="config.whatsapp?.defaultCountryCode||'—'"></strong></div>
-              </div>
-            </section>
+        </section>
+
+        <section class="card crm-channel-panel" x-show="activeChannel === 'email'" x-cloak>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">Email through Amazon SES</h5><p class="text-muted mb-0">Used for transactional and marketing email templates.</p></div><a href="/communications/templates?channel=email" class="btn btn-primary btn-sm">Manage email templates</a></div>
+          <div class="card-body crm-channel-panel-grid">
+            <div class="crm-channel-checklist"><div><span>Verified sender email</span><span class="crm-status" :class="config.email?.fromEmail ? 'status-approved':'status-rejected'" x-text="config.email?.fromEmail ? 'Configured':'Missing'"></span></div><div><span>AWS credentials or role</span><span class="crm-status" :class="config.email?.credentials ? 'status-approved':'status-inactive'" x-text="config.email?.credentials ? 'Detected':'Use IAM role or credentials'"></span></div><div><span>Region</span><strong x-text="config.email?.region || '—'"></strong></div><div><span>Configuration set</span><strong x-text="config.email?.configurationSet || 'Not set'"></strong></div></div>
+            <aside class="crm-channel-help"><h6>How this channel works</h6><ol><li>Verify the sender email or domain in Amazon SES.</li><li>Create an email template in Manage templates.</li><li>Select the active email template in an automation rule.</li><li>Use Message logs to confirm delivery or failure.</li></ol></aside>
           </div>
-          <div class="col-lg-6" x-show="visibleSection('email')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">Amazon SES</h5></div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Sender email</span><span class="crm-status" :class="config.email?.fromEmail?'status-approved':'status-rejected'" x-text="config.email?.fromEmail?'Configured':'Missing'"></span></div>
-                <div class="d-flex justify-content-between border-bottom py-2"><span>AWS credentials/role</span><span class="crm-status" :class="config.email?.credentials?'status-approved':'status-inactive'" x-text="config.email?.credentials?'Detected':'Use instance role or credentials'"></span></div>
-                <div class="d-flex justify-content-between py-2"><span>Region</span><strong x-text="config.email?.region||'—'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Configuration set</span><strong x-text="config.email?.configurationSet||'Not set'"></strong></div>
-              </div>
-            </section>
+        </section>
+
+        <section class="card crm-channel-panel" x-show="activeChannel === 'slack'" x-cloak>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">Internal Slack notifications</h5><p class="text-muted mb-0">Used only for internal operational alerts and rule-based team notifications.</p></div><a href="/communications#slack-tools" class="btn btn-primary btn-sm">Open Slack test tool</a></div>
+          <div class="card-body crm-channel-panel-grid">
+            <div class="crm-channel-checklist"><div><span>Bot User OAuth Token</span><span class="crm-status" :class="config.slack?.botToken ? 'status-approved':'status-rejected'" x-text="config.slack?.botToken ? 'Configured':'Missing'"></span></div><div><span>Default channel ID</span><strong x-text="config.slack?.defaultChannelId || 'Not set'"></strong></div><div><span>Default channel</span><strong x-text="'#' + (config.slack?.defaultChannelName || 'internal-team')"></strong></div><div><span>Delivery availability</span><span class="crm-status" :class="config.slack?.available ? 'status-approved':'status-rejected'" x-text="config.slack?.available ? 'Available':'Unavailable'"></span></div></div>
+            <aside class="crm-channel-help"><h6>Required Slack setup</h6><ol><li>Use a bot token with chat:write, channels:read and groups:read.</li><li>Invite the app to every private channel it must use.</li><li>Sync channels while editing a rule.</li><li>Choose the channel and message inside Manage rules.</li></ol></aside>
           </div>
-          <div class="col-lg-6" x-show="visibleSection('slack')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">Internal Slack notifications</h5></div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Bot User OAuth Token</span><span class="crm-status" :class="config.slack?.botToken?'status-approved':'status-rejected'" x-text="config.slack?.botToken?'Configured':'Missing'"></span></div>
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Default channel ID</span><strong x-text="config.slack?.defaultChannelId||'Not set'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Default channel name</span><strong x-text="'#' + (config.slack?.defaultChannelName||'internal-team')"></strong></div>
-                <p class="text-muted mt-3 mb-0">Use one xoxb bot token for multiple channels. Required bot scopes: chat:write, channels:read and groups:read. Invite the app to private channels.</p>
-              </div>
-            </section>
-          </div>
-          <div class="col-lg-6" x-show="visibleSection('delivery')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">Delivery gateway</h5></div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Current mode</span><strong x-text="humanize(config.deliveryMode)"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Lambda URL</span><span class="crm-status" :class="config.lambda?.url?'status-approved':'status-inactive'" x-text="config.lambda?.url?'Configured':'Not required in local mode'"></span></div>
-                <p class="text-muted mt-3 mb-0">Switch MESSAGE_DELIVERY_MODE from local to lambda later; the CRM workflow and database records stay unchanged.</p>
-              </div>
-            </section>
-          </div>
-          <div class="col-lg-6" x-show="visibleSection('otp')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">OTP security</h5></div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>OTP secret</span><span class="crm-status" :class="config.otp?.secret?'status-approved':'status-rejected'" x-text="config.otp?.secret?'Configured':'Missing'"></span></div>
-                <div class="d-flex justify-content-between py-2"><span>Expiry</span><strong x-text="(config.otp?.expiryMinutes||0)+' minutes'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Resend delay</span><strong x-text="(config.otp?.resendSeconds||0)+' seconds'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>Maximum attempts</span><strong x-text="config.otp?.maxAttempts||0"></strong></div>
-              </div>
-            </section>
-          </div>
-          <div class="col-lg-6" x-show="visibleSection('retention')" x-cloak>
-            <section class="card h-100">
-              <div class="card-header"><h5 class="mb-0">MongoDB log retention</h5></div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom py-2"><span>Communication logs</span><strong x-text="(config.retention?.communicationDays||7)+' days'"></strong></div>
-                <div class="d-flex justify-content-between py-2"><span>OTP activity</span><strong x-text="(config.retention?.otpDays||7)+' days'"></strong></div>
-                <p class="text-muted mt-3 mb-0">MongoDB TTL indexes delete expired logs automatically. Templates, rules, settings, leads and CRM notes are not deleted.</p>
-              </div>
-            </section>
-          </div>
-        </div>
-        <section class="card mt-3" x-show="!showIssuesOnly" x-cloak><div class="card-header"><h5 class="mb-0">Required webhook URLs</h5></div><div class="card-body"><code class="d-block mb-2" x-text="origin+'/api/webhooks/whatsapp'"></code><code class="d-block mb-2" x-text="origin+'/api/webhooks/ses'"></code><code class="d-block" x-text="origin+'/api/webhooks/message-delivery'"></code></div></section>
+        </section>
+
+        <section class="card crm-channel-panel" x-show="activeChannel === 'otp'" x-cloak>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">OTP security</h5><p class="text-muted mb-0">Controls login OTP expiry, retries and verification protection.</p></div><a href="/communications/otp" class="btn btn-primary btn-sm">View OTP activity</a></div>
+          <div class="card-body crm-channel-panel-grid"><div class="crm-channel-checklist"><div><span>OTP secret</span><span class="crm-status" :class="config.otp?.secret ? 'status-approved':'status-rejected'" x-text="config.otp?.secret ? 'Configured':'Missing'"></span></div><div><span>Expiry</span><strong x-text="(config.otp?.expiryMinutes || 0) + ' minutes'"></strong></div><div><span>Resend delay</span><strong x-text="(config.otp?.resendSeconds || 0) + ' seconds'"></strong></div><div><span>Maximum attempts</span><strong x-text="config.otp?.maxAttempts || 0"></strong></div></div><aside class="crm-channel-help"><h6>Security guidance</h6><p>Keep the OTP secret private in Secrets Manager. OTP codes and hashes are never displayed in this interface.</p></aside></div>
+        </section>
+
+        <section class="card crm-channel-panel" x-show="activeChannel === 'delivery'" x-cloak>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">Delivery gateway, webhooks and retention</h5><p class="text-muted mb-0">Shared infrastructure used by all communication channels.</p></div></div>
+          <div class="card-body crm-channel-panel-grid"><div class="crm-channel-checklist"><div><span>Delivery mode</span><strong x-text="humanize(config.deliveryMode)"></strong></div><div><span>Lambda URL</span><span class="crm-status" :class="config.deliveryMode !== 'lambda' || config.lambda?.url ? 'status-approved':'status-rejected'" x-text="config.deliveryMode !== 'lambda' ? 'Not required in local mode' : (config.lambda?.url ? 'Configured':'Missing')"></span></div><div><span>Communication log retention</span><strong x-text="(config.retention?.communicationDays || 7) + ' days'"></strong></div><div><span>OTP log retention</span><strong x-text="(config.retention?.otpDays || 7) + ' days'"></strong></div></div><aside class="crm-channel-help"><h6>Webhook URLs</h6><code x-text="origin + '/api/webhooks/whatsapp'"></code><code x-text="origin + '/api/webhooks/ses'"></code><code x-text="origin + '/api/webhooks/message-delivery'"></code><p class="mt-3 mb-0">MongoDB TTL indexes delete expired activity logs automatically. Templates and automation rules are retained.</p></aside></div>
+        </section>
       </div><%- include('../partials/footer') %>
     </div></div></div>
     <script>
-      function settingsPage() {
+      function channelManagementPage() {
         return {
-          config: {},
-          error: '',
-          origin: location.origin,
-          showIssuesOnly: false,
-          get whatsappItems() {
-            return [
-              { label: 'Access token', value: this.config.whatsapp?.accessToken },
-              { label: 'Phone number ID', value: this.config.whatsapp?.phoneNumberId },
-              { label: 'Business account ID', value: this.config.whatsapp?.businessAccountId },
-              { label: 'Webhook verify token', value: this.config.whatsapp?.webhookVerifyToken },
-              { label: 'App secret', value: this.config.whatsapp?.appSecret },
-            ];
-          },
-          get issueCount() {
-            return ['whatsapp', 'email', 'slack', 'delivery', 'otp'].filter((section) => this.hasIssue(section)).length;
-          },
-          hasIssue(section) {
-            if (section === 'whatsapp') return this.whatsappItems.some((item) => !item.value);
-            if (section === 'email') return !this.config.email?.fromEmail;
-            if (section === 'slack') return !this.config.slack?.available;
-            if (section === 'delivery') return this.config.deliveryMode === 'lambda' && !this.config.lambda?.url;
-            if (section === 'otp') return !this.config.otp?.secret;
+          config: {}, error: '', origin: location.origin,
+          activeChannel: ['whatsapp','email','slack','otp','delivery'].includes(queryValue('channel')) ? queryValue('channel') : 'whatsapp',
+          get whatsappItems() { return [
+            { label: 'Access token', value: this.config.whatsapp?.accessToken },
+            { label: 'Phone number ID', value: this.config.whatsapp?.phoneNumberId },
+            { label: 'Business account ID', value: this.config.whatsapp?.businessAccountId },
+            { label: 'Webhook verify token', value: this.config.whatsapp?.webhookVerifyToken },
+            { label: 'App secret', value: this.config.whatsapp?.appSecret },
+          ]; },
+          selectChannel(channel) { this.activeChannel = channel; const url = new URL(location.href); url.searchParams.set('channel', channel); history.replaceState({}, '', url); },
+          channelReady(channel) {
+            if (channel === 'whatsapp') return this.whatsappItems.every((item) => Boolean(item.value));
+            if (channel === 'email') return Boolean(this.config.email?.fromEmail);
+            if (channel === 'slack') return Boolean(this.config.slack?.available);
+            if (channel === 'otp') return Boolean(this.config.otp?.secret);
+            if (channel === 'delivery') return this.config.deliveryMode !== 'lambda' || Boolean(this.config.lambda?.url);
             return false;
           },
-          visibleSection(section) {
-            return !this.showIssuesOnly || this.hasIssue(section);
-          },
-          async load() {
-            try {
-              this.config = (await apiFetch('/api/communication/config')).data || {};
-            } catch (error) {
-              this.error = error.message;
-            }
-          }
+          async load() { try { this.config = (await apiFetch('/api/communication/config')).data || {}; } catch (error) { this.error = error.message; } },
         };
       }
     </script>

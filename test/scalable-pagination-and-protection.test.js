@@ -83,7 +83,7 @@ test("marketplace expiry cleanup is bounded indexed and CommonJS", () => {
   assert.match(cleanup, /marketplaceStatus: "expired"/);
   assert.match(cleanup, /module\.exports/);
   assert.doesNotMatch(cleanup, /\.aggregate\s*\(|\$expr|\.skip\s*\(/);
-  assert.equal(packageJson.scripts["cleanup:marketplace-leads"], "node scripts/expire-marketplace-leads.js");
+  assert.equal(packageJson.scripts["cleanup:marketplace-leads"], "node scripts/run-with-runtime.js scripts/expire-marketplace-leads.js");
 });
 
 test("CRM dashboard caps filtered counts instead of exact collection-wide counts", () => {
@@ -91,7 +91,7 @@ test("CRM dashboard caps filtered counts instead of exact collection-wide counts
   const view = source("views/dashboard/index.ejs");
   assert.match(dashboard, /COUNT_CAP/);
   assert.match(dashboard, /async function boundedCount/);
-  assert.match(dashboard, /\.limit\(cap \+ 1\)/);
-  assert.doesNotMatch(dashboard, /countDocuments\s*\(/);
+  assert.match(dashboard, /\{ \$limit: cap \+ 1 \}/);
+  assert.match(dashboard, /\{ \$count: "value" \}/);
   assert.match(view, /metric\(data\.offered, data\.caps\?\.offered\)/);
 });

@@ -6,6 +6,12 @@ const catalogService = require("../catalog/catalog-service");
 const { validateMobile } = require("../../utils/mobile");
 const { numberValue, plainObjectValue, pincodeValue } = require("../../utils/validation");
 
+const ENQUIRY_TIMELINE_LIMIT = 50;
+
+const timelinePush = function (entry) {
+  return { $each: [entry], $slice: -ENQUIRY_TIMELINE_LIMIT };
+};
+
 const CUSTOMER_VISIBLE_STATUS = Object.freeze({
   new: { key: "submitted", label: "Submitted", description: "Your enquiry has been received." },
   verification: { key: "review", label: "Under review", description: "The Findoly team is reviewing your requirement." },
@@ -76,7 +82,7 @@ function presentCustomerEnquiry(row = {}) {
 }
 
 async function categories() {
-  const rows = await catalogService.listCategories({ includeInactive: false });
+  const rows = await catalogService.listCategories({ includeInactive: false, includeLegacy: false });
   return rows
     .filter((row) => row.active !== false)
     .map((row) => ({
@@ -163,13 +169,13 @@ async function createEnquiry(input = {}) {
         updatedAt: now,
       },
       $push: {
-        timeline: {
+        timeline: timelinePush({
           timelineId: crypto.randomUUID(),
           type: "customer_mobile_verified",
           message: "Customer mobile verified through Findoly Customer Website",
           actor: "customer-portal",
           createdAt: now,
-        },
+        }),
       },
     },
   );

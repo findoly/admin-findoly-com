@@ -53,6 +53,6 @@ test("lead service enforces mandatory one-to-five Service Types and unlock limit
 test("provider service validates categories and creates no marketplace fan-out rows", () => {
   const service = source("services/provider/provider-service.js");
   assert.match(service, /maxItems:\s*50/);
-  assert.match(service, /assertUniqueProviderMobile/);
+  assert.match(service, /assertUniqueProviderContacts/);
   assert.doesNotMatch(service, /LeadDistribution|scheduleProviderSync/);
 });

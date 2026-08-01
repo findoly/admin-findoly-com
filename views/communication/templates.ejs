@@ -4,10 +4,15 @@
   <body x-data="crmShell()" x-init="initShell()">
     <%- include('../partials/navbar') %>
     <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
-      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Manage approved WhatsApp templates and reusable SES email content.</p></div><a href="/communications/templates/new" class="btn btn-primary crm-primary-action">Create template</a></div></div>
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">WhatsApp and email templates are managed separately so each channel stays clear.</p></div><div class="d-flex gap-2 flex-wrap"><a href="/communications/templates/new?channel=whatsapp" class="btn btn-primary crm-primary-action">New WhatsApp template</a><a href="/communications/templates/new?channel=email" class="btn btn-light crm-primary-action">New email template</a></div></div></div>
       <div class="content" x-data="templateList()" x-init="load()">
         <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
         <%- include('_navigation', { active: 'templates' }) %>
+        <section class="crm-template-channel-cards" aria-label="Template channel management">
+          <a href="/communications/templates" class="crm-template-channel-card" :class="{ 'is-active': !filters.channel }"><span class="crm-channel-picker-icon">ALL</span><span><strong>All templates</strong><small>View every reusable template</small></span></a>
+          <a href="/communications/templates?channel=whatsapp" class="crm-template-channel-card" :class="{ 'is-active': filters.channel === 'whatsapp' }"><span class="crm-channel-picker-icon">WA</span><span><strong>WhatsApp templates</strong><small>Meta approval, utility and authentication</small></span></a>
+          <a href="/communications/templates?channel=email" class="crm-template-channel-card" :class="{ 'is-active': filters.channel === 'email' }"><span class="crm-channel-picker-icon">EM</span><span><strong>Email templates</strong><small>Amazon SES subjects and HTML content</small></span></a>
+        </section>
         <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
           <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="filters.q" placeholder="Search templates" aria-label="Search communication templates"></label>
           <label class="crm-filter-field"><span>Channel</span><select x-model="filters.channel"><option value="">All channels</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label>
@@ -16,7 +21,7 @@
           <label class="crm-filter-field"><span>Language</span><input type="text" x-model="filters.language" maxlength="20" placeholder="en_US"></label>
           <label class="crm-filter-field"><span>Active</span><select x-model="filters.active"><option value="">All</option><option value="true">Active</option><option value="false">Inactive</option></select></label>
           <label class="crm-filter-field"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Recently updated</option><option value="oldest">Oldest updated</option><option value="name">Name A–Z</option></select></label>
-          <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="hasFilters()" @click="reset()">Clear</button><button class="btn btn-light" type="button" @click="sync()" :disabled="syncing"><span x-text="syncing ? 'Syncing…' : 'Sync Meta'"></span></button></div>
+          <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" x-show="hasFilters()" @click="reset()">Clear</button><button class="btn btn-light" type="button" x-show="filters.channel !== 'email'" @click="sync()" :disabled="syncing"><span x-text="syncing ? 'Syncing…' : 'Sync Meta'"></span></button></div>
           <label class="crm-filter-field crm-filter-page-size"><span>Rows</span><select x-model.number="pagination.limit" @change="search()"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
         </form></section>
         <section class="card crm-data-card">
@@ -33,7 +38,7 @@
     <script>
       function templateList() {
         return {
-          rows: [], filters: { q: '', channel: '', status: '', category: '', language: '', active: '', sortOrder: 'newest' }, pagination: createCursorPagination(20), loading: false, error: '', message: '', syncing: false,
+          rows: [], filters: { q: queryValue('q'), channel: queryValue('channel'), status: queryValue('status'), category: queryValue('category'), language: queryValue('language'), active: queryValue('active'), sortOrder: queryValue('sortOrder') || 'newest' }, pagination: createCursorPagination(Number(queryValue('limit') || 20)), loading: false, error: '', message: '', syncing: false,
           query() { const query = new URLSearchParams({ ...this.filters, limit: this.pagination.limit, cursor: this.pagination.cursor }); [...query].forEach(([key,value]) => { if(!value) query.delete(key); }); return query.toString(); },
           hasFilters() { return Boolean(this.filters.q || this.filters.channel || this.filters.status || this.filters.category || this.filters.language || this.filters.active || this.filters.sortOrder !== 'newest' || this.pagination.limit !== 20); },
           async load() { this.loading = true; this.error = ''; try { const body = await apiFetch('/api/communication/templates?' + this.query()); this.rows = body.data || []; applyCursorPagination(this.pagination, body.pagination || {}); } catch(error){ this.error=error.message; } finally { this.loading = false; } },

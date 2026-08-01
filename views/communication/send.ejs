@@ -7,7 +7,7 @@
       <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Send an approved WhatsApp template or an active SES email template.</p></div><a href="/communications/logs" class="btn btn-light crm-primary-action">Message logs</a></div></div>
       <div class="content" x-data="sendMessagePage()" x-init="init()">
         <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div><div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div><div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
-        <%- include('_navigation', { active: 'logs' }) %>
+        <%- include('_navigation', { active: 'send' }) %>
         <form class="card" @submit.prevent="send()"><div class="card-body"><div class="row g-3">
           <div class="col-md-3"><label class="form-label">Channel</label><select class="form-select" x-model="form.channel" @change="loadTemplates()"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
           <div class="col-md-5"><label class="form-label">Template</label><select class="form-select" x-model="form.templateId" required><option value="">Select template</option><template x-for="template in templates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select></div>

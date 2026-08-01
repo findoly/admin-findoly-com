@@ -106,6 +106,46 @@
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
   }
 
+  function formatIndiaDateInput(value) {
+    const date = safeDate(value);
+    if (!date) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date).reduce((output, part) => {
+      if (part.type !== 'literal') output[part.type] = part.value;
+      return output;
+    }, {});
+    return parts.year + '-' + parts.month + '-' + parts.day;
+  }
+
+  function formatIndiaDateOnly(value) {
+    const input = formatIndiaDateInput(value);
+    if (!input) return '—';
+    const [year, month, day] = input.split('-');
+    return day + '/' + month + '/' + year;
+  }
+
+  function formatIndiaDateTimeLocal(value) {
+    const date = safeDate(value);
+    if (!date) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(date).reduce((output, part) => {
+      if (part.type !== 'literal') output[part.type] = part.value;
+      return output;
+    }, {});
+    return parts.year + '-' + parts.month + '-' + parts.day + 'T' + parts.hour + ':' + parts.minute;
+  }
+
   const HUMAN_TEXT_EMOJI_PATTERN = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u20E3]/u;
   const HUMAN_TEXT_HTML_PATTERN = /<\/?[A-Za-z][^>]*>|&(?:#\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);/u;
 
@@ -262,6 +302,7 @@
       shellError: '',
       sidebarOpen: false,
       sidebarCollapsed: readSidebarCollapsed(),
+      communicationMenuOpen: location.pathname === '/communications' || location.pathname.startsWith('/communications/'),
       async initShell() {
         syncSidebarDocumentState(this.sidebarCollapsed);
         enableSidebarTransitionsAfterInitialLayout();

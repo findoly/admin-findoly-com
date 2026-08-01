@@ -754,7 +754,21 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
   }
   metadata.lastStatusNote = transition.note;
 
-  await Enquiry.updateOne(enquiryQuery(enquiryId), {
+  const statusUpdateQuery = isAgentRequirement
+    ? {
+        $and: [
+          enquiryQuery(enquiryId),
+          {
+            $or: [
+              { partnerPayoutLockWithdrawalId: "" },
+              { partnerPayoutLockWithdrawalId: null },
+              { partnerPayoutLockWithdrawalId: { $exists: false } },
+            ],
+          },
+        ],
+      }
+    : enquiryQuery(enquiryId);
+  const statusUpdate = await Enquiry.updateOne(statusUpdateQuery, {
     $set: {
       status: transition.toStatus,
       statusUpdatedAt: now,
@@ -776,6 +790,17 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
       }),
     },
   });
+  if (statusUpdate.matchedCount !== 1) {
+    throw Object.assign(
+      new Error(isAgentRequirement
+        ? "This referral is locked while its Razorpay payout is processing"
+        : "Lead status changed while it was being updated"),
+      {
+        status: 409,
+        code: isAgentRequirement ? "REFERRAL_PAYOUT_LOCKED" : "LEAD_CONCURRENT_UPDATE",
+      },
+    );
+  }
 
   if (isAgentRequirement && transition.toStatus === "rejected") {
     if (existing.partnerWithdrawalId && existing.partnerPayoutStatus === "reserved") {

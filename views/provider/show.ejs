@@ -36,6 +36,8 @@
                       <dl class="row mb-0">
                         <dt class="col-5">Provider ID</dt><dd class="col-7" x-text="provider.providerId"></dd>
                         <dt class="col-5">Mobile</dt><dd class="col-7" x-text="provider.mobile ? '+91 ' + provider.mobile : '—'"></dd>
+                        <dt class="col-5">WhatsApp</dt><dd class="col-7" x-text="provider.whatsappNumber ? '+91 ' + provider.whatsappNumber : '—'"></dd>
+                        <dt class="col-5">Email</dt><dd class="col-7" x-text="provider.email || '—'"></dd>
                         <dt class="col-5">Status</dt><dd class="col-7" x-text="humanize(provider.status)"></dd>
                         <dt class="col-5">Portal access</dt><dd class="col-7" x-text="provider.portalAccessEnabled === false ? 'Restricted' : 'Enabled'"></dd>
                         <dt class="col-5">Outcome warnings</dt><dd class="col-7" x-text="provider.outcomeWarningCount || 0"></dd>

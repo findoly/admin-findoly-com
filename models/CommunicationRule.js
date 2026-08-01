@@ -45,7 +45,11 @@ const communicationRuleSchema = new mongoose.Schema(
 );
 
 communicationRuleSchema.index({ event: 1, recipientSource: 1 }, { unique: true });
-communicationRuleSchema.index({ enabled: 1, event: 1 });
+communicationRuleSchema.index({ enabled: 1, event: 1, _id: 1 });
+communicationRuleSchema.index({ event: 1, name: 1, _id: 1 });
+communicationRuleSchema.index({ name: 1, _id: 1 });
+communicationRuleSchema.index({ updatedAt: -1, _id: -1 });
+communicationRuleSchema.index({ recipientSource: 1, event: 1, _id: 1 });
 
 module.exports = mongoose.model(
   "CommunicationRule",

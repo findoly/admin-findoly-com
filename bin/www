@@ -19,6 +19,8 @@ let mongoose = null;
 let shuttingDown = false;
 let runPromise = null;
 let signalHandlersInstalled = false;
+let activeHandler = startupHandler;
+let bootstrapState = "starting";
 
 function resolvePort(env = process.env) {
   const port = Number(env.PORT || 3000);
@@ -26,6 +28,41 @@ function resolvePort(env = process.env) {
     throw new Error("PORT must be a whole number between 1 and 65535");
   }
   return port;
+}
+
+function startupHandler(_req, res) {
+  res.statusCode = 503;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Retry-After", "3");
+  res.end(JSON.stringify({
+    success: false,
+    code: "CRM_STARTING",
+    message: bootstrapState === "failed" ? "CRM startup failed" : "CRM is starting",
+  }));
+}
+
+function dispatchRequest(req, res) {
+  return activeHandler(req, res);
+}
+
+function listen(serverInstance, port) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      serverInstance.off("error", onError);
+      reject(error);
+    };
+    serverInstance.once("error", onError);
+    serverInstance.listen(port, () => {
+      serverInstance.off("error", onError);
+      resolve();
+    });
+  });
+}
+
+async function closeServer() {
+  if (!server || !server.listening) return;
+  await new Promise((resolve) => server.close(resolve));
 }
 
 async function shutdown(signal) {
@@ -43,9 +80,7 @@ async function shutdown(signal) {
   }, shutdownTimeoutMs);
   forceTimer.unref();
 
-  if (server && server.listening) {
-    await new Promise((resolve) => server.close(resolve));
-  }
+  await closeServer();
   if (mongoose && mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch((error) => console.error("MongoDB disconnect error:", error.message));
   }
@@ -68,37 +103,39 @@ async function start({
   loadMongoose = () => require("mongoose"),
   httpModule = http,
 } = {}) {
-  const secretResult = await loadSecrets();
-  cloudwatchLogger.configureFromEnv();
-  if (!secretResult.skipped) {
-    console.log(`CRM configuration loaded from AWS Secrets Manager (${secretResult.loaded} values)`);
-  }
-
-  const app = loadApp();
-  mongoose = loadMongoose();
   const port = resolvePort();
-  app.set("port", port);
-  server = httpModule.createServer(app);
+  activeHandler = startupHandler;
+  bootstrapState = "starting";
+  server = httpModule.createServer(dispatchRequest);
+  await listen(server, port);
+  console.log(`CRM bootstrap listener active on port ${port}`);
 
-  await app.locals.databasePromise;
-  await new Promise((resolve, reject) => {
-    const onError = (error) => {
-      server.off("error", onError);
-      reject(error);
-    };
-    server.once("error", onError);
-    server.listen(port, () => {
-      server.off("error", onError);
-      resolve();
+  try {
+    const secretResult = await loadSecrets();
+    cloudwatchLogger.configureFromEnv();
+    if (!secretResult.skipped) {
+      console.log(`CRM configuration loaded from AWS Secrets Manager (${secretResult.loaded} values)`);
+    }
+
+    const app = loadApp();
+    mongoose = loadMongoose();
+    app.set("port", port);
+    await app.locals.databasePromise;
+
+    activeHandler = app;
+    bootstrapState = "ready";
+    server.on("error", (error) => {
+      console.error("HTTP server error:", error);
+      process.exitCode = 1;
     });
-  });
-
-  server.on("error", (error) => {
-    console.error("HTTP server error:", error);
-    process.exitCode = 1;
-  });
-  console.log(`Findoly CRM listening on port ${port}`);
-  return server;
+    console.log(`Findoly CRM listening on port ${port}`);
+    return server;
+  } catch (error) {
+    bootstrapState = "failed";
+    activeHandler = startupHandler;
+    await closeServer().catch(() => {});
+    throw error;
+  }
 }
 
 function run() {
@@ -117,9 +154,12 @@ run().catch(() => {});
 
 module.exports = {
   cloudwatchLogger,
+  dispatchRequest,
   installSignalHandlers,
+  listen,
   resolvePort,
   run,
   shutdown,
   start,
+  startupHandler,
 };

@@ -57,6 +57,13 @@
                       </div>
                     </div>
                     <div class="col-md-4">
+                      <label class="form-label">WhatsApp number</label>
+                      <div class="input-group">
+                        <span class="input-group-text crm-mobile-prefix">+91</span>
+                        <input class="form-control" x-model="form.whatsappNumber" @input="form.whatsappNumber = digitsOnly(form.whatsappNumber)" inputmode="numeric" autocomplete="tel-national" pattern="[6-9][0-9]{9}" minlength="10" maxlength="10" placeholder="Defaults to mobile" required />
+                      </div>
+                    </div>
+                    <div class="col-md-4">
                       <label class="form-label">Email</label>
                       <input class="form-control" type="email" x-model="form.email" maxlength="254" />
                     </div>
@@ -160,6 +167,7 @@
                     name: "",
                     businessName: "",
                     mobile: "",
+                    whatsappNumber: "",
                     email: "",
                     city: "",
                     state: "",
@@ -195,6 +203,7 @@
                           ...this.form,
                           ...d,
                           mobile: this.digitsOnly(d.mobile),
+                          whatsappNumber: this.digitsOnly(d.whatsappNumber || d.mobile),
                           categorySlugs: Array.isArray(d.categorySlugs) ? d.categorySlugs : [],
                         };
                         this.areaText = (d.serviceAreas || []).join(", ");
@@ -206,6 +215,7 @@
                           name: request.name || '',
                           businessName: request.businessName || '',
                           mobile: this.digitsOnly(request.mobile),
+                          whatsappNumber: this.digitsOnly(request.whatsappNumber || request.mobile),
                           email: request.email || '',
                           city: request.city || '',
                           state: request.state || '',
@@ -246,6 +256,10 @@
                     try {
                       if (!/^[6-9]\d{9}$/.test(this.form.mobile)) {
                         throw new Error("Enter a valid 10-digit Indian provider mobile number");
+                      }
+                      this.form.whatsappNumber = this.digitsOnly(this.form.whatsappNumber || this.form.mobile);
+                      if (!/^[6-9]\d{9}$/.test(this.form.whatsappNumber)) {
+                        throw new Error("Enter a valid 10-digit Indian WhatsApp number");
                       }
                       if (!this.form.categorySlugs.length) {
                         throw new Error("Select at least one category");

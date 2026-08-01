@@ -197,6 +197,7 @@ async function cursorPaginate(
     limit = DEFAULT_LIMIT,
     cursor = "",
     select,
+    maxTimeMS = Number(process.env.CRM_QUERY_MAX_TIME_MS || 10000),
   } = {},
 ) {
   if (!Model || typeof Model.find !== "function") {
@@ -206,9 +207,13 @@ async function cursorPaginate(
   const normalizedSort = normalizeSort(sort);
   const cursorValues = decodeCursor(cursor, normalizedSort);
   const cursorCondition = buildCursorCondition(normalizedSort, cursorValues);
+  const boundedMaxTimeMS = Number.isFinite(Number(maxTimeMS))
+    ? Math.min(Math.max(Math.trunc(Number(maxTimeMS)), 1000), 60000)
+    : 10000;
   let databaseQuery = Model.find(mergeQuery(query, cursorCondition))
     .sort(normalizedSort)
-    .limit(normalizedLimit + 1);
+    .limit(normalizedLimit + 1)
+    .maxTimeMS(boundedMaxTimeMS);
 
   if (select) databaseQuery = databaseQuery.select(select);
 

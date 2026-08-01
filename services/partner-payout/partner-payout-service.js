@@ -6,16 +6,40 @@ const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { textValue, enumValue, identifierValue, queryTextValue, validationError } = require("../../utils/validation");
 const { canonicalLeadStatus } = require("../../utils/lead-journey");
+const { buildSearchAlternatives } = require("../../utils/search-query");
+const { withTransaction } = require("../../utils/transaction");
+const { boundedJsonValue } = require("../../utils/bounded-json");
 const razorpay = require("./razorpay-service");
 
 const WAITING_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
-const ACTIVE_WITHDRAWAL_STATUSES = ["submitted", "under_review", "eligibility_approved", "finance_approved", "payout_processing", "payout_failed", "eligibility_changed"];
+const ACTIVE_WITHDRAWAL_STATUSES = ["submitted", "under_review", "eligibility_approved", "finance_approved", "payout_processing", "payout_failed"];
 const WITHDRAWAL_STATUSES = ["submitted", "under_review", "eligibility_approved", "finance_approved", "payout_processing", "paid", "rejected", "cancelled", "payout_failed", "eligibility_changed", "payout_reversed"];
 const INVALID_REQUIREMENT_STATUSES = ["rejected", "invalid", "not_interested"];
 const VALIDATION_STATUSES = ["pending", "valid", "invalid"];
 const VALIDATION_METHODS = ["phone_call", "whatsapp", "email", "in_person", "other"];
 const CONVERSION_STATUSES = ["pending", "converted", "not_converted"];
 const INVALID_REASONS = ["duplicate", "incorrect_details", "customer_not_interested", "fake_referral", "unreachable", "outside_assigned_category", "other"];
+const APPROVAL_HISTORY_LIMIT = 200;
+const ENQUIRY_TIMELINE_LIMIT = 500;
+
+function historyPush(entry) {
+  return { $each: [entry], $slice: -APPROVAL_HISTORY_LIMIT };
+}
+
+function timelinePush(entries) {
+  const values = Array.isArray(entries) ? entries : [entries];
+  return { $each: values, $slice: -ENQUIRY_TIMELINE_LIMIT };
+}
+
+function payoutStatusDetails(value) {
+  return boundedJsonValue(value || {}, {
+    maxBytes: 16_000,
+    maxDepth: 5,
+    maxArrayLength: 50,
+    maxKeys: 100,
+    maxStringLength: 2000,
+  });
+}
 
 function isAgentLead(row = {}) {
   return Boolean(row.agentId && (row.sourceChannel === "agent" || row.sourceWebsite === "agent-portal" || row.metadata?.agentSubmission));
@@ -79,7 +103,7 @@ function maturedEligibleQuery(agentId, now = new Date()) {
 
 function maximumReferralsPerWithdrawal() {
   const configured = Number(process.env.AGENT_WITHDRAWAL_MAX_REFERRALS || 1000) || 1000;
-  const bounded = Math.min(Math.max(Math.floor(configured), 10), 5000);
+  const bounded = Math.min(Math.max(Math.floor(configured), 10), 1000);
   return Math.max(10, Math.floor(bounded / 10) * 10);
 }
 
@@ -191,61 +215,81 @@ async function submitWithdrawal(agentId, actor = "agent") {
   if (calculation.eligibleBlockCount < 1 || calculation.selectedRequirements.length < 10) {
     throw validationError("At least 10 matured valid referrals and 20% sales conversion are required");
   }
-  const active = await AgentWithdrawal.findOne({ agentId: calculation.agent.agentId, status: { $in: ACTIVE_WITHDRAWAL_STATUSES } }).lean();
-  if (active) throw Object.assign(new Error("An active withdrawal request already exists"), { status: 409 });
 
   const withdrawalId = uuid();
   const ids = calculation.selectedRequirements.map((row) => row.enquiryId);
-  const reserveResult = await Enquiry.updateMany(
-    { ...maturedEligibleQuery(calculation.agent.agentId), enquiryId: { $in: ids } },
-    { $set: { partnerPayoutStatus: "reserved", partnerWithdrawalId: withdrawalId, updatedAt: new Date() } },
-  );
-  if (reserveResult.modifiedCount !== ids.length) {
-    await Enquiry.updateMany({ partnerWithdrawalId: withdrawalId, partnerPayoutStatus: "reserved" }, { $set: { partnerPayoutStatus: "unpaid", partnerWithdrawalId: "" } });
-    throw Object.assign(new Error("Referral eligibility changed. Refresh and try again"), { status: 409 });
-  }
-
   try {
-    const row = await AgentWithdrawal.create({
-      withdrawalId,
-      withdrawalNumber: generateWithdrawalNumber(calculation.agent.referralId),
-      agentId: calculation.agent.agentId,
-      referralId: calculation.agent.referralId,
-      agentName: calculation.agent.name,
-      agentBusinessName: calculation.agent.businessName || "",
-      agentMobile: calculation.agent.mobile,
-      categoryId: calculation.agent.categoryId || "",
-      categorySlug: calculation.agent.categorySlug || "",
-      categoryName: calculation.agent.categoryName || "",
-      payoutPerReferralPaise: calculation.payoutPerReferralPaise,
-      validReferralCount: calculation.validReferralCount,
-      convertedSaleCount: calculation.convertedSaleCount,
-      eligibleBlockCount: calculation.eligibleBlockCount,
-      payableReferralCount: ids.length,
-      grossAmountPaise: ids.length * calculation.payoutPerReferralPaise,
-      deductionAmountPaise: 0,
-      netAmountPaise: ids.length * calculation.payoutPerReferralPaise,
-      requirementIds: ids,
-      requirementSnapshots: calculation.selectedRequirements.map((item) => ({
-        enquiryId: item.enquiryId,
-        requirementTitle: item.requirementTitle || "",
-        customerName: item.name || "",
-        category: item.category || "",
-        submittedAt: item.createdAt,
-        eligibilityDate: item.partnerEligibilityDate,
-        converted: item.agentSaleConversion === "converted",
-      })),
-      status: "submitted",
-      approvalHistory: [auditEntry("submitted", "", "submitted", "Withdrawal submitted from Agent Portal", actor)],
-      payoutMode: calculation.agent.payoutMode || "IMPS",
-      payoutAccountLabel: calculation.agent.payoutAccountLabel || "",
-      razorpayContactId: calculation.agent.razorpayContactId || "",
-      razorpayFundAccountId: calculation.agent.razorpayFundAccountId || "",
-      updatedBy: actor,
-    });
-    return presentWithdrawal(row.toObject());
+    return await withTransaction(async (session) => {
+      const active = await AgentWithdrawal.findOne({
+        agentId: calculation.agent.agentId,
+        status: { $in: ACTIVE_WITHDRAWAL_STATUSES },
+      }).session(session).lean();
+      if (active) {
+        throw Object.assign(new Error("An active withdrawal request already exists"), {
+          status: 409,
+          code: "ACTIVE_WITHDRAWAL_EXISTS",
+        });
+      }
+
+      const reserveResult = await Enquiry.updateMany(
+        { ...maturedEligibleQuery(calculation.agent.agentId), enquiryId: { $in: ids } },
+        { $set: { partnerPayoutStatus: "reserved", partnerWithdrawalId: withdrawalId, partnerPayoutLockedAt: null, partnerPayoutLockWithdrawalId: "", updatedAt: new Date() } },
+        { session },
+      );
+      if (reserveResult.modifiedCount !== ids.length) {
+        throw Object.assign(new Error("Referral eligibility changed. Refresh and try again"), {
+          status: 409,
+          code: "WITHDRAWAL_ELIGIBILITY_CHANGED",
+        });
+      }
+
+      const [row] = await AgentWithdrawal.create([{
+        withdrawalId,
+        withdrawalNumber: generateWithdrawalNumber(calculation.agent.referralId),
+        agentId: calculation.agent.agentId,
+        referralId: calculation.agent.referralId,
+        agentName: calculation.agent.name,
+        agentBusinessName: calculation.agent.businessName || "",
+        agentMobile: calculation.agent.mobile,
+        categoryId: calculation.agent.categoryId || "",
+        categorySlug: calculation.agent.categorySlug || "",
+        categoryName: calculation.agent.categoryName || "",
+        payoutPerReferralPaise: calculation.payoutPerReferralPaise,
+        validReferralCount: calculation.validReferralCount,
+        convertedSaleCount: calculation.convertedSaleCount,
+        eligibleBlockCount: calculation.eligibleBlockCount,
+        payableReferralCount: ids.length,
+        grossAmountPaise: ids.length * calculation.payoutPerReferralPaise,
+        deductionAmountPaise: 0,
+        netAmountPaise: ids.length * calculation.payoutPerReferralPaise,
+        requirementIds: ids,
+        requirementSnapshots: calculation.selectedRequirements.map((item) => ({
+          enquiryId: item.enquiryId,
+          requirementTitle: item.requirementTitle || "",
+          customerName: item.name || "",
+          category: item.category || "",
+          submittedAt: item.createdAt,
+          eligibilityDate: item.partnerEligibilityDate,
+          converted: item.agentSaleConversion === "converted",
+        })),
+        status: "submitted",
+        activeSlot: calculation.agent.agentId,
+        approvalHistory: [auditEntry("submitted", "", "submitted", "Withdrawal submitted from Agent Portal", actor)],
+        payoutMode: calculation.agent.payoutMode || "IMPS",
+        payoutAccountLabel: calculation.agent.payoutAccountLabel || "",
+        razorpayContactId: calculation.agent.razorpayContactId || "",
+        razorpayFundAccountId: calculation.agent.razorpayFundAccountId || "",
+        updatedBy: actor,
+      }], { session });
+      return presentWithdrawal(row.toObject());
+    }, { operationLabel: "Partner withdrawal operations" });
   } catch (error) {
-    await Enquiry.updateMany({ partnerWithdrawalId: withdrawalId, partnerPayoutStatus: "reserved" }, { $set: { partnerPayoutStatus: "unpaid", partnerWithdrawalId: "" } });
+    if (error?.code === 11000) {
+      throw Object.assign(new Error("An active withdrawal request already exists"), {
+        status: 409,
+        code: "ACTIVE_WITHDRAWAL_EXISTS",
+      });
+    }
     throw error;
   }
 }
@@ -257,9 +301,10 @@ async function listWithdrawals(filters = {}) {
   if (filters.agentId) query.agentId = identifierValue(filters.agentId, { label: "Agent ID filter" });
   const q = queryTextValue(filters.q, { label: "Withdrawal search", maxLength: 100 });
   if (q) {
-    const escaped = String(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const search = new RegExp(escaped, "i");
-    query.$or = [{ withdrawalNumber: search }, { agentName: search }, { agentBusinessName: search }, { referralId: search }, { razorpayPayoutId: search }];
+    query.$or = buildSearchAlternatives(q, {
+      identifierFields: ["withdrawalId", "withdrawalNumber", "referralId", "razorpayPayoutId"],
+      prefixFields: ["agentName", "agentBusinessName"],
+    });
   }
   applyDateRange(query, filters, { fields: { submittedAt: "Submitted date", createdAt: "Created date", updatedAt: "Updated date", paidAt: "Paid date" }, defaultField: "submittedAt" });
   const result = await cursorPaginate(AgentWithdrawal, { query, sort: dateSort(filters, { fields: ["submittedAt", "createdAt", "updatedAt", "paidAt"], defaultField: "submittedAt" }), limit, cursor });
@@ -275,25 +320,28 @@ async function listAgentWithdrawals(agentId, filters = {}) {
   return { ...result, data: result.data.map(presentWithdrawal) };
 }
 
-async function getWithdrawal(withdrawalId, agentId = "") {
+async function getWithdrawal(withdrawalId, agentId = "", session = null) {
   const id = identifierValue(withdrawalId, { label: "Withdrawal ID" });
   const query = { withdrawalId: id };
   if (agentId) query.agentId = identifierValue(agentId, { label: "Agent ID" });
-  const row = await AgentWithdrawal.findOne(query).lean();
+  let lookup = AgentWithdrawal.findOne(query);
+  if (session) lookup = lookup.session(session);
+  const row = await lookup.lean();
   if (!row) throw Object.assign(new Error("Withdrawal request not found"), { status: 404 });
   return presentWithdrawal(row);
 }
 
-async function releaseRequirements(withdrawalId) {
-  await Enquiry.updateMany(
+async function releaseRequirements(withdrawalId, session = null) {
+  return Enquiry.updateMany(
     { partnerWithdrawalId: withdrawalId, partnerPayoutStatus: "reserved" },
-    { $set: { partnerPayoutStatus: "unpaid", partnerWithdrawalId: "", updatedAt: new Date() } },
+    { $set: { partnerPayoutStatus: "unpaid", partnerWithdrawalId: "", partnerPayoutLockedAt: null, partnerPayoutLockWithdrawalId: "", updatedAt: new Date() } },
+    session ? { session } : undefined,
   );
 }
 
-async function revalidateWithdrawal(row) {
+async function revalidateWithdrawal(row, session = null) {
   const now = new Date();
-  const eligible = await Enquiry.find({
+  let eligible = Enquiry.find({
     enquiryId: { $in: row.requirementIds },
     agentId: row.agentId,
     agentReferralValidation: "valid",
@@ -301,10 +349,12 @@ async function revalidateWithdrawal(row) {
     status: { $nin: INVALID_REQUIREMENT_STATUSES },
     partnerPayoutStatus: "reserved",
     partnerWithdrawalId: row.withdrawalId,
-  }).select({ enquiryId: 1, agentSaleConversion: 1 }).lean();
-  const converted = eligible.filter((item) => item.agentSaleConversion === "converted").length;
-  const blocks = Math.min(Math.floor(eligible.length / 10), Math.floor(converted / 2));
-  if (eligible.length !== row.payableReferralCount || blocks * 10 < row.payableReferralCount) {
+  }).select({ enquiryId: 1, agentSaleConversion: 1 });
+  if (session) eligible = eligible.session(session);
+  const eligibleRows = await eligible.lean();
+  const converted = eligibleRows.filter((item) => item.agentSaleConversion === "converted").length;
+  const blocks = Math.min(Math.floor(eligibleRows.length / 10), Math.floor(converted / 2));
+  if (eligibleRows.length !== row.payableReferralCount || blocks * 10 < row.payableReferralCount) {
     throw Object.assign(new Error("Withdrawal eligibility changed and requires review"), { status: 409, code: "ELIGIBILITY_CHANGED" });
   }
   return true;
@@ -313,73 +363,144 @@ async function revalidateWithdrawal(row) {
 async function transitionWithdrawal(withdrawalId, action, note, actor = "crm-admin") {
   const normalizedAction = enumValue(action, ["start_review", "approve_eligibility", "approve_finance", "reject", "cancel"], { label: "Withdrawal action" });
   const message = textValue(note, { label: "Approval note", required: true, maxLength: 2000, preserveWhitespace: true });
-  const row = await getWithdrawal(withdrawalId);
-  let nextStatus = row.status;
-  if (normalizedAction === "start_review" && row.status === "submitted") nextStatus = "under_review";
-  else if (normalizedAction === "approve_eligibility" && ["under_review", "eligibility_changed"].includes(row.status)) {
-    await revalidateWithdrawal(row);
-    nextStatus = "eligibility_approved";
-  } else if (normalizedAction === "approve_finance" && row.status === "eligibility_approved") {
-    await revalidateWithdrawal(row);
-    nextStatus = "finance_approved";
-  } else if (normalizedAction === "reject" && !["paid", "payout_processing"].includes(row.status)) nextStatus = "rejected";
-  else if (normalizedAction === "cancel" && !["paid", "payout_processing"].includes(row.status)) nextStatus = "cancelled";
-  else throw validationError("This withdrawal action is not allowed at the current stage");
 
-  const now = new Date();
-  const set = { status: nextStatus, updatedBy: actor, updatedAt: now };
-  if (nextStatus === "under_review") set.reviewedAt = now;
-  if (nextStatus === "eligibility_approved") set.eligibilityApprovedAt = now;
-  if (nextStatus === "finance_approved") set.financeApprovedAt = now;
-  if (["rejected", "cancelled"].includes(nextStatus)) {
-    set.rejectedAt = now;
-    set.rejectionReason = message;
-    await releaseRequirements(row.withdrawalId);
-  }
-  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, {
-    $set: set,
-    $push: { approvalHistory: auditEntry(normalizedAction, row.status, nextStatus, message, actor) },
-  });
-  return getWithdrawal(row.withdrawalId);
+  return withTransaction(async (session) => {
+    const row = await getWithdrawal(withdrawalId, "", session);
+    let nextStatus = row.status;
+    if (normalizedAction === "start_review" && row.status === "submitted") nextStatus = "under_review";
+    else if (normalizedAction === "approve_eligibility" && row.status === "under_review") {
+      await revalidateWithdrawal(row, session);
+      nextStatus = "eligibility_approved";
+    } else if (normalizedAction === "approve_finance" && row.status === "eligibility_approved") {
+      await revalidateWithdrawal(row, session);
+      nextStatus = "finance_approved";
+    } else if (normalizedAction === "reject" && !["paid", "payout_processing"].includes(row.status)) nextStatus = "rejected";
+    else if (normalizedAction === "cancel" && !["paid", "payout_processing"].includes(row.status)) nextStatus = "cancelled";
+    else throw validationError("This withdrawal action is not allowed at the current stage");
+
+    const now = new Date();
+    const set = { status: nextStatus, updatedBy: actor, updatedAt: now };
+    if (nextStatus === "under_review") set.reviewedAt = now;
+    if (nextStatus === "eligibility_approved") set.eligibilityApprovedAt = now;
+    if (nextStatus === "finance_approved") set.financeApprovedAt = now;
+    if (["rejected", "cancelled"].includes(nextStatus)) {
+      set.rejectedAt = now;
+      set.rejectionReason = message;
+      set.activeSlot = "";
+      await releaseRequirements(row.withdrawalId, session);
+    }
+    const result = await AgentWithdrawal.updateOne(
+      { withdrawalId: row.withdrawalId, status: row.status },
+      {
+        $set: set,
+        $push: { approvalHistory: historyPush(auditEntry(normalizedAction, row.status, nextStatus, message, actor)) },
+      },
+      { session },
+    );
+    if (result.modifiedCount !== 1) {
+      throw Object.assign(new Error("This withdrawal changed while it was being updated. Refresh and try again."), {
+        status: 409,
+        code: "WITHDRAWAL_CONCURRENT_UPDATE",
+      });
+    }
+    return getWithdrawal(row.withdrawalId, "", session);
+  }, { operationLabel: "Partner withdrawal operations" });
 }
 
 async function processPayout(withdrawalId, note, actor = "crm-admin") {
   const message = textValue(note, { label: "Payout note", required: true, maxLength: 1000, preserveWhitespace: true });
-  const row = await getWithdrawal(withdrawalId);
-  if (!["finance_approved", "payout_failed"].includes(row.status)) throw validationError("Finance approval is required before payout");
-  await revalidateWithdrawal(row);
-  const agent = await getAgent(row.agentId);
-  if (agent.payoutEnabled !== true || !agent.razorpayFundAccountId) throw validationError("Configure and enable the agent payout account before processing payment");
-
-  const attempt = Number(row.payoutAttemptCount || 0) + 1;
-  const idempotencyKey = `${row.withdrawalId.slice(0, 32)}${String(attempt).padStart(2, "0")}`;
-  const now = new Date();
-  const claim = await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId, status: row.status }, {
-    $set: { status: "payout_processing", payoutAttemptCount: attempt, payoutIdempotencyKey: idempotencyKey, payoutInitiatedAt: now, payoutFailureReason: "", updatedBy: actor, updatedAt: now },
-    $push: { approvalHistory: auditEntry("payout_started", row.status, "payout_processing", message, actor) },
-  });
-  if (!claim.matchedCount) {
-    throw Object.assign(new Error("This withdrawal is already being processed or has changed. Refresh and try again."), {
-      status: 409,
-      code: "PAYOUT_ALREADY_PROCESSING",
-    });
+  const initial = await getWithdrawal(withdrawalId);
+  if (!["finance_approved", "payout_failed"].includes(initial.status)) {
+    throw validationError("Finance approval is required before payout");
+  }
+  const agent = await getAgent(initial.agentId);
+  if (agent.payoutEnabled !== true || !agent.razorpayFundAccountId) {
+    throw validationError("Configure and enable the agent payout account before processing payment");
   }
 
+  const claim = await withTransaction(async (session) => {
+    const row = await getWithdrawal(withdrawalId, "", session);
+    if (!["finance_approved", "payout_failed"].includes(row.status)) {
+      throw Object.assign(new Error("This withdrawal is already being processed or has changed. Refresh and try again."), {
+        status: 409,
+        code: "PAYOUT_ALREADY_PROCESSING",
+      });
+    }
+    await revalidateWithdrawal(row, session);
+    const attempt = Number(row.payoutAttemptCount || 0) + 1;
+    const idempotencyKey = `${row.withdrawalId.slice(0, 32)}${String(attempt).padStart(2, "0")}`;
+    const now = new Date();
+    const lockResult = await Enquiry.updateMany(
+      {
+        enquiryId: { $in: row.requirementIds },
+        partnerWithdrawalId: row.withdrawalId,
+        partnerPayoutStatus: "reserved",
+        $or: [
+          { partnerPayoutLockWithdrawalId: "" },
+          { partnerPayoutLockWithdrawalId: null },
+          { partnerPayoutLockWithdrawalId: { $exists: false } },
+        ],
+      },
+      {
+        $set: {
+          partnerPayoutLockedAt: now,
+          partnerPayoutLockWithdrawalId: row.withdrawalId,
+          updatedAt: now,
+        },
+      },
+      { session },
+    );
+    if (lockResult.modifiedCount !== row.requirementIds.length) {
+      throw Object.assign(new Error("Referral payout state changed while the payout was being started"), {
+        status: 409,
+        code: "PAYOUT_REQUIREMENT_LOCK_FAILED",
+      });
+    }
+    const updateResult = await AgentWithdrawal.updateOne(
+      { withdrawalId: row.withdrawalId, status: row.status },
+      {
+        $set: {
+          status: "payout_processing",
+          payoutAttemptCount: attempt,
+          payoutIdempotencyKey: idempotencyKey,
+          payoutInitiatedAt: now,
+          payoutFailureReason: "",
+          updatedBy: actor,
+          updatedAt: now,
+        },
+        $push: {
+          approvalHistory: historyPush(
+            auditEntry("payout_started", row.status, "payout_processing", message, actor),
+          ),
+        },
+      },
+      { session },
+    );
+    if (updateResult.modifiedCount !== 1) {
+      throw Object.assign(new Error("This withdrawal is already being processed or has changed. Refresh and try again."), {
+        status: 409,
+        code: "PAYOUT_ALREADY_PROCESSING",
+      });
+    }
+    return { row, attempt, idempotencyKey };
+  }, { operationLabel: "Partner payout operations" });
+
+  let payout = null;
   try {
-    const payout = await razorpay.createPayout({
-      idempotencyKey,
+    payout = await razorpay.createPayout({
+      idempotencyKey: claim.idempotencyKey,
       fundAccountId: agent.razorpayFundAccountId,
-      amountPaise: row.netAmountPaise,
+      amountPaise: claim.row.netAmountPaise,
       mode: agent.payoutMode || "IMPS",
-      referenceId: row.withdrawalNumber,
-      narration: `Findoly ${row.referralId} payout`,
-      notes: { withdrawalId: row.withdrawalId, referralId: row.referralId },
+      referenceId: claim.row.withdrawalNumber,
+      narration: `Findoly ${claim.row.referralId} payout`,
+      notes: { withdrawalId: claim.row.withdrawalId, referralId: claim.row.referralId },
     });
-    await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, {
+    await AgentWithdrawal.updateOne({ withdrawalId: claim.row.withdrawalId, status: "payout_processing" }, {
       $set: {
         razorpayPayoutId: payout.id || "",
         razorpayPayoutStatus: payout.status || "processing",
-        razorpayStatusDetails: payout.status_details || {},
+        razorpayStatusDetails: payoutStatusDetails(payout.status_details),
         payoutReference: payout.utr || payout.id || "",
         payoutMode: agent.payoutMode || "IMPS",
         payoutAccountLabel: agent.payoutAccountLabel || "",
@@ -388,46 +509,177 @@ async function processPayout(withdrawalId, note, actor = "crm-admin") {
         updatedAt: new Date(),
       },
     });
-    if (payout.status === "processed") await markPaid(row.withdrawalId, payout, "razorpay-api");
-    return getWithdrawal(row.withdrawalId);
+    if (payout.status === "processed") {
+      await markPaid(claim.row.withdrawalId, payout, "razorpay-api");
+    } else if (["failed", "cancelled", "rejected"].includes(String(payout.status || "").toLowerCase())) {
+      await markPayoutFailed(claim.row.withdrawalId, payout, "payout_failed", "razorpay-api");
+    }
+    return getWithdrawal(claim.row.withdrawalId);
   } catch (error) {
-    await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, {
-      $set: { status: "payout_failed", payoutFailureReason: error.message, updatedBy: actor, updatedAt: new Date() },
-      $push: { approvalHistory: auditEntry("payout_failed", "payout_processing", "payout_failed", error.message, actor) },
-    });
+    const reconciliationRequired = Boolean(payout?.id || error?.requestMayHaveSucceeded);
+    if (reconciliationRequired) {
+      const reason = `Payout result requires reconciliation: ${String(error?.message || "unknown result").slice(0, 1800)}`;
+      await AgentWithdrawal.updateOne(
+        { withdrawalId: claim.row.withdrawalId, status: "payout_processing" },
+        {
+          $set: {
+            payoutFailureReason: reason,
+            razorpayPayoutId: payout?.id || claim.row.razorpayPayoutId || "",
+            razorpayPayoutStatus: payout?.status || claim.row.razorpayPayoutStatus || "unknown",
+            updatedBy: actor,
+            updatedAt: new Date(),
+          },
+          $push: {
+            approvalHistory: historyPush(
+              auditEntry("payout_reconciliation_required", "payout_processing", "payout_processing", reason, actor),
+            ),
+          },
+        },
+      );
+      throw Object.assign(
+        new Error("The payout result is uncertain and must be reconciled from Razorpay or its webhook before retrying"),
+        {
+          status: 503,
+          code: "PAYOUT_RECONCILIATION_REQUIRED",
+          cause: error,
+        },
+      );
+    }
+    await withTransaction(async (session) => {
+      const reason = String(error?.message || "Payout request failed").slice(0, 2000);
+      await Enquiry.updateMany(
+        { partnerPayoutLockWithdrawalId: claim.row.withdrawalId, partnerPayoutStatus: "reserved" },
+        { $set: { partnerPayoutLockedAt: null, partnerPayoutLockWithdrawalId: "", updatedAt: new Date() } },
+        { session },
+      );
+      await AgentWithdrawal.updateOne(
+        { withdrawalId: claim.row.withdrawalId, status: "payout_processing" },
+        {
+          $set: { status: "payout_failed", payoutFailureReason: reason, updatedBy: actor, updatedAt: new Date() },
+          $push: { approvalHistory: historyPush(auditEntry("payout_failed", "payout_processing", "payout_failed", reason, actor)) },
+        },
+        { session },
+      );
+    }, { operationLabel: "Partner payout failure recording" });
     throw error;
   }
 }
 
 async function markPaid(withdrawalId, payout = {}, actor = "razorpay-webhook") {
-  const row = await getWithdrawal(withdrawalId);
-  if (row.status === "paid") return row;
-  const now = new Date();
-  const reference = payout.utr || payout.id || row.razorpayPayoutId || row.withdrawalNumber;
-  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, {
-    $set: { status: "paid", razorpayPayoutId: payout.id || row.razorpayPayoutId || "", razorpayPayoutStatus: payout.status || "processed", razorpayStatusDetails: payout.status_details || {}, payoutReference: reference, paidAt: now, payoutFailureReason: "", updatedBy: actor, updatedAt: now },
-    $push: { approvalHistory: auditEntry("paid", row.status, "paid", "Razorpay payout processed successfully", actor) },
-  });
-  await Enquiry.updateMany(
-    { enquiryId: { $in: row.requirementIds }, partnerWithdrawalId: row.withdrawalId, partnerPayoutStatus: "reserved" },
-    { $set: { partnerPayoutStatus: "paid", partnerPayoutRatePaise: row.payoutPerReferralPaise, partnerPayoutAmountPaise: row.payoutPerReferralPaise, partnerPaidAt: now, partnerPayoutReference: reference, updatedAt: now } },
-  );
-  return getWithdrawal(row.withdrawalId);
+  return withTransaction(async (session) => {
+    const row = await getWithdrawal(withdrawalId, "", session);
+    if (row.status === "paid" || row.status === "payout_reversed") return row;
+    if (!["payout_processing", "payout_failed"].includes(row.status)) {
+      throw Object.assign(new Error("This withdrawal is not awaiting payout completion"), {
+        status: 409,
+        code: "PAYOUT_STATUS_NOT_COMPLETABLE",
+      });
+    }
+    const now = new Date();
+    const reference = payout.utr || payout.id || row.razorpayPayoutId || row.withdrawalNumber;
+    const enquiryResult = await Enquiry.updateMany(
+      { enquiryId: { $in: row.requirementIds }, partnerWithdrawalId: row.withdrawalId, partnerPayoutStatus: "reserved" },
+      { $set: { partnerPayoutStatus: "paid", partnerPayoutRatePaise: row.payoutPerReferralPaise, partnerPayoutAmountPaise: row.payoutPerReferralPaise, partnerPaidAt: now, partnerPayoutReference: reference, partnerPayoutLockedAt: null, partnerPayoutLockWithdrawalId: "", updatedAt: now } },
+      { session },
+    );
+    if (enquiryResult.modifiedCount !== row.requirementIds.length) {
+      throw Object.assign(new Error("Payout records are inconsistent and require review before completion"), {
+        status: 409,
+        code: "PAYOUT_REQUIREMENT_MISMATCH",
+      });
+    }
+    const withdrawalResult = await AgentWithdrawal.updateOne(
+      { withdrawalId: row.withdrawalId, status: row.status },
+      {
+        $set: {
+          status: "paid",
+          activeSlot: "",
+          razorpayPayoutId: payout.id || row.razorpayPayoutId || "",
+          razorpayPayoutStatus: payout.status || "processed",
+          razorpayStatusDetails: payoutStatusDetails(payout.status_details),
+          payoutReference: reference,
+          paidAt: now,
+          payoutFailureReason: "",
+          updatedBy: actor,
+          updatedAt: now,
+        },
+        $push: { approvalHistory: historyPush(auditEntry("paid", row.status, "paid", "Razorpay payout processed successfully", actor)) },
+      },
+      { session },
+    );
+    if (withdrawalResult.modifiedCount !== 1) {
+      throw Object.assign(new Error("Payout status changed while completion was being recorded"), {
+        status: 409,
+        code: "PAYOUT_CONCURRENT_UPDATE",
+      });
+    }
+    return getWithdrawal(row.withdrawalId, "", session);
+  }, { operationLabel: "Partner payout operations" });
 }
 
 async function markPayoutFailed(withdrawalId, payout = {}, status = "payout_failed", actor = "razorpay-webhook") {
-  const row = await getWithdrawal(withdrawalId);
-  if (row.status === "paid" && status !== "payout_reversed") return row;
-  const nextStatus = status === "payout_reversed" ? "payout_reversed" : "payout_failed";
-  const reason = payout?.status_details?.description || payout?.failure_reason || payout?.error?.description || `Razorpay payout ${nextStatus.replace("payout_", "")}`;
-  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, {
-    $set: { status: nextStatus, razorpayPayoutId: payout.id || row.razorpayPayoutId || "", razorpayPayoutStatus: payout.status || nextStatus, razorpayStatusDetails: payout.status_details || {}, payoutFailureReason: reason, updatedBy: actor, updatedAt: new Date() },
-    $push: { approvalHistory: auditEntry(nextStatus, row.status, nextStatus, reason, actor) },
-  });
-  if (nextStatus === "payout_reversed") {
-    await Enquiry.updateMany({ partnerWithdrawalId: row.withdrawalId, partnerPayoutStatus: "paid" }, { $set: { partnerPayoutStatus: "unpaid", partnerWithdrawalId: "", partnerPayoutRatePaise: 0, partnerPayoutAmountPaise: 0, partnerPaidAt: null, partnerPayoutReference: "", updatedAt: new Date() } });
-  }
-  return getWithdrawal(row.withdrawalId);
+  return withTransaction(async (session) => {
+    const row = await getWithdrawal(withdrawalId, "", session);
+    const nextStatus = status === "payout_reversed" ? "payout_reversed" : "payout_failed";
+    if (row.status === nextStatus) return row;
+    if (row.status === "paid" && nextStatus !== "payout_reversed") return row;
+    const reason = payout?.status_details?.description || payout?.failure_reason || payout?.error?.description || `Razorpay payout ${nextStatus.replace("payout_", "")}`;
+    const now = new Date();
+
+    if (nextStatus === "payout_reversed") {
+      await Enquiry.updateMany(
+        {
+          partnerWithdrawalId: row.withdrawalId,
+          partnerPayoutStatus: { $in: ["paid", "reserved"] },
+        },
+        {
+          $set: {
+            partnerPayoutStatus: "unpaid",
+            partnerWithdrawalId: "",
+            partnerPayoutRatePaise: 0,
+            partnerPayoutAmountPaise: 0,
+            partnerPaidAt: null,
+            partnerPayoutReference: "",
+            partnerPayoutLockedAt: null,
+            partnerPayoutLockWithdrawalId: "",
+            updatedAt: now,
+          },
+        },
+        { session },
+      );
+    } else {
+      await Enquiry.updateMany(
+        { partnerPayoutLockWithdrawalId: row.withdrawalId, partnerPayoutStatus: "reserved" },
+        { $set: { partnerPayoutLockedAt: null, partnerPayoutLockWithdrawalId: "", updatedAt: now } },
+        { session },
+      );
+    }
+
+    const updateResult = await AgentWithdrawal.updateOne(
+      { withdrawalId: row.withdrawalId, status: row.status },
+      {
+        $set: {
+          status: nextStatus,
+          activeSlot: nextStatus === "payout_reversed" ? "" : row.agentId,
+          razorpayPayoutId: payout.id || row.razorpayPayoutId || "",
+          razorpayPayoutStatus: payout.status || nextStatus,
+          razorpayStatusDetails: payoutStatusDetails(payout.status_details),
+          payoutFailureReason: reason,
+          updatedBy: actor,
+          updatedAt: now,
+        },
+        $push: { approvalHistory: historyPush(auditEntry(nextStatus, row.status, nextStatus, reason, actor)) },
+      },
+      { session },
+    );
+    if (updateResult.modifiedCount !== 1) {
+      throw Object.assign(new Error("Payout status changed while failure or reversal was being recorded"), {
+        status: 409,
+        code: "PAYOUT_CONCURRENT_UPDATE",
+      });
+    }
+    return getWithdrawal(row.withdrawalId, "", session);
+  }, { operationLabel: "Partner payout operations" });
 }
 
 async function handleWebhook(event = {}) {
@@ -440,30 +692,91 @@ async function handleWebhook(event = {}) {
   if (eventName === "payout.processed" || payout.status === "processed") return markPaid(row.withdrawalId, payout);
   if (eventName === "payout.reversed" || payout.status === "reversed") return markPayoutFailed(row.withdrawalId, payout, "payout_reversed");
   if (eventName === "payout.failed" || payout.status === "failed" || payout.status === "cancelled" || payout.status === "rejected") return markPayoutFailed(row.withdrawalId, payout, "payout_failed");
-  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, { $set: { razorpayPayoutStatus: payout.status || eventName, razorpayStatusDetails: payout.status_details || {}, updatedAt: new Date() } });
+  await AgentWithdrawal.updateOne({ withdrawalId: row.withdrawalId }, { $set: { razorpayPayoutStatus: payout.status || eventName, razorpayStatusDetails: payoutStatusDetails(payout.status_details), updatedAt: new Date() } });
   return getWithdrawal(row.withdrawalId);
 }
 
-async function assertRequirementNotPayoutProcessing(enquiry = {}) {
+async function assertRequirementNotPayoutProcessing(enquiry = {}, session = null) {
+  if (enquiry.partnerPayoutLockWithdrawalId) {
+    throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), {
+      status: 409,
+      code: "REFERRAL_PAYOUT_LOCKED",
+    });
+  }
   if (!enquiry.partnerWithdrawalId || enquiry.partnerPayoutStatus !== "reserved") return true;
-  const processing = await AgentWithdrawal.findOne({ withdrawalId: enquiry.partnerWithdrawalId, status: "payout_processing" }).select({ withdrawalId: 1 }).lean();
+  let lookup = AgentWithdrawal.findOne({
+    withdrawalId: enquiry.partnerWithdrawalId,
+    status: "payout_processing",
+  }).select({ withdrawalId: 1 });
+  if (session) lookup = lookup.session(session);
+  const processing = await lookup.lean();
   if (processing) {
-    throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), { status: 409 });
+    throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), {
+      status: 409,
+      code: "REFERRAL_PAYOUT_LOCKED",
+    });
   }
   return true;
 }
 
-async function markEligibilityChangedForRequirement(enquiryId, reason, actor = "crm-admin") {
-  const enquiry = await Enquiry.findOne({ enquiryId }).lean();
+function unlockedReferralQuery(enquiryId) {
+  return {
+    enquiryId,
+    $or: [
+      { partnerPayoutLockWithdrawalId: "" },
+      { partnerPayoutLockWithdrawalId: null },
+      { partnerPayoutLockWithdrawalId: { $exists: false } },
+    ],
+  };
+}
+
+async function markEligibilityChangedInSession(enquiry, reason, actor, session) {
   if (!enquiry?.partnerWithdrawalId || enquiry.partnerPayoutStatus !== "reserved") return null;
-  const withdrawal = await AgentWithdrawal.findOne({ withdrawalId: enquiry.partnerWithdrawalId, status: { $in: ACTIVE_WITHDRAWAL_STATUSES } }).lean();
+  const withdrawal = await AgentWithdrawal.findOne({
+    withdrawalId: enquiry.partnerWithdrawalId,
+    status: { $in: ACTIVE_WITHDRAWAL_STATUSES },
+  }).session(session).lean();
   if (!withdrawal) return null;
-  await releaseRequirements(withdrawal.withdrawalId);
-  await AgentWithdrawal.updateOne({ withdrawalId: withdrawal.withdrawalId }, {
-    $set: { status: "eligibility_changed", payoutFailureReason: reason, updatedBy: actor, updatedAt: new Date() },
-    $push: { approvalHistory: auditEntry("eligibility_changed", withdrawal.status, "eligibility_changed", reason, actor) },
-  });
-  return getWithdrawal(withdrawal.withdrawalId);
+  if (withdrawal.status === "payout_processing" || enquiry.partnerPayoutLockWithdrawalId) {
+    throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), {
+      status: 409,
+      code: "REFERRAL_PAYOUT_LOCKED",
+    });
+  }
+  await releaseRequirements(withdrawal.withdrawalId, session);
+  const result = await AgentWithdrawal.updateOne(
+    { withdrawalId: withdrawal.withdrawalId, status: withdrawal.status },
+    {
+      $set: {
+        status: "eligibility_changed",
+        activeSlot: "",
+        payoutFailureReason: reason,
+        updatedBy: actor,
+        updatedAt: new Date(),
+      },
+      $push: {
+        approvalHistory: historyPush(
+          auditEntry("eligibility_changed", withdrawal.status, "eligibility_changed", reason, actor),
+        ),
+      },
+    },
+    { session },
+  );
+  if (result.modifiedCount !== 1) {
+    throw Object.assign(new Error("Withdrawal eligibility changed concurrently. Refresh and try again."), {
+      status: 409,
+      code: "WITHDRAWAL_CONCURRENT_UPDATE",
+    });
+  }
+  return getWithdrawal(withdrawal.withdrawalId, "", session);
+}
+
+async function markEligibilityChangedForRequirement(enquiryId, reason, actor = "crm-admin") {
+  return withTransaction(async (session) => {
+    const enquiry = await Enquiry.findOne({ enquiryId }).session(session).lean();
+    if (!enquiry) return null;
+    return markEligibilityChangedInSession(enquiry, reason, actor, session);
+  }, { operationLabel: "Partner withdrawal operations" });
 }
 
 async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admin") {
@@ -476,102 +789,167 @@ async function updateReferralValidation(enquiryId, input = {}, actor = "crm-admi
     maxLength: 2000,
     preserveWhitespace: true,
   });
-  const reason = status === "invalid" ? enumValue(input.reason, INVALID_REASONS, { label: "Invalid referral reason" }) : "";
-  const row = await Enquiry.findOne({ enquiryId }).lean();
-  if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (canonicalLeadStatus(row.status) === "approved") {
-    throw Object.assign(
-      new Error("Lead validation is locked after approval because the lead is already published to providers."),
-      { status: 409 },
-    );
-  }
-  const agentLead = isAgentLead(row);
-  if (agentLead) await assertRequirementNotPayoutProcessing(row);
-  const now = new Date();
-  const payoutStatus = agentLead
-    ? (status === "invalid" ? "not_eligible" : (eligibilityDate(row) > now ? "waiting_period" : "unpaid"))
+  const reason = status === "invalid"
+    ? enumValue(input.reason, INVALID_REASONS, { label: "Invalid referral reason" })
     : "";
-  if (agentLead && status !== "valid" && row.partnerWithdrawalId && row.partnerPayoutStatus === "reserved") {
-    await markEligibilityChangedForRequirement(enquiryId, `Referral changed to ${status}: ${note}`, actor);
-  }
 
-  const set = {
-    agentReferralValidation: status,
-    leadValidationMethod: method,
-    agentReferralInvalidReason: reason,
-    agentReferralValidationNote: note,
-    agentReferralValidatedAt: now,
-    agentReferralValidatedBy: actor,
-    updatedAt: now,
-  };
-  if (agentLead) {
-    set.partnerEligibilityDate = row.partnerEligibilityDate || eligibilityDate(row);
-    set.partnerPayoutStatus = row.partnerPayoutStatus === "paid" ? "paid" : payoutStatus;
-  }
-  const timeline = [{
-    timelineId: uuid(),
-    type: "lead_validation",
-    message: `Lead marked ${status}`,
-    method,
-    note,
-    reason,
-    actor,
-    createdAt: now,
-  }];
+  return withTransaction(async (session) => {
+    const row = await Enquiry.findOne({ enquiryId }).session(session).lean();
+    if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
+    if (canonicalLeadStatus(row.status) === "approved") {
+      throw Object.assign(
+        new Error("Lead validation is locked after approval because the lead is already published to providers."),
+        { status: 409 },
+      );
+    }
+    const agentLead = isAgentLead(row);
+    if (agentLead) await assertRequirementNotPayoutProcessing(row, session);
+    const now = new Date();
+    const payoutStatus = agentLead
+      ? (status === "invalid" ? "not_eligible" : (eligibilityDate(row) > now ? "waiting_period" : "unpaid"))
+      : "";
+    if (agentLead && status !== "valid") {
+      await markEligibilityChangedInSession(
+        row,
+        `Referral changed to ${status}: ${note}`,
+        actor,
+        session,
+      );
+    }
 
-  if (status === "invalid" && canonicalLeadStatus(row.status) !== "rejected") {
-    const metadata = { ...(row.metadata || {}) };
-    metadata.rejectedFromStatus = canonicalLeadStatus(row.status);
-    metadata.rejectionReason = note;
-    metadata.lastStatusNote = note;
-    set.status = "rejected";
-    set.marketplaceAvailable = false;
-    set.marketplaceStatus = "closed";
-    set.statusUpdatedAt = now;
-    set.statusUpdatedBy = actor;
-    set.metadata = metadata;
-    timeline.push({
+    const set = {
+      agentReferralValidation: status,
+      leadValidationMethod: method,
+      agentReferralInvalidReason: reason,
+      agentReferralValidationNote: note,
+      agentReferralValidatedAt: now,
+      agentReferralValidatedBy: actor,
+      updatedAt: now,
+    };
+    if (agentLead) {
+      set.partnerEligibilityDate = row.partnerEligibilityDate || eligibilityDate(row);
+      set.partnerPayoutStatus = row.partnerPayoutStatus === "paid" ? "paid" : payoutStatus;
+      if (status === "invalid") {
+        set.partnerWithdrawalId = "";
+        set.partnerPayoutLockedAt = null;
+        set.partnerPayoutLockWithdrawalId = "";
+      }
+    }
+    const timeline = [{
       timelineId: uuid(),
-      type: "status_changed",
-      message: "Lead was marked Invalid and automatically changed to Rejected.",
-      fromStatus: canonicalLeadStatus(row.status),
-      toStatus: "rejected",
-      action: "reject",
+      type: "lead_validation",
+      message: `Lead marked ${status}`,
       method,
       note,
       reason,
       actor,
       createdAt: now,
-    });
-  }
+    }];
 
-  await Enquiry.updateOne(
-    { enquiryId },
-    { $set: set, $push: { timeline: { $each: timeline } } },
-  );
-  return Enquiry.findOne({ enquiryId }).lean();
+    if (status === "invalid" && canonicalLeadStatus(row.status) !== "rejected") {
+      const metadata = { ...(row.metadata || {}) };
+      metadata.rejectedFromStatus = canonicalLeadStatus(row.status);
+      metadata.rejectionReason = note;
+      metadata.lastStatusNote = note;
+      set.status = "rejected";
+      set.marketplaceAvailable = false;
+      set.marketplaceStatus = "closed";
+      set.statusUpdatedAt = now;
+      set.statusUpdatedBy = actor;
+      set.metadata = metadata;
+      timeline.push({
+        timelineId: uuid(),
+        type: "status_changed",
+        message: "Lead was marked Invalid and automatically changed to Rejected.",
+        fromStatus: canonicalLeadStatus(row.status),
+        toStatus: "rejected",
+        action: "reject",
+        method,
+        note,
+        reason,
+        actor,
+        createdAt: now,
+      });
+    }
+
+    const updateResult = await Enquiry.updateOne(
+      unlockedReferralQuery(enquiryId),
+      { $set: set, $push: { timeline: timelinePush(timeline) } },
+      { session },
+    );
+    if (updateResult.matchedCount !== 1) {
+      throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), {
+        status: 409,
+        code: "REFERRAL_PAYOUT_LOCKED",
+      });
+    }
+    return Enquiry.findOne({ enquiryId }).session(session).lean();
+  }, { operationLabel: "Partner referral validation" });
 }
 
 async function updateSaleConversion(enquiryId, input = {}, actor = "crm-admin") {
   const status = enumValue(input.status, CONVERSION_STATUSES, { label: "Sale conversion status" });
-  const note = textValue(input.note, { label: "Sale conversion note", required: true, maxLength: 2000, preserveWhitespace: true });
-  const row = await Enquiry.findOne({ enquiryId }).lean();
-  if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (!isAgentLead(row)) throw validationError("Sale conversion tracking is available only for Agent Portal requirements");
-  await assertRequirementNotPayoutProcessing(row);
-  const now = new Date();
-  await Enquiry.updateOne({ enquiryId }, {
-    $set: {
+  const note = textValue(input.note, {
+    label: "Sale conversion note",
+    required: true,
+    maxLength: 2000,
+    preserveWhitespace: true,
+  });
+
+  return withTransaction(async (session) => {
+    const row = await Enquiry.findOne({ enquiryId }).session(session).lean();
+    if (!row) throw Object.assign(new Error("Lead not found"), { status: 404 });
+    if (!isAgentLead(row)) {
+      throw validationError("Sale conversion tracking is available only for Agent Portal requirements");
+    }
+    await assertRequirementNotPayoutProcessing(row, session);
+    if (status !== "converted") {
+      await markEligibilityChangedInSession(
+        row,
+        `Sale conversion changed to ${status}: ${note}`,
+        actor,
+        session,
+      );
+    }
+    const now = new Date();
+    const set = {
       agentSaleConversion: status,
       agentSaleConversionNote: note,
       agentSaleConvertedAt: status === "converted" ? now : null,
       agentSaleConvertedBy: actor,
       updatedAt: now,
-    },
-    $push: { timeline: { timelineId: uuid(), type: "agent_sale_conversion", message: `Agent referral sale marked ${status}`, note, actor, createdAt: now } },
-  });
-  if (status !== "converted") await markEligibilityChangedForRequirement(enquiryId, `Sale conversion changed to ${status}: ${note}`, actor);
-  return Enquiry.findOne({ enquiryId }).lean();
+    };
+    if (status !== "converted" && row.partnerPayoutStatus === "reserved") {
+      set.partnerPayoutStatus = "unpaid";
+      set.partnerWithdrawalId = "";
+      set.partnerPayoutLockedAt = null;
+      set.partnerPayoutLockWithdrawalId = "";
+    }
+    const result = await Enquiry.updateOne(
+      unlockedReferralQuery(enquiryId),
+      {
+        $set: set,
+        $push: {
+          timeline: timelinePush({
+            timelineId: uuid(),
+            type: "agent_sale_conversion",
+            message: `Agent referral sale marked ${status}`,
+            note,
+            actor,
+            createdAt: now,
+          }),
+        },
+      },
+      { session },
+    );
+    if (result.matchedCount !== 1) {
+      throw Object.assign(new Error("This referral is locked while its Razorpay payout is processing"), {
+        status: 409,
+        code: "REFERRAL_PAYOUT_LOCKED",
+      });
+    }
+    return Enquiry.findOne({ enquiryId }).session(session).lean();
+  }, { operationLabel: "Partner sale conversion update" });
 }
 
 module.exports = {

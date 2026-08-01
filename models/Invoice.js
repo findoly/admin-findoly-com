@@ -9,8 +9,8 @@ const invoiceSchema = new mongoose.Schema(
     customerName: { type: String, default: "" },
     providerName: { type: String, default: "" },
     status: { type: String, default: "draft", index: true, enum: ["draft", "sent", "paid", "overdue", "cancelled"] },
-    issueDate: { type: String, default: "" },
-    dueDate: { type: String, default: "" },
+    issueDate: { type: Date, default: null },
+    dueDate: { type: Date, default: null },
     items: { type: [mongoose.Schema.Types.Mixed], default: [] },
     subtotal: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
@@ -27,5 +27,8 @@ const invoiceSchema = new mongoose.Schema(
 
 invoiceSchema.index({ createdAt: -1, _id: -1 });
 invoiceSchema.index({ status: 1, createdAt: -1, _id: -1 });
+invoiceSchema.index({ issueDate: -1, _id: -1 });
+invoiceSchema.index({ dueDate: -1, _id: -1 });
+invoiceSchema.index({ updatedAt: -1, _id: -1 });
 
 module.exports = mongoose.model("Invoice", invoiceSchema, "invoices");

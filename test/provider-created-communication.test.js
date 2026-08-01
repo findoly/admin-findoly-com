@@ -33,7 +33,7 @@ test("provider-created defaults are idempotently ensured before rules and templa
 test("provider creation dispatches once after successful persistence and maps template variables", () => {
   const provider = read("services/provider/provider-service.js");
   const notification = read("services/communication/notification-service.js");
-  assert.match(provider, /Provider\.create\(data\)[\s\S]*dispatch\(\s*"provider_created"/);
+  assert.match(provider, /Provider\.create\(\[\{ \.\.\.data, providerId \}\][\s\S]*dispatch\(\s*"provider_created"/);
   assert.match(notification, /values\["1"\]\s*=\s*provider\.name/);
   assert.match(notification, /values\["2"\]\s*=\s*provider\.providerId/);
   assert.match(notification, /values\["4"\][\s\S]*categorySlugs/);

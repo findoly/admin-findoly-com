@@ -29,6 +29,43 @@ function validHttpUrl(value, { httpsOnly = false } = {}) {
   }
 }
 
+function validOrigin(value, { httpsOnly = false } = {}) {
+  try {
+    const url = new URL(String(value || ""));
+    if (httpsOnly && url.protocol !== "https:") return false;
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    return url.pathname === "/" && !url.search && !url.hash && Boolean(url.hostname);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function databaseNameFromMongoUri(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (!["mongodb:", "mongodb+srv:"].includes(url.protocol)) return "";
+    return decodeURIComponent(url.pathname.replace(/^\/+/, "").split("/")[0] || "").trim();
+  } catch (_error) {
+    return "";
+  }
+}
+
+
+function integerSettingError(env, key, { min, max, optional = true } = {}) {
+  const raw = env[key];
+  if ((raw === undefined || raw === null || String(raw).trim() === "") && optional) return "";
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    return `${key} must be a whole number between ${min} and ${max}`;
+  }
+  return "";
+}
+
+function strongToken(value, minimum = 32) {
+  const text = String(value || "").trim();
+  return text.length >= minimum && !/(replace|placeholder|example|dummy|your[_ -]?token)/i.test(text);
+}
+
 function validateRuntimeConfig(env = process.env) {
   const production = env.NODE_ENV === "production";
   const errors = [];
@@ -36,6 +73,8 @@ function validateRuntimeConfig(env = process.env) {
 
   if (env.SKIP_DB !== "true" && !present(env.MONGODB_URI)) {
     errors.push("MONGODB_URI is required");
+  } else if (env.SKIP_DB !== "true" && !databaseNameFromMongoUri(env.MONGODB_URI)) {
+    errors.push("MONGODB_URI must include an explicit database name");
   }
 
   const sessionSecret = String(
@@ -52,6 +91,50 @@ function validateRuntimeConfig(env = process.env) {
     if (!validHttpUrl(url, { httpsOnly: production })) {
       errors.push(`OTP service URL is invalid${production ? " or is not HTTPS" : ""}: ${url}`);
     }
+  }
+
+  const corsOrigins = String(env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (production && !corsOrigins.length) {
+    errors.push("CORS_ORIGINS must contain at least the CRM browser origin");
+  }
+  for (const origin of corsOrigins) {
+    if (!validOrigin(origin, { httpsOnly: production })) {
+      errors.push(`CORS origin is invalid${production ? " or is not HTTPS" : ""}: ${origin}`);
+    }
+  }
+
+  const adminOrigin = env.CRM_ADMIN_ORIGIN || (production ? "https://admin.findoly.com" : "");
+  if (production && !validOrigin(adminOrigin, { httpsOnly: true })) {
+    errors.push("CRM_ADMIN_ORIGIN must be a valid HTTPS origin without a path");
+  }
+
+  const integerSettings = [
+    ["MONGO_MAX_POOL_SIZE", 1, 500],
+    ["MONGO_MIN_POOL_SIZE", 0, 100],
+    ["MONGO_MAX_IDLE_TIME_MS", 1000, 600000],
+    ["MONGO_SERVER_SELECTION_TIMEOUT_MS", 1000, 120000],
+    ["CRM_QUERY_MAX_TIME_MS", 1000, 60000],
+    ["CRM_OTP_RESEND_SECONDS", 1, 3600],
+    ["CRM_OTP_MAX_SENDS_PER_MINUTE", 1, 20],
+    ["CRM_OTP_RATE_WINDOW_SECONDS", 10, 3600],
+    ["CRM_OTP_MAX_IP_REQUESTS_PER_HOUR", 5, 1000],
+    ["CRM_OTP_IP_RATE_WINDOW_SECONDS", 60, 86400],
+    ["CRM_OTP_MAX_IP_VERIFY_ATTEMPTS_PER_HOUR", 5, 5000],
+    ["CRM_OTP_IP_VERIFY_WINDOW_SECONDS", 60, 86400],
+    ["PUBLIC_INTAKE_RATE_MAX", 10, 10000],
+    ["PUBLIC_INTAKE_RATE_WINDOW_MS", 60000, 86400000],
+  ];
+  for (const [key, min, max] of integerSettings) {
+    const message = integerSettingError(env, key, { min, max });
+    if (message) errors.push(message);
+  }
+  const maxPool = Number(env.MONGO_MAX_POOL_SIZE || 30);
+  const minPool = Number(env.MONGO_MIN_POOL_SIZE || 2);
+  if (Number.isFinite(maxPool) && Number.isFinite(minPool) && minPool > maxPool) {
+    errors.push("MONGO_MIN_POOL_SIZE cannot be greater than MONGO_MAX_POOL_SIZE");
   }
 
   const s3Values = {
@@ -75,8 +158,13 @@ function validateRuntimeConfig(env = process.env) {
     errors.push("AWS_CLOUDFRONT_DOMAIN must be a hostname without a path");
   }
 
-  if (production && !present(env.PUBLIC_INTAKE_API_TOKEN)) {
-    warnings.push("PUBLIC_INTAKE_API_TOKEN is not configured; public enquiry aliases rely on rate limiting only");
+  if (production && !strongToken(env.PUBLIC_INTAKE_API_TOKEN, 32)) {
+    errors.push("PUBLIC_INTAKE_API_TOKEN must be a non-placeholder random value of at least 32 characters");
+  }
+  for (const key of ["COMMUNICATION_EVENT_API_TOKEN", "COMMUNICATION_OTP_API_TOKEN", "CUSTOMER_PORTAL_API_TOKEN"]) {
+    if (present(env[key]) && !strongToken(env[key], 32)) {
+      errors.push(`${key} must be a non-placeholder random value of at least 32 characters when configured`);
+    }
   }
   if (production && !present(env.COMMUNICATION_EVENT_API_TOKEN)) {
     warnings.push("COMMUNICATION_EVENT_API_TOKEN is not configured; communication integration events will reject requests");
@@ -102,4 +190,13 @@ function assertRuntimeConfig(env = process.env) {
   return result;
 }
 
-module.exports = { validateRuntimeConfig, assertRuntimeConfig, validHttpUrl, invalidAwsSessionToken };
+module.exports = {
+  validateRuntimeConfig,
+  assertRuntimeConfig,
+  validHttpUrl,
+  validOrigin,
+  databaseNameFromMongoUri,
+  strongToken,
+  invalidAwsSessionToken,
+  integerSettingError,
+};
