@@ -32,6 +32,7 @@ test("CRM and Provider share the providerjoinrequests collection contract", () =
   assert.match(model, /categoryNameSnapshot/);
   assert.match(model, /convertedProviderId/);
   assert.match(model, /partialFilterExpression: \{ \$or:/);
+  assert.doesNotMatch(model, /normalizedMobile:\s*\{[^}]*index:\s*true/);
   assert.match(indexes, /ProviderJoinRequest/);
 });
 

@@ -7,7 +7,7 @@ const providerJoinRequestSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, maxlength: 120 },
     businessName: { type: String, default: "", trim: true, maxlength: 160 },
     mobile: { type: String, required: true, trim: true, maxlength: 10 },
-    normalizedMobile: { type: String, required: true, trim: true, index: true, maxlength: 10 },
+    normalizedMobile: { type: String, required: true, trim: true, maxlength: 10 },
     whatsappNumber: { type: String, required: true, trim: true, maxlength: 10 },
     normalizedWhatsappNumber: { type: String, required: true, trim: true, index: true, maxlength: 10 },
     email: { type: String, default: "", trim: true, lowercase: true, maxlength: 254, index: true },
