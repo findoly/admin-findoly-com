@@ -1,3 +1,5 @@
+"use strict";
+
 const crypto = require("crypto");
 const ProviderJoinRequest = require("../../models/ProviderJoinRequest");
 const Provider = require("../../models/Provider");
@@ -18,11 +20,9 @@ const {
 
 const STATUSES = Object.freeze(["new", "contacted", "converted", "rejected"]);
 const OPEN_STATUSES = Object.freeze(["new", "contacted"]);
+const MUTABLE_STATUSES = Object.freeze(["new", "contacted", "rejected"]);
 const CONVERSION_LOCK_TTL_MS = 10 * 60 * 1000;
-
-function escapeRegex(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const STATUS_HISTORY_LIMIT = 50;
 
 function requestQuery(providerJoinRequestId) {
   return { providerJoinRequestId: identifierValue(providerJoinRequestId, { label: "Provider request ID" }) };
@@ -36,7 +36,49 @@ function present(row = {}) {
   return {
     ...row,
     providerJoinRequestId: row.providerJoinRequestId || row.id || "",
+    statusHistory: Array.isArray(row.statusHistory) ? row.statusHistory : [],
   };
+}
+
+function statusHistoryEntry(fromStatus, toStatus, note, actor, changedAt = new Date()) {
+  return {
+    fromStatus: String(fromStatus || ""),
+    toStatus: String(toStatus || ""),
+    note: String(note || "").trim(),
+    changedBy: actorValue(actor),
+    changedAt,
+  };
+}
+
+function transitionHistory(current, toStatus, note, actor) {
+  const entries = [];
+  const history = Array.isArray(current.statusHistory) ? current.statusHistory : [];
+  const hasRecordedRejection = history.some((entry) => entry?.toStatus === "rejected");
+  if (current.status === "rejected" && !hasRecordedRejection && current.internalNote) {
+    entries.push(statusHistoryEntry(
+      "",
+      "rejected",
+      current.internalNote,
+      current.processedBy || actor,
+      current.rejectedAt || current.updatedAt || current.createdAt || new Date(),
+    ));
+  }
+  entries.push(statusHistoryEntry(current.status, toStatus, note, actor));
+  return entries;
+}
+
+function historyPush(entries) {
+  return { $each: entries, $slice: -STATUS_HISTORY_LIMIT };
+}
+
+function activeConversionLock(row, now = new Date()) {
+  if (!row?.conversionLockAt) return false;
+  return new Date(row.conversionLockAt) >= new Date(now.getTime() - CONVERSION_LOCK_TTL_MS);
+}
+
+function maskedMobile(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits ? `******${digits.slice(-4)}` : "not-recorded";
 }
 
 async function metadata() {
@@ -87,26 +129,42 @@ async function get(providerJoinRequestId) {
 
 async function updateStatus(providerJoinRequestId, input = {}, actor) {
   const current = await get(providerJoinRequestId);
-  const status = enumValue(input.status, ["contacted", "rejected"], {
+  const status = enumValue(input.status, MUTABLE_STATUSES, {
     label: "Provider request status",
   });
   if (current.status === "converted") {
     throw Object.assign(new Error("Converted provider requests cannot be changed"), { status: 409 });
   }
-  if (current.status === "rejected") {
-    throw Object.assign(new Error("Rejected provider requests cannot be changed"), { status: 409 });
+  if (status === current.status) {
+    throw validationError("Select a different provider request status");
   }
+
   const now = new Date();
   const staleBefore = new Date(now.getTime() - CONVERSION_LOCK_TTL_MS);
-  if (current.conversionLockAt && new Date(current.conversionLockAt) >= staleBefore) {
+  if (activeConversionLock(current, now)) {
     throw Object.assign(new Error("This provider request is currently being converted"), { status: 409 });
   }
-  const internalNote = humanTextValue(input.internalNote ?? current.internalNote, {
-    label: "Internal note",
-    required: status === "rejected",
-    maxLength: 2000,
-    preserveWhitespace: true,
-  });
+
+  let internalNote;
+  if (current.status === "rejected" && status !== "rejected") {
+    internalNote = humanTextValue(input.internalNote, {
+      label: "Reopening note",
+      required: true,
+      maxLength: 2000,
+      preserveWhitespace: true,
+    });
+    if (internalNote.trim() === String(current.internalNote || "").trim()) {
+      throw validationError("Update the internal note to explain why this rejected request is being reopened");
+    }
+  } else {
+    internalNote = humanTextValue(input.internalNote ?? current.internalNote, {
+      label: "Internal note",
+      required: status === "rejected",
+      maxLength: 2000,
+      preserveWhitespace: true,
+    });
+  }
+
   const set = {
     status,
     internalNote,
@@ -116,37 +174,58 @@ async function updateStatus(providerJoinRequestId, input = {}, actor) {
     conversionLockBy: "",
   };
   if (status === "contacted") {
-    set.contactedAt = current.contactedAt || now;
+    set.contactedAt = now;
+    set.rejectedAt = null;
+  } else if (status === "new") {
+    set.contactedAt = null;
     set.rejectedAt = null;
   } else {
     set.rejectedAt = now;
   }
-  const result = await ProviderJoinRequest.updateOne(
-    {
-      ...requestQuery(providerJoinRequestId),
-      status: { $in: OPEN_STATUSES },
-      $or: [
-        { conversionLockAt: null },
-        { conversionLockAt: { $exists: false } },
-        { conversionLockAt: { $lt: staleBefore } },
-      ],
-    },
-    { $set: set },
-  );
+
+  let result;
+  try {
+    result = await ProviderJoinRequest.updateOne(
+      {
+        ...requestQuery(providerJoinRequestId),
+        status: current.status,
+        $or: [
+          { conversionLockAt: null },
+          { conversionLockAt: { $exists: false } },
+          { conversionLockAt: { $lt: staleBefore } },
+        ],
+      },
+      {
+        $set: set,
+        $push: {
+          statusHistory: historyPush(transitionHistory(current, status, internalNote, actor)),
+        },
+      },
+    );
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw Object.assign(new Error("Another open provider request already uses this mobile number"), {
+        status: 409,
+        code: "PROVIDER_REQUEST_CONTACT_CONFLICT",
+      });
+    }
+    throw error;
+  }
   if (!result.modifiedCount) {
     throw Object.assign(new Error("This provider request changed while you were updating it"), { status: 409 });
   }
-  console.log(`Provider joining request ${providerJoinRequestId} marked ${status}`);
+  console.log(`Provider joining request ${providerJoinRequestId} changed from ${current.status} to ${status}`);
   return get(providerJoinRequestId);
 }
 
-async function markConverted(providerJoinRequestId, providerId, actor, lockToken) {
+async function markConverted(request, providerId, actor, lockToken, transitionNote = "") {
+  const providerJoinRequestId = request.providerJoinRequestId;
   const updated = await withTransaction(async (session) => {
     const now = new Date();
     const row = await ProviderJoinRequest.findOneAndUpdate(
       {
         ...requestQuery(providerJoinRequestId),
-        status: { $in: OPEN_STATUSES },
+        status: request.status,
         conversionLockBy: lockToken,
       },
       {
@@ -158,6 +237,14 @@ async function markConverted(providerJoinRequestId, providerId, actor, lockToken
           conversionLockAt: null,
           conversionLockBy: "",
           updatedAt: now,
+        },
+        $push: {
+          statusHistory: historyPush(transitionHistory(
+            request,
+            "converted",
+            transitionNote || "Provider account created from this request",
+            actor,
+          )),
         },
       },
       { new: true, runValidators: true, session },
@@ -182,8 +269,18 @@ async function convert(providerJoinRequestId, input = {}, actor) {
     if (provider) return { provider: providerService.presentProvider(provider), request: initial, existing: true };
     throw Object.assign(new Error("This provider request has already been converted"), { status: 409 });
   }
+
+  let reopenNote = "";
   if (initial.status === "rejected") {
-    throw Object.assign(new Error("Rejected provider requests cannot be converted"), { status: 409 });
+    reopenNote = humanTextValue(input.reopenNote, {
+      label: "Reopening note",
+      required: true,
+      maxLength: 2000,
+      preserveWhitespace: true,
+    });
+    if (reopenNote.trim() === String(initial.internalNote || "").trim()) {
+      throw validationError("Add a new note explaining why this rejected request is being converted");
+    }
   }
 
   const now = new Date();
@@ -192,7 +289,7 @@ async function convert(providerJoinRequestId, input = {}, actor) {
   const request = await ProviderJoinRequest.findOneAndUpdate(
     {
       ...requestQuery(providerJoinRequestId),
-      status: { $in: OPEN_STATUSES },
+      status: initial.status,
       $or: [
         { conversionLockAt: null },
         { conversionLockAt: { $exists: false } },
@@ -213,26 +310,38 @@ async function convert(providerJoinRequestId, input = {}, actor) {
       request.normalizedWhatsappNumber,
       request.whatsappNumber,
     ].filter(Boolean))];
-    const emailValue = String(request.normalizedEmail || request.email || "").trim().toLowerCase();
+    const normalizedEmail = String(request.normalizedEmail || request.email || "").trim().toLowerCase();
     const providerMatches = [];
     if (phoneValues.length) {
       for (const field of ["normalizedMobile", "mobile", "normalizedWhatsappNumber", "whatsappNumber"]) {
         providerMatches.push({ [field]: { $in: phoneValues } });
       }
     }
-    if (emailValue) providerMatches.push({ $or: [{ normalizedEmail: emailValue }, { email: emailValue }] });
+    if (normalizedEmail) providerMatches.push({ $or: [{ normalizedEmail }, { email: normalizedEmail }] });
     const existing = providerMatches.length
       ? await Provider.findOne({ $or: providerMatches }).lean()
       : null;
     if (existing) {
-      const updatedRequest = await markConverted(providerJoinRequestId, existing.providerId, actor, lockToken);
+      const updatedRequest = await markConverted(
+        request,
+        existing.providerId,
+        actor,
+        lockToken,
+        reopenNote || "Request linked to an existing provider account",
+      );
       return { provider: providerService.presentProvider(existing), request: updatedRequest, existing: true };
     }
 
     const provider = await providerService.create(input, actorValue(actor), {
       allowedProviderJoinRequestId: request.providerJoinRequestId,
     });
-    const updatedRequest = await markConverted(providerJoinRequestId, provider.providerId, actor, lockToken);
+    const updatedRequest = await markConverted(
+      request,
+      provider.providerId,
+      actor,
+      lockToken,
+      reopenNote || "Provider account created from this request",
+    );
     console.log(`Provider joining request ${providerJoinRequestId} converted to provider ${provider.providerId}`);
     return { provider, request: updatedRequest, existing: false };
   } catch (error) {
@@ -244,4 +353,57 @@ async function convert(providerJoinRequestId, input = {}, actor) {
   }
 }
 
-module.exports = { metadata, list, get, updateStatus, convert, present, STATUSES, OPEN_STATUSES };
+async function remove(providerJoinRequestId, actor) {
+  const deleted = await withTransaction(async (session) => {
+    const now = new Date();
+    const staleBefore = new Date(now.getTime() - CONVERSION_LOCK_TTL_MS);
+    const row = await ProviderJoinRequest.findOne(requestQuery(providerJoinRequestId)).session(session).lean();
+    if (!row) throw Object.assign(new Error("Provider joining request not found"), { status: 404 });
+    if (row.status === "converted") {
+      throw Object.assign(new Error("Converted provider requests are retained for audit history and cannot be deleted"), {
+        status: 409,
+      });
+    }
+    if (activeConversionLock(row, now)) {
+      throw Object.assign(new Error("This provider request is currently being converted"), { status: 409 });
+    }
+
+    const result = await ProviderJoinRequest.deleteOne(
+      {
+        ...requestQuery(providerJoinRequestId),
+        status: { $ne: "converted" },
+        $or: [
+          { conversionLockAt: null },
+          { conversionLockAt: { $exists: false } },
+          { conversionLockAt: { $lt: staleBefore } },
+        ],
+      },
+      { session },
+    );
+    if (!result.deletedCount) {
+      throw Object.assign(new Error("This provider request changed while it was being deleted"), { status: 409 });
+    }
+    await releaseEntityContacts("provider_join_request", providerJoinRequestId, session);
+    return row;
+  }, { operationLabel: "Provider request deletion" });
+
+  console.log(`Provider joining request ${providerJoinRequestId} permanently deleted by ${actorValue(actor)}; previous status=${deleted.status}; mobile=${maskedMobile(deleted.mobile)}`);
+  return {
+    providerJoinRequestId,
+    name: deleted.name || "",
+    previousStatus: deleted.status || "",
+  };
+}
+
+module.exports = {
+  metadata,
+  list,
+  get,
+  updateStatus,
+  convert,
+  remove,
+  present,
+  STATUSES,
+  OPEN_STATUSES,
+  MUTABLE_STATUSES,
+};

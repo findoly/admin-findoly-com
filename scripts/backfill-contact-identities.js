@@ -12,10 +12,11 @@ const SystemMigration = require("../models/SystemMigration");
 const { contactEntries, normalizeEmail, normalizePhone } = require("../utils/contact-normalization");
 
 const MIGRATION_ID = "contact-identities-v1";
-const MIGRATION_VERSION = 1;
-const STAGING_COLLECTION = "contactidentities_migration_v1";
+const MIGRATION_VERSION = 2;
+const STAGING_COLLECTION = "contactidentities_migration_v2";
 const CONTACT_COLLECTION = "contactidentities";
 const REPORT_SAMPLE_LIMIT = 100;
+const EMPLOYEE_LINKED_TYPES = new Set(["agent", "provider", "employee", "provider_join_request"]);
 
 const SOURCES = Object.freeze([
   {
@@ -119,6 +120,35 @@ function writeErrors(error) {
   return error?.writeErrors || error?.result?.result?.writeErrors || [];
 }
 
+function identityOwners(document = {}) {
+  const primary = {
+    entityType: document.entityType || "",
+    entityId: String(document.entityId || ""),
+    field: document.field || "",
+    sourceCollection: document.sourceCollection || "",
+  };
+  const shared = Array.isArray(document.sharedOwners) ? document.sharedOwners : [];
+  return [primary, ...shared].filter((owner) => owner.entityType && owner.entityId);
+}
+
+function canMergeEmployeeLinkedOwner(existing, incoming) {
+  if (!EMPLOYEE_LINKED_TYPES.has(incoming?.entityType)) return false;
+  const owners = identityOwners(existing);
+  if (!owners.length || owners.some((owner) => !EMPLOYEE_LINKED_TYPES.has(owner.entityType))) return false;
+  if (owners.some((owner) => owner.entityType === incoming.entityType && String(owner.entityId) !== String(incoming.entityId))) {
+    return false;
+  }
+  const employeeLinked = incoming.entityType === "employee"
+    || owners.some((owner) => owner.entityType === "employee");
+  return employeeLinked && !owners.some((owner) => (
+    owner.entityType === incoming.entityType
+    && String(owner.entityId) === String(incoming.entityId)
+  ));
+}
+
+// Backward-compatible export for older migration tests and tooling.
+const canMergeEmployeeProviderOwner = canMergeEmployeeLinkedOwner;
+
 async function insertIdentityBatch(staging, documents, conflicts) {
   if (!documents.length) return;
   try {
@@ -126,18 +156,42 @@ async function insertIdentityBatch(staging, documents, conflicts) {
   } catch (error) {
     const failures = writeErrors(error);
     if (!failures.length || failures.some((failure) => Number(failure?.code) !== 11000)) throw error;
-    for (const failure of failures) {
+    const orderedFailures = [...failures].sort((left, right) => {
+      const leftDocument = documents[Number(left.index)];
+      const rightDocument = documents[Number(right.index)];
+      return Number(rightDocument?.entityType === "employee") - Number(leftDocument?.entityType === "employee");
+    });
+    for (const failure of orderedFailures) {
       const document = documents[Number(failure.index)];
       if (!document) continue;
       const existing = await staging.findOne(
         { key: document.key },
-        { projection: { _id: 0, key: 1, entityType: 1, entityId: 1, field: 1, sourceCollection: 1 } },
+        { projection: { _id: 0, key: 1, entityType: 1, entityId: 1, field: 1, sourceCollection: 1, sharedOwners: 1 } },
       );
       if (
         existing
-        && existing.entityType === document.entityType
-        && String(existing.entityId) === String(document.entityId)
+        && identityOwners(existing).some((owner) => (
+          owner.entityType === document.entityType
+          && String(owner.entityId) === String(document.entityId)
+        ))
       ) continue;
+      if (existing && canMergeEmployeeLinkedOwner(existing, document)) {
+        await staging.updateOne(
+          { key: document.key },
+          {
+            $addToSet: {
+              sharedOwners: {
+                entityType: document.entityType,
+                entityId: String(document.entityId),
+                field: document.field,
+                sourceCollection: document.sourceCollection,
+              },
+            },
+            $set: { updatedAt: new Date() },
+          },
+        );
+        continue;
+      }
       addSamples(conflicts, [{
         key: document.key,
         owners: [
@@ -194,6 +248,7 @@ async function stageContactIdentities(database, { batchSize = 1000 } = {}) {
           entityType: source.entityType,
           entityId,
           sourceCollection: source.collection,
+          sharedOwners: [],
           createdAt: now,
           updatedAt: now,
         });
@@ -342,6 +397,9 @@ module.exports = {
   normalizationUpdate,
   rawValidationIssues,
   normalizedContacts,
+  identityOwners,
+  canMergeEmployeeLinkedOwner,
+  canMergeEmployeeProviderOwner,
   stageContactIdentities,
   applyNormalizationChanges,
   uniqueContactKeyIndexPresent,

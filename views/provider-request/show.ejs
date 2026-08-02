@@ -35,6 +35,23 @@
                 <div class="mt-4">
                   <label class="form-label" for="providerRequestNote">Internal note</label>
                   <textarea id="providerRequestNote" class="form-control" rows="4" maxlength="2000" x-model="internalNote" <%= canAccess('provider_requests.manage') ? '' : 'readonly' %>></textarea>
+                  <div class="form-text" x-show="request.status === 'rejected'">Change this note before reopening a rejected request.</div>
+                </div>
+
+                <div class="mt-4" x-show="Array.isArray(request.statusHistory) && request.statusHistory.length" x-cloak>
+                  <h3 class="h6 mb-3">Status history</h3>
+                  <div class="list-group list-group-flush border rounded">
+                    <template x-for="(entry,index) in [...(request.statusHistory || [])].reverse()" :key="index + '-' + entry.changedAt">
+                      <div class="list-group-item">
+                        <div class="d-flex flex-wrap justify-content-between gap-2">
+                          <strong><span x-text="humanize(entry.fromStatus || 'initial')"></span> → <span x-text="humanize(entry.toStatus)"></span></strong>
+                          <span class="text-muted fs-sm" x-text="formatDate(entry.changedAt)"></span>
+                        </div>
+                        <div class="mt-1" x-show="entry.note" x-text="entry.note"></div>
+                        <div class="text-muted fs-sm mt-1" x-show="entry.changedBy" x-text="'Changed by ' + entry.changedBy"></div>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
               <div class="card-footer crm-provider-request-actions">
@@ -42,13 +59,47 @@
                 <template x-if="request.convertedProviderId"><a class="btn btn-outline-primary" :href="'/providers/'+request.convertedProviderId">Open provider</a></template>
                 <% if (canAccess('provider_requests.manage')) { %>
                   <button type="button" class="btn btn-outline-primary" x-show="request.status === 'new'" :disabled="saving" @click="setStatus('contacted')">Mark contacted</button>
-                  <button type="button" class="btn btn-outline-danger" x-show="request.status !== 'converted' && request.status !== 'rejected'" :disabled="saving" @click="setStatus('rejected')">Reject request</button>
+                  <button type="button" class="btn btn-outline-secondary" x-show="request.status === 'contacted'" :disabled="saving" @click="setStatus('new')">Move to new</button>
+                  <button type="button" class="btn btn-outline-primary" x-show="request.status === 'rejected'" :disabled="saving" @click="setStatus('contacted')">Reopen as contacted</button>
+                  <button type="button" class="btn btn-outline-secondary" x-show="request.status === 'rejected'" :disabled="saving" @click="setStatus('new')">Reopen as new</button>
+                  <button type="button" class="btn btn-outline-danger" x-show="request.status === 'new' || request.status === 'contacted'" :disabled="saving" @click="setStatus('rejected')">Reject request</button>
+                  <button type="button" class="btn btn-danger" x-show="request.status && request.status !== 'converted'" :disabled="saving || deleting" @click="openDeleteModal()">Delete request</button>
                 <% } %>
                 <% if (canAccess('provider_requests.manage') && canAccess('providers.create')) { %>
-                  <a class="btn btn-primary" x-show="request.status === 'new' || request.status === 'contacted'" :href="'/providers/new?requestId='+encodeURIComponent(request.providerJoinRequestId || '')">Create provider</a>
+                  <a class="btn btn-primary" x-show="request.status === 'new' || request.status === 'contacted' || request.status === 'rejected'" :href="'/providers/new?requestId='+encodeURIComponent(request.providerJoinRequestId || '')">Create provider</a>
                 <% } %>
               </div>
             </section>
+
+            <% if (canAccess('provider_requests.manage')) { %>
+              <div x-show="deleteModalOpen" x-cloak @keydown.escape.window="closeDeleteModal()">
+                <div class="modal fade show" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="delete-provider-request-title" style="display:block">
+                  <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <div>
+                          <h5 class="modal-title" id="delete-provider-request-title">Delete provider request?</h5>
+                          <p class="text-muted fs-sm mb-0">This action permanently removes the joining request.</p>
+                        </div>
+                        <button type="button" class="btn-close" aria-label="Close" @click="closeDeleteModal()" :disabled="deleting"></button>
+                      </div>
+                      <div class="modal-body">
+                        <div class="alert alert-danger mb-0">
+                          <strong x-text="request.name || 'This applicant'"></strong>
+                          <div class="mt-1" x-text="request.mobile ? '+91 ' + request.mobile : request.providerJoinRequestId"></div>
+                          <div class="mt-2">The request and its reserved contact entries will be deleted. This cannot be undone.</div>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-light" @click="closeDeleteModal()" :disabled="deleting">Cancel</button>
+                        <button type="button" class="btn btn-danger" @click="deleteRequest()" :disabled="deleting" x-text="deleting ? 'Deleting…' : 'Delete permanently'"></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-backdrop fade show" @click="closeDeleteModal()"></div>
+              </div>
+            <% } %>
           </main>
         </div>
         <%- include('../partials/footer') %>
@@ -57,17 +108,38 @@
     <script>
       function providerRequestDetail() {
         return {
-          request: {}, internalNote: '', loading: true, saving: false, error: '',
+          request: {}, internalNote: '', loading: true, saving: false, deleting: false, deleteModalOpen: false, error: '',
           requestId: pathRecordId(),
           requestStatusClass(status) { return { new: 'status-pending', contacted: 'status-active', converted: 'status-completed', rejected: 'status-blocked' }[status] || 'status-inactive'; },
           async load() { this.loading=true; this.error=''; try { this.request=(await apiFetch('/api/provider-requests/'+this.requestId)).data||{}; this.internalNote=this.request.internalNote||''; } catch(error) { this.error=error.message; } finally { this.loading=false; } },
           async setStatus(status) {
             if (this.saving) return;
-            if (status === 'rejected' && !String(this.internalNote || '').trim()) { this.error='Add an internal note before rejecting this request'; return; }
+            const note = String(this.internalNote || '').trim();
+            if (status === 'rejected' && !note) { this.error='Add an internal note before rejecting this request'; return; }
+            if (this.request.status === 'rejected' && status !== 'rejected' && (!note || note === String(this.request.internalNote || '').trim())) {
+              this.error='Update the internal note to explain why this rejected request is being reopened';
+              return;
+            }
             this.saving=true; this.error='';
             try { this.request=(await apiFetch('/api/provider-requests/'+this.requestId+'/status',{method:'PATCH',body:JSON.stringify({status,internalNote:this.internalNote})})).data||{}; this.internalNote=this.request.internalNote||''; showCrmToast('Provider request updated','success'); }
             catch(error) { this.error=error.message; }
             finally { this.saving=false; }
+          },
+          openDeleteModal() { if (this.request.status !== 'converted') this.deleteModalOpen = true; },
+          closeDeleteModal() { if (!this.deleting) this.deleteModalOpen = false; },
+          async deleteRequest() {
+            if (this.deleting || this.request.status === 'converted') return;
+            this.deleting = true; this.error = '';
+            try {
+              await apiFetch('/api/provider-requests/' + this.requestId, { method: 'DELETE' });
+              showCrmToast('Provider request deleted', 'success');
+              location.href = '/provider-requests';
+            } catch (error) {
+              this.error = error.message;
+              this.deleteModalOpen = false;
+            } finally {
+              this.deleting = false;
+            }
           }
         };
       }

@@ -2,6 +2,20 @@
 
 const mongoose = require("mongoose");
 
+const sharedOwnerSchema = new mongoose.Schema(
+  {
+    entityType: {
+      type: String,
+      required: true,
+      enum: ["agent", "provider", "employee", "provider_join_request"],
+    },
+    entityId: { type: String, required: true, trim: true, maxlength: 128 },
+    field: { type: String, required: true, enum: ["mobile", "whatsapp", "email"] },
+    sourceCollection: { type: String, required: true, trim: true, maxlength: 80 },
+  },
+  { _id: false },
+);
+
 const contactIdentitySchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, trim: true, maxlength: 320 },
@@ -16,6 +30,7 @@ const contactIdentitySchema = new mongoose.Schema(
     entityId: { type: String, required: true, trim: true, maxlength: 128, index: true },
     field: { type: String, required: true, enum: ["mobile", "whatsapp", "email"] },
     sourceCollection: { type: String, required: true, trim: true, maxlength: 80 },
+    sharedOwners: { type: [sharedOwnerSchema], default: [] },
   },
   {
     collection: "contactidentities",

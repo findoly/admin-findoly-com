@@ -22,6 +22,7 @@ const DEFAULT_RULES = Object.freeze([
   ["Provider not interested", "provider_not_interested", "Internal notification when a provider marks the lead not interested", "customer"],
   ["Provider other update", "provider_other", "Internal notification for another provider activity update", "customer"],
   ["Sale conversion updated", "sale_conversion_updated", "Notification after sale-conversion status changes", "customer"],
+  ["Nearby lead available", "nearby_lead_available", "WhatsApp alert when a matching lead is immediately visible within 20 km", "provider"],
   ["Provider account created", "provider_created", "Welcome notification after a provider is created successfully", "provider"],
   ["Agent registration", "agent_created", "Welcome email after an agent is created successfully", "agent"],
   ["Employee registration", "employee_created", "Welcome email after an employee is created successfully", "employee"],
@@ -77,7 +78,7 @@ const resolveRecipient = function (rule, context) {
   if (rule.recipientSource === "provider") {
     return {
       name: provider.name || provider.businessName || "Provider",
-      mobile: provider.mobile || "",
+      mobile: provider.normalizedWhatsappNumber || provider.whatsappNumber || provider.normalizedMobile || provider.mobile || "",
       email: provider.email || "",
       providerId: provider.providerId || "",
     };
@@ -178,6 +179,13 @@ const variablesFor = function (context) {
     values["5"] = values.login_url || "";
     values["6"] = values.support_email || "support@findoly.com";
   }
+  if (context.trigger === "nearby_lead_available" || context.event === "nearby_lead_available") {
+    values["1"] = provider.name || provider.businessName || "Provider";
+    values["2"] = lead.category || lead.categorySlug || lead.serviceType || "Service";
+    values["3"] = joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode);
+    values["4"] = lead.requirementTitle || lead.serviceType || "New customer requirement";
+    values["5"] = context.marketplaceUrl || process.env.PROVIDER_PORTAL_MARKETPLACE_URL || process.env.PROVIDER_PORTAL_LOGIN_URL || "";
+  }
   return values;
 };
 
@@ -188,7 +196,8 @@ const sendRule = async function (rule, context, actor) {
   const provider = context.provider || {};
   const agent = context.agent || {};
   const employee = context.employee || {};
-  const entityId = lead.enquiryId || lead.id || provider.providerId || agent.agentId || employee.employeeId || rule.event;
+  const entityId = context.idempotencyEntityId
+    || (lead.enquiryId || lead.id || provider.providerId || agent.agentId || employee.employeeId || rule.event);
   const base = {
     enquiryId: lead.enquiryId || lead.id || "",
     providerId: recipient.providerId || provider.providerId || "",
@@ -210,6 +219,7 @@ const sendRule = async function (rule, context, actor) {
   };
   const suffix = String(context.idempotencySuffix || lead.statusUpdatedAt || provider.createdAt || agent.createdAt || employee.createdAt || Date.now());
   const results = [];
+  const whatsappOnly = rule.event === "nearby_lead_available";
   if (rule.whatsappEnabled && rule.whatsappTemplateId && recipient.mobile) {
     results.push(
       await communicationService.send(
@@ -224,7 +234,7 @@ const sendRule = async function (rule, context, actor) {
       ),
     );
   }
-  if (rule.emailEnabled && rule.emailTemplateId && recipient.email) {
+  if (!whatsappOnly && rule.emailEnabled && rule.emailTemplateId && recipient.email) {
     results.push(
       await communicationService.send(
         {
@@ -239,7 +249,7 @@ const sendRule = async function (rule, context, actor) {
     );
   }
   const slackMessage = String(rule.slackMessage || "").trim();
-  if (rule.slackEnabled && slackMessage) {
+  if (!whatsappOnly && rule.slackEnabled && slackMessage) {
     const channelId = String(rule.slackChannelId || process.env.SLACK_DEFAULT_CHANNEL_ID || "").trim();
     const channelName = String(rule.slackChannelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team").replace(/^#/, "");
     results.push(

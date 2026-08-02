@@ -2,7 +2,7 @@ const Communication = require("../../models/Communication");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const messageGateway = require("./message-gateway");
 const { normalizeChannelId } = require("./slack-service");
-const { renderText, normalizeVariables } = require("./template-renderer");
+const { renderText, normalizeVariables, templateParameterValues } = require("./template-renderer");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
@@ -229,8 +229,8 @@ const getTemplate = async function (templateId, channel) {
   const id = identifierValue(templateId, { label: "Template ID" });
   const template = await CommunicationTemplate.findOne({ templateId: id, channel, isActive: true }).lean();
   if (!template) throw validationError(`${channel} template was not found or is inactive`);
-  if (channel === "whatsapp" && template.status !== "approved") {
-    throw validationError("WhatsApp messages can use only approved templates");
+  if (channel === "whatsapp" && (template.status !== "approved" || !template.externalTemplateId)) {
+    throw validationError("WhatsApp messages can use only approved templates with a Gupshup template ID");
   }
   if (channel === "email" && template.status !== "active") {
     throw validationError("Email messages can use only active email templates");
@@ -354,6 +354,8 @@ const send = async function (input, actor) {
       channelId: isSlack ? recipientContact : "",
       channelName: isSlack ? slackChannelName : "",
       templateName: template ? template.name : "",
+      externalTemplateId: template ? template.externalTemplateId : "",
+      templateParams: template ? templateParameterValues(template, preview.variables) : [],
       language: template ? template.language : "",
       category: template ? template.category : "",
       subject: preview.subject,
@@ -519,7 +521,7 @@ const createInbound = async function (input) {
     message: textValue(source.message, { label: "Inbound message", maxLength: 10000, preserveWhitespace: true }),
     status: "received",
     deliveryMode: "local",
-    deliveryProvider: "meta",
+    deliveryProvider: "gupshup",
     providerMessageId,
     externalResponse: boundedJsonValue(source.externalResponse || null),
     statusHistory: [{ status: "received", at: new Date() }],

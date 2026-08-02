@@ -57,7 +57,6 @@ app.use((req, res, next) => {
 app.use(morgan(production ? "combined" : "dev"));
 
 const communicationController = require("./controllers/communicationController");
-app.get("/api/webhooks/whatsapp", communicationController.verifyWhatsAppWebhook);
 app.post(
   "/api/webhooks/whatsapp",
   express.raw({ type: "application/json", limit: "1mb" }),

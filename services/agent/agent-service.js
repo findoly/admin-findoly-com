@@ -122,6 +122,7 @@ async function create(input = {}, actor = "crm-admin") {
           entityType: "agent",
           entityId: agentId,
           contacts: { mobile: data.normalizedMobile, email: data.normalizedEmail },
+          allowEmployeeRoleOverlap: true,
           session,
         });
         await Agent.create([{ ...data, agentId, referralId, createdBy: actorValue(actor) }], { session });
@@ -161,6 +162,7 @@ async function update(agentId, input = {}, actor = "crm-admin") {
         entityType: "agent",
         entityId: existing.agentId,
         contacts: { mobile: data.normalizedMobile, email: data.normalizedEmail },
+        allowEmployeeRoleOverlap: true,
         session,
       });
       const result = await Agent.updateOne({ agentId: existing.agentId }, { $set: data }, { session });

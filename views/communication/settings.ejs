@@ -17,7 +17,7 @@
 
         <section class="crm-channel-picker" aria-label="Communication channels">
           <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'whatsapp' }" @click="selectChannel('whatsapp')" :aria-pressed="(activeChannel === 'whatsapp').toString()">
-            <span class="crm-channel-picker-icon">WA</span><span><strong>WhatsApp</strong><small>Meta templates and delivery</small></span><span class="crm-status" :class="channelReady('whatsapp') ? 'status-approved' : 'status-rejected'" x-text="channelReady('whatsapp') ? 'Ready' : 'Setup needed'"></span>
+            <span class="crm-channel-picker-icon">WA</span><span><strong>WhatsApp</strong><small>Gupshup templates and delivery</small></span><span class="crm-status" :class="channelReady('whatsapp') ? 'status-approved' : 'status-rejected'" x-text="channelReady('whatsapp') ? 'Ready' : 'Setup needed'"></span>
           </button>
           <button type="button" class="crm-channel-picker-card" :class="{ 'is-active': activeChannel === 'email' }" @click="selectChannel('email')" :aria-pressed="(activeChannel === 'email').toString()">
             <span class="crm-channel-picker-icon">EM</span><span><strong>Email</strong><small>Amazon SES templates</small></span><span class="crm-status" :class="channelReady('email') ? 'status-approved' : 'status-rejected'" x-text="channelReady('email') ? 'Ready' : 'Setup needed'"></span>
@@ -34,10 +34,10 @@
         </section>
 
         <section class="card crm-channel-panel" x-show="activeChannel === 'whatsapp'" x-cloak>
-          <div class="card-header crm-card-heading"><div><h5 class="mb-1">WhatsApp Cloud API</h5><p class="text-muted mb-0">Used for approved Meta templates, provider alerts, customer updates and OTP delivery.</p></div><a href="/communications/templates?channel=whatsapp" class="btn btn-primary btn-sm">Manage WhatsApp templates</a></div>
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">Gupshup WhatsApp API</h5><p class="text-muted mb-0">Used for approved Gupshup templates, nearby-provider alerts, customer updates and OTP delivery.</p></div><a href="/communications/templates?channel=whatsapp" class="btn btn-primary btn-sm">Manage WhatsApp templates</a></div>
           <div class="card-body crm-channel-panel-grid">
             <div class="crm-channel-checklist"><template x-for="item in whatsappItems" :key="item.label"><div><span x-text="item.label"></span><span class="crm-status" :class="item.value ? 'status-approved':'status-rejected'" x-text="item.value ? 'Configured':'Missing'"></span></div></template></div>
-            <aside class="crm-channel-help"><h6>How this channel works</h6><ol><li>Configure the Meta credentials in Secrets Manager.</li><li>Create a WhatsApp template in Manage templates.</li><li>Submit it to Meta and wait for approval.</li><li>Select the approved template in an automation rule.</li></ol><div><strong>API version:</strong> <span x-text="config.whatsapp?.apiVersion || '—'"></span></div><div><strong>Country code:</strong> <span x-text="config.whatsapp?.defaultCountryCode || '—'"></span></div></aside>
+            <aside class="crm-channel-help"><h6>How this channel works</h6><ol><li>Configure the Gupshup API key, app name and source number in Secrets Manager.</li><li>Create and approve the WhatsApp template in Gupshup.</li><li>Save its approved template ID in Manage templates.</li><li>Select the activated template in an automation rule.</li></ol><div><strong>Provider:</strong> <span x-text="humanize(config.whatsapp?.provider || 'gupshup')"></span></div><div><strong>Country code:</strong> <span x-text="config.whatsapp?.defaultCountryCode || '—'"></span></div></aside>
           </div>
         </section>
 
@@ -74,11 +74,10 @@
           config: {}, error: '', origin: location.origin,
           activeChannel: ['whatsapp','email','slack','otp','delivery'].includes(queryValue('channel')) ? queryValue('channel') : 'whatsapp',
           get whatsappItems() { return [
-            { label: 'Access token', value: this.config.whatsapp?.accessToken },
-            { label: 'Phone number ID', value: this.config.whatsapp?.phoneNumberId },
-            { label: 'Business account ID', value: this.config.whatsapp?.businessAccountId },
-            { label: 'Webhook verify token', value: this.config.whatsapp?.webhookVerifyToken },
-            { label: 'App secret', value: this.config.whatsapp?.appSecret },
+            { label: 'Gupshup API key', value: this.config.whatsapp?.apiKey },
+            { label: 'Gupshup app name', value: this.config.whatsapp?.appName },
+            { label: 'Source WhatsApp number', value: this.config.whatsapp?.sourceNumber },
+            { label: 'Webhook token', value: this.config.whatsapp?.webhookToken },
           ]; },
           selectChannel(channel) { this.activeChannel = channel; const url = new URL(location.href); url.searchParams.set('channel', channel); history.replaceState({}, '', url); },
           channelReady(channel) {

@@ -22,13 +22,14 @@ SYSTEM_EVENT_SLACK_ENABLED=true
 # Provider email is sent only after a lead unlock or provider status/outcome update.
 PROVIDER_EVENT_EMAIL_ENABLED=true
 
-META_WHATSAPP_API_VERSION=v25.0
-META_WHATSAPP_ACCESS_TOKEN=replace-with-meta-access-token
-META_WHATSAPP_PHONE_NUMBER_ID=replace-with-phone-number-id
-META_WHATSAPP_BUSINESS_ACCOUNT_ID=replace-with-whatsapp-business-account-id
-META_WEBHOOK_VERIFY_TOKEN=replace-with-a-random-webhook-token
-META_APP_SECRET=replace-with-meta-app-secret
-WHATSAPP_DEFAULT_COUNTRY_CODE=91
+CRM_GUPSHUP_API_KEY=replace-with-gupshup-api-key
+CRM_GUPSHUP_APP_NAME=replace-with-gupshup-app-name
+CRM_GUPSHUP_SOURCE_NUMBER=919999999999
+CRM_GUPSHUP_API_BASE_URL=https://api.gupshup.io
+CRM_GUPSHUP_WEBHOOK_TOKEN=replace-with-a-random-webhook-token
+CRM_WHATSAPP_DEFAULT_COUNTRY_CODE=91
+CRM_NEARBY_LEAD_ALERT_BATCH_SIZE=25
+PROVIDER_PORTAL_MARKETPLACE_URL=https://provider.findoly.com/leads?status=marketplace
 
 AWS_REGION=ap-south-1
 SES_FROM_EMAIL=verified-sender@example.com
@@ -73,7 +74,7 @@ MESSAGE_LAMBDA_AUTH_TOKEN=replace-with-a-private-token
 MESSAGE_LAMBDA_WEBHOOK_TOKEN=replace-with-a-private-webhook-token
 ```
 
-In Lambda mode, Meta, SES and Slack provider secrets can live in Lambda instead of the CRM server. The CRM continues sending the same channel payloads and retaining logs for seven days.
+In Lambda mode, Gupshup, SES and Slack provider secrets can live in Lambda instead of the CRM server. The CRM continues sending the same channel payloads and retaining logs for seven days.
 
 ## Slack setup and dashboard API
 

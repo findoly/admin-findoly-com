@@ -408,6 +408,8 @@ async function assertUniqueProviderContacts({ mobile, whatsappNumber = "", email
     entityId: excludingProviderId,
     contacts: { mobile, whatsappNumber, email },
     allowedProviderJoinRequestId: options.allowedProviderJoinRequestId || "",
+    allowEmployeeRoleOverlap: true,
+    allowEmployeeProviderOverlap: true,
     session: options.session || null,
   });
 }
@@ -437,13 +439,15 @@ async function create(input, actor = "crm-admin", options = {}) {
           email: data.normalizedEmail,
         },
         allowedProviderJoinRequestId: options.allowedProviderJoinRequestId || "",
+        allowEmployeeRoleOverlap: true,
+        allowEmployeeProviderOverlap: true,
         session,
       });
       await Provider.create([{ ...data, providerId }], { session });
     }, { operationLabel: "Provider account creation" });
   } catch (error) {
     if (error?.code === 11000) {
-      throw Object.assign(new Error("A provider, agent, employee, or joining request already uses these contact details"), {
+      throw Object.assign(new Error("A Provider, Agent, or Provider joining request already uses these contact details"), {
         status: 409,
         code: "CONTACT_ALREADY_EXISTS",
       });
@@ -480,6 +484,8 @@ async function update(providerId, input = {}, actor = "crm-admin") {
           whatsappNumber: data.normalizedWhatsappNumber,
           email: data.normalizedEmail,
         },
+        allowEmployeeRoleOverlap: true,
+        allowEmployeeProviderOverlap: true,
         session,
       });
       const result = await Provider.updateOne(query, { $set: data }, { session });
@@ -489,7 +495,7 @@ async function update(providerId, input = {}, actor = "crm-admin") {
     }, { operationLabel: "Provider account update" });
   } catch (error) {
     if (error?.code === 11000) {
-      throw Object.assign(new Error("A provider, agent, employee, or joining request already uses these contact details"), {
+      throw Object.assign(new Error("A Provider, Agent, or Provider joining request already uses these contact details"), {
         status: 409,
         code: "CONTACT_ALREADY_EXISTS",
       });

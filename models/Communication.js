@@ -44,7 +44,7 @@ const communicationSchema = new mongoose.Schema(
     deliveryProvider: {
       type: String,
       default: "manual",
-      enum: ["manual", "meta", "ses", "slack", "lambda"],
+      enum: ["manual", "meta", "gupshup", "ses", "slack", "lambda"],
     },
     providerMessageId: { type: String, default: "", index: true },
     idempotencyKey: { type: String, default: "" },

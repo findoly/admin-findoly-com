@@ -245,7 +245,7 @@ Set the RazorpayX values from `.env.example`, allowlist the CRM server IP in Raz
 
 The CRM includes a built-in Communication Center at `/communications` for:
 
-- Meta WhatsApp Cloud API template creation, submission, status synchronization and test sending
+- Gupshup WhatsApp template-ID management, delivery tracking and test sending
 - approved WhatsApp Utility, Authentication and Marketing templates
 - Amazon SES email templates and test sending
 - internal Slack messages to multiple manually created channels through one bot token
@@ -335,12 +335,12 @@ MESSAGE_LAMBDA_WEBHOOK_TOKEN=your-private-webhook-token
 
 The Lambda request receives the channel, recipient, template, variables, rendered email content, communication ID, purpose and metadata. It should return `providerMessageId` and `status`, then call `/api/webhooks/message-delivery` for later delivery updates.
 
-### Meta setup
+### Gupshup WhatsApp setup
 
-1. Configure the WhatsApp Business Account ID, phone-number ID, access token, app secret and webhook verification token.
-2. Configure the Meta callback URL as `/api/webhooks/whatsapp`.
-3. Create a local WhatsApp template, submit it to Meta, then use **Sync Meta templates** until its status is `approved`.
-4. Assign approved templates to notification rules.
+1. Configure the Gupshup API key, app name, source WhatsApp number and webhook token.
+2. Configure the Gupshup callback URL as `/api/webhooks/whatsapp?token=<CRM_GUPSHUP_WEBHOOK_TOKEN>`.
+3. Create and approve each WhatsApp template in Gupshup, then save its template ID in CRM and activate it.
+4. Assign the activated template to notification rules. Use the `nearby_lead_available` provider rule for immediate alerts within 20 km.
 
 ### Amazon SES setup
 

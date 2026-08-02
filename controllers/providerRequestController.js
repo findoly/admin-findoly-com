@@ -51,4 +51,16 @@ async function convert(req, res, next) {
   }
 }
 
-module.exports = { metadata, list, get, updateStatus, convert };
+async function remove(req, res, next) {
+  try {
+    return res.json({
+      success: true,
+      message: "Provider joining request deleted permanently",
+      data: await service.remove(req.params.providerJoinRequestId, req.admin),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { metadata, list, get, updateStatus, convert, remove };

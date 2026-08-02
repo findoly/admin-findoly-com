@@ -25,7 +25,7 @@
           <%- include('_navigation', { active: 'overview' }) %>
           <section class="crm-communication-start mb-3" aria-label="Communication Center quick actions">
             <a href="/communications/send"><span>Send</span><strong>Send a message</strong><small>Choose WhatsApp or email and a reusable template.</small></a>
-            <a href="/communications/templates?channel=whatsapp"><span>WA</span><strong>WhatsApp templates</strong><small>Create, submit and sync Meta templates.</small></a>
+            <a href="/communications/templates?channel=whatsapp"><span>WA</span><strong>WhatsApp templates</strong><small>Link and activate approved Gupshup templates.</small></a>
             <a href="/communications/templates?channel=email"><span>EM</span><strong>Email templates</strong><small>Manage SES subjects, text and HTML content.</small></a>
             <a href="/communications/rules"><span>Rules</span><strong>Automation rules</strong><small>Connect CRM events to recipients and channels.</small></a>
             <a href="/communications/settings"><span>Setup</span><strong>Channel management</strong><small>Review WhatsApp, email, Slack and OTP readiness.</small></a>
@@ -149,7 +149,7 @@
                 <div class="card-header crm-card-heading"><div><h5 class="mb-1">Configuration</h5><p class="text-muted mb-0">Environment readiness.</p></div></div>
                 <div class="card-body">
                   <div class="d-flex justify-content-between mb-3"><span>Delivery mode</span><strong x-text="humanize(config.deliveryMode)"></strong></div>
-                  <div class="d-flex justify-content-between mb-3"><span>Meta WhatsApp</span><span class="crm-status" :class="config.whatsapp?.accessToken && config.whatsapp?.phoneNumberId ? 'status-approved' : 'status-rejected'" x-text="config.whatsapp?.accessToken && config.whatsapp?.phoneNumberId ? 'Configured' : 'Incomplete'"></span></div>
+                  <div class="d-flex justify-content-between mb-3"><span>Gupshup WhatsApp</span><span class="crm-status" :class="config.whatsapp?.apiKey && config.whatsapp?.appName && config.whatsapp?.sourceNumber ? 'status-approved' : 'status-rejected'" x-text="config.whatsapp?.apiKey && config.whatsapp?.appName && config.whatsapp?.sourceNumber ? 'Configured' : 'Incomplete'"></span></div>
                   <div class="d-flex justify-content-between mb-3"><span>Amazon SES</span><span class="crm-status" :class="config.email?.fromEmail ? 'status-approved' : 'status-rejected'" x-text="config.email?.fromEmail ? 'Configured' : 'Incomplete'"></span></div>
                   <div class="d-flex justify-content-between mb-3"><span>Slack bot</span><span class="crm-status" :class="config.slack?.available ? 'status-approved' : 'status-rejected'" x-text="config.slack?.available ? 'Configured' : 'Missing'"></span></div>
                   <div class="d-flex justify-content-between"><span>OTP secret</span><span class="crm-status" :class="config.otp?.secret ? 'status-approved' : 'status-rejected'" x-text="config.otp?.secret ? 'Configured' : 'Missing'"></span></div>

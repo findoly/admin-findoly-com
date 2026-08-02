@@ -1,6 +1,17 @@
 const mongoose = require("mongoose");
 const uuid = require("../utils/uuid");
 
+const providerRequestStatusHistorySchema = new mongoose.Schema(
+  {
+    fromStatus: { type: String, default: "", trim: true, maxlength: 40 },
+    toStatus: { type: String, required: true, trim: true, maxlength: 40 },
+    note: { type: String, default: "", trim: true, maxlength: 2000 },
+    changedBy: { type: String, default: "", trim: true, maxlength: 254 },
+    changedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const providerJoinRequestSchema = new mongoose.Schema(
   {
     providerJoinRequestId: { type: String, default: uuid, unique: true, index: true, immutable: true },
@@ -29,6 +40,7 @@ const providerJoinRequestSchema = new mongoose.Schema(
       index: true,
     },
     internalNote: { type: String, default: "", trim: true, maxlength: 2000 },
+    statusHistory: { type: [providerRequestStatusHistorySchema], default: [] },
     contactedAt: { type: Date, default: null },
     rejectedAt: { type: Date, default: null },
     convertedAt: { type: Date, default: null },

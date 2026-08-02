@@ -49,4 +49,14 @@ const orderedValues = function (variables) {
   });
 };
 
-module.exports = { normalizeVariables, renderText, orderedValues };
+const templateParameterValues = function (template, variables) {
+  const data = normalizeVariables(variables);
+  const source = [template?.headerText, template?.body, template?.footer].filter(Boolean).join("\n");
+  const indexes = [...new Set(Array.from(source.matchAll(/{{\s*(\d+)\s*}}/g), function (match) {
+    return Number(match[1]);
+  }))].sort(function (left, right) { return left - right; });
+  if (!indexes.length) return orderedValues(data);
+  return indexes.map(function (index) { return String(data[String(index)] ?? ""); });
+};
+
+module.exports = { normalizeVariables, renderText, orderedValues, templateParameterValues };

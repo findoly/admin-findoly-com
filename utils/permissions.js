@@ -29,7 +29,7 @@ const PERMISSION_GROUPS = Object.freeze([
     label: "Provider requests",
     permissions: [
       { key: "provider_requests.view", label: "View provider joining requests" },
-      { key: "provider_requests.manage", label: "Contact, reject and convert provider requests" },
+      { key: "provider_requests.manage", label: "Contact, reopen, reject, convert and delete provider requests" },
     ],
   },
   {

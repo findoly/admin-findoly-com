@@ -27,6 +27,12 @@
                 <div><strong>Creating from provider joining request</strong><span x-text="sourceRequest.providerJoinRequestId"></span></div>
                 <a :href="'/provider-requests/'+sourceRequest.providerJoinRequestId">Review request</a>
               </div>
+              <div x-show="sourceRequest.status === 'rejected'" x-cloak class="alert alert-warning">
+                <strong>Reopening a rejected request</strong>
+                <p class="mb-2 mt-1">Add a new internal reason explaining why this request should now be converted.</p>
+                <label class="form-label" for="providerRequestReopenNote">Reopening reason</label>
+                <textarea id="providerRequestReopenNote" class="form-control" rows="3" maxlength="2000" x-model="requestReopenNote" placeholder="Explain why the rejected request is now being approved"></textarea>
+              </div>
               <form class="card" @submit.prevent="save">
                 <div class="card-body" :class="loading && 'crm-loading'">
                   <div class="row g-3">
@@ -161,6 +167,7 @@
                   recordId: pageMode() === "edit" ? pathRecordId(true) : "",
                   requestId: pageMode() === "create" ? queryValue("requestId") : "",
                   sourceRequest: {},
+                  requestReopenNote: "",
                   prefillWarning: "",
                   categories: [],
                   form: {
@@ -282,12 +289,19 @@
                       if (!Number.isFinite(Number(this.form.rating)) || Number(this.form.rating) < 0 || Number(this.form.rating) > 5) {
                         throw new Error("Provider rating must be between 0 and 5");
                       }
+                      const isRequestConversion = this.mode === "create" && Boolean(this.requestId);
+                      if (isRequestConversion && this.sourceRequest.status === 'rejected') {
+                        const reopenNote = String(this.requestReopenNote || '').trim();
+                        if (!reopenNote || reopenNote === String(this.sourceRequest.internalNote || '').trim()) {
+                          throw new Error('Add a new reason explaining why this rejected request is being converted');
+                        }
+                      }
                       const payload = {
                         ...this.form,
                         skills: [...this.form.categorySlugs],
                         serviceAreas,
+                        reopenNote: this.requestReopenNote,
                       };
-                      const isRequestConversion = this.mode === "create" && Boolean(this.requestId);
                       const response = await apiFetch(
                         this.mode === "edit"
                           ? "/api/provider/" + this.recordId

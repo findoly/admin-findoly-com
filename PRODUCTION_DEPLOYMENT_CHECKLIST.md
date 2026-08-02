@@ -79,6 +79,24 @@ DASHBOARD_COUNT_CAP=10000
 COMMUNICATION_DASHBOARD_CACHE_TTL_MS=30000
 ```
 
+Required Gupshup and Provider Marketplace values:
+
+```env
+CRM_GUPSHUP_API_KEY=
+CRM_GUPSHUP_APP_NAME=
+CRM_GUPSHUP_SOURCE_NUMBER=
+CRM_GUPSHUP_API_BASE_URL=https://api.gupshup.io
+CRM_GUPSHUP_WEBHOOK_TOKEN=
+CRM_WHATSAPP_DEFAULT_COUNTRY_CODE=91
+CRM_NEARBY_LEAD_ALERT_BATCH_SIZE=10
+PROVIDER_PORTAL_MARKETPLACE_URL=https://provider.findoly.com/leads
+```
+
+- [ ] The Gupshup API key, app name and source number match the production Gupshup application.
+- [ ] The webhook token is a non-placeholder random value and is configured on both sides.
+- [ ] The Provider Marketplace URL opens the production Lead Marketplace.
+- [ ] No `META_WHATSAPP_*` or Meta Graph API values are required by this release.
+
 ## 3. Mandatory migration order
 
 Use a maintenance window and run one application writer while contact identities are built.
@@ -94,7 +112,9 @@ npm run migrate:contact-identities -- --dry-run
 ```
 
 - [ ] Resolve every malformed date/contact value reported by a dry run.
-- [ ] Resolve every duplicate mobile, WhatsApp or email across Agents, Providers, Employees and joining requests.
+- [ ] Review every duplicate mobile, WhatsApp or email reported by contact migration v2.
+- [ ] Preserve legitimate employee-linked ownership where one Employee is also an Agent, Provider or provider applicant.
+- [ ] Resolve same-role duplicates and Agent/Provider/request overlaps that are not linked to an Employee.
 - [ ] Resolve multiple active withdrawals for the same Agent.
 
 ### Apply
@@ -131,15 +151,21 @@ npm run verify:query-plans
 - [ ] Request IDs are present on responses and safe server errors.
 - [ ] `/api/health` does not expose the database name or credentials.
 
-## 5. Contact uniqueness smoke tests
+## 5. Contact identity and role-overlap smoke tests
 
-- [ ] Create an Agent with unique mobile/email.
-- [ ] Attempt a Provider with the Agent's mobile; creation is rejected.
-- [ ] Attempt an Employee with the Provider's email; creation is rejected.
-- [ ] Attempt a Provider whose WhatsApp matches another entity's mobile; creation is rejected.
+- [ ] Create an Employee with unique mobile/email.
+- [ ] Create an Agent using that Employee's contact; creation succeeds and the shared identity records both owners.
+- [ ] Create a Provider using that Employee's contact; creation succeeds.
+- [ ] Submit a provider joining request using that Employee's contact; submission succeeds.
+- [ ] Attempt a second Agent with the same contact; creation is rejected.
+- [ ] Attempt a second Provider with the same contact; creation is rejected.
+- [ ] Attempt a second Employee with the same contact; creation is rejected.
+- [ ] Attempt a second active provider request with the same contact; submission is rejected.
+- [ ] Attempt Agent-to-Provider contact reuse where no Employee is linked; creation is rejected.
+- [ ] Attempt a Provider whose WhatsApp matches an unrelated entity's mobile; creation is rejected.
 - [ ] Update one entity while preserving its own contacts; update succeeds.
-- [ ] Update one entity to another entity's contact; update is rejected.
-- [ ] Convert a provider joining request; contact ownership transfers to the created Provider.
+- [ ] Update one entity to an unrelated entity's contact; update is rejected.
+- [ ] Convert a provider joining request; request ownership transfers to the created Provider while legitimate Employee ownership remains.
 - [ ] Repeat conversion; no duplicate Provider or duplicate welcome communication is created.
 
 ## 6. Financial consistency smoke tests
@@ -161,7 +187,35 @@ npm run verify:query-plans
 - [ ] Provider-subscription search returns results beyond the old 500-provider boundary.
 - [ ] Dashboard counters remain responsive on production-like volumes.
 
-## 8. Existing feature smoke tests
+## 8. Gupshup and nearby-lead alert smoke tests
+
+- [ ] Create or edit the nearby-lead WhatsApp template and enter the exact approved Gupshup template ID.
+- [ ] Activate the local template only after the Gupshup template is approved.
+- [ ] Enable the `nearby_lead_available` rule with WhatsApp enabled; email and Slack remain disabled for this event.
+- [ ] Publish a category-matching lead with valid coordinates.
+- [ ] A portal-enabled active Provider at exactly 20.0 km receives one WhatsApp alert.
+- [ ] A Provider farther than 20.0 km receives no WhatsApp alert, including when the lead becomes visible later.
+- [ ] A Provider without service coordinates receives no WhatsApp alert.
+- [ ] A Provider with a non-matching category receives no WhatsApp alert.
+- [ ] Repeating or retrying publication does not create a duplicate alert for the same lead/provider/publication.
+- [ ] A Gupshup delivery failure is logged but does not roll back lead publication.
+- [ ] Gupshup `message-event` callbacks update message delivery status.
+- [ ] The alert contains only provider name, service/category, general location, requirement summary and marketplace link; no locked customer contact or exact address is exposed.
+
+## 9. Provider Portal marketplace smoke tests
+
+- [ ] On a real Android phone, Lead Marketplace shows one compact Search & Filters button with no closed-state blank space.
+- [ ] On a real iPhone, the bottom sheet opens, scrolls, applies filters, clears filters and closes correctly.
+- [ ] Desktop and tablet filter layout remains unchanged.
+- [ ] A lead within 20 km appears immediately and contributes to Available Leads.
+- [ ] A lead above 20–50 km is excluded until its 10-minute visibility time.
+- [ ] A lead above 50–100 km is excluded until its 30-minute visibility time.
+- [ ] A lead above 100 km or with missing provider coordinates is excluded until its 60-minute visibility time.
+- [ ] A lead already unlocked by the Provider is excluded from Available Leads.
+- [ ] Expired, closed, fully unlocked, unavailable or category-mismatched leads are excluded.
+- [ ] Dashboard Available Leads count matches the Lead Marketplace result set for the same Provider.
+
+## 10. Existing feature smoke tests
 
 - [ ] Employee login/logout and role revocation.
 - [ ] Provider, Agent and Employee create/update.
@@ -170,9 +224,9 @@ npm run verify:query-plans
 - [ ] Communication Center rules, templates, logs, OTP activity and provider-created notification.
 - [ ] S3 File Manager list/upload/download/error logging.
 - [ ] Razorpay webhook signature validation.
-- [ ] WhatsApp, SES and message-delivery webhook validation.
+- [ ] Gupshup WhatsApp, SES and message-delivery webhook validation.
 
-## 9. Scale validation
+## 11. Scale validation
 
 - [ ] Load representative data volumes into staging.
 - [ ] Run `npm run verify:query-plans` against that dataset.
@@ -183,10 +237,15 @@ npm run verify:query-plans
 
 Broad free-text search should move to Atlas Search or dedicated normalized search fields before sustained million-record use. Per-process caches/rate limits should move to a shared store before horizontal scaling.
 
-## 10. Go-live and rollback
+## 12. Go-live, deployment order and rollback
 
-- [ ] Start one instance and complete smoke tests before scaling out.
-- [ ] Watch CloudWatch/Hostinger logs for startup, migration, index, MongoDB, OTP, S3, communication and payout errors.
-- [ ] Enable traffic gradually.
+- [ ] Put CRM and Provider Portal writes into the agreed maintenance mode.
+- [ ] Back up the database and deploy the CRM release first without enabling public traffic.
+- [ ] Run contact identity migration v2, index verification and CRM readiness checks.
+- [ ] Configure and validate the production Gupshup template, rule and webhook.
+- [ ] Deploy the Provider Portal release and run its index/readiness checks.
+- [ ] Start one instance of each portal and complete role-overlap, marketplace-count, mobile-filter and 20 km alert smoke tests before scaling out.
+- [ ] Watch CloudWatch/Hostinger logs for startup, migration, index, MongoDB, OTP, S3, Gupshup, communication and payout errors.
+- [ ] Enable traffic gradually, CRM first and then Provider Portal.
 - [ ] Monitor transactions, duplicate-key errors, query timeouts and rate-limit responses.
 - [ ] If a release blocker appears, stop traffic, restore the previous release, and follow the verified database rollback/restore procedure.

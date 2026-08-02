@@ -2,6 +2,7 @@ const Enquiry = require("../../models/Enquiry");
 const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const catalogService = require("../catalog/catalog-service");
 const notificationService = require("../communication/notification-service");
+const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
 const uuid = require("../../utils/uuid");
 const { validateMobile } = require("../../utils/mobile");
 const {
@@ -484,7 +485,15 @@ async function publishMarketplace(enquiryId, actor = "system") {
     },
   });
 
-  return get(enquiryId);
+  const publishedLead = await get(enquiryId);
+  if (remainingUnlocks > 0) {
+    try {
+      await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
+    } catch (error) {
+      console.error(`Nearby provider WhatsApp alerts failed for ${publishedLead.enquiryId}:`, error.message);
+    }
+  }
+  return publishedLead;
 }
 
 async function closeMarketplace(enquiryId, marketplaceStatus = "paused", actor = "system", closureReason = "status_change") {

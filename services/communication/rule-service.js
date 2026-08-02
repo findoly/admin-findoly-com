@@ -31,6 +31,7 @@ const EVENTS = Object.freeze([
   "provider_other",
   "sale_conversion_updated",
   "manual_message",
+  "nearby_lead_available",
   "provider_created",
   "agent_created",
   "employee_created",
@@ -47,8 +48,8 @@ const validateTemplate = async function (templateId, channel, enabled) {
   const id = identifierValue(templateId, { label: `${channel} template ID` });
   const template = await CommunicationTemplate.findOne({ templateId: id, channel, isActive: true }).lean();
   if (!template) throw validationError(`${channel} template was not found or is inactive`);
-  if (channel === "whatsapp" && template.status !== "approved") {
-    throw validationError("WhatsApp rule requires an approved template");
+  if (channel === "whatsapp" && (template.status !== "approved" || !template.externalTemplateId)) {
+    throw validationError("WhatsApp rule requires an approved template with a Gupshup template ID");
   }
   if (channel === "email" && template.status !== "active") {
     throw validationError("Email rule requires an active email template");
@@ -58,21 +59,23 @@ const validateTemplate = async function (templateId, channel, enabled) {
 
 const normalizeInput = async function (input, current) {
   const existing = current || {};
+  const event = normalizeEvent(input.event ?? existing.event);
+  const whatsappOnly = event === "nearby_lead_available";
   const whatsappEnabled = booleanValue(input.whatsappEnabled, {
     label: "WhatsApp enabled",
     fallback: existing.whatsappEnabled || false,
   });
-  const emailEnabled = booleanValue(input.emailEnabled, {
+  const emailEnabled = whatsappOnly ? false : booleanValue(input.emailEnabled, {
     label: "Email enabled",
     fallback: existing.emailEnabled || false,
   });
-  const slackEnabled = booleanValue(input.slackEnabled, {
+  const slackEnabled = whatsappOnly ? false : booleanValue(input.slackEnabled, {
     label: "Slack enabled",
     fallback: existing.slackEnabled || false,
   });
   const data = {
     name: textValue(input.name ?? existing.name, { label: "Rule name", required: true, maxLength: 160 }),
-    event: normalizeEvent(input.event ?? existing.event),
+    event,
     enabled: booleanValue(input.enabled, { label: "Rule enabled", fallback: existing.enabled || false }),
     whatsappEnabled,
     whatsappTemplateId: await validateTemplate(
@@ -108,7 +111,7 @@ const normalizeInput = async function (input, current) {
       maxLength: 10000,
       preserveWhitespace: true,
     }),
-    recipientSource: enumValue(input.recipientSource, RECIPIENT_SOURCES, {
+    recipientSource: whatsappOnly ? "provider" : enumValue(input.recipientSource, RECIPIENT_SOURCES, {
       label: "Rule recipient source",
       fallback: existing.recipientSource || "customer",
     }),
@@ -118,6 +121,12 @@ const normalizeInput = async function (input, current) {
       preserveWhitespace: true,
     }),
   };
+  if (whatsappOnly) {
+    data.emailTemplateId = "";
+    data.slackChannelId = "";
+    data.slackChannelName = "";
+    data.slackMessage = "";
+  }
   if (data.enabled && !data.whatsappEnabled && !data.emailEnabled && !data.slackEnabled) {
     throw validationError("Enable at least one channel before enabling the rule");
   }

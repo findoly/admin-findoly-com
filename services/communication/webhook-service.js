@@ -22,56 +22,56 @@ const parseJsonBuffer = function (rawBody, label) {
 };
 
 const extractWhatsAppMessageText = function (message) {
-  if (!message) return "";
-  if (message.text?.body) return message.text.body;
-  if (message.button?.text) return message.button.text;
-  if (message.interactive?.button_reply?.title) return message.interactive.button_reply.title;
-  if (message.interactive?.list_reply?.title) return message.interactive.list_reply.title;
-  if (message.image?.caption) return message.image.caption;
-  if (message.document?.caption) return message.document.caption;
-  return `[${message.type || "message"}]`;
+  const content = message?.payload || message || {};
+  if (content.text) return typeof content.text === "string" ? content.text : (content.text.body || "");
+  if (content.body) return content.body;
+  if (content.title) return content.title;
+  if (content.caption) return content.caption;
+  if (content.postbackText) return content.postbackText;
+  return `[${message?.type || content?.type || "message"}]`;
 };
 
-const processWhatsApp = async function (rawBody, signature) {
-  if (!whatsappService.verifyWebhookSignature(rawBody, signature)) {
-    throw validationError("Invalid WhatsApp webhook signature", 401);
+const gupshupStatus = function (value) {
+  const status = String(value || "").toLowerCase();
+  if (status === "enqueued") return "accepted";
+  if (["sent", "delivered", "read", "failed"].includes(status)) return status;
+  return status || "accepted";
+};
+
+const processWhatsApp = async function (rawBody, auth = {}) {
+  if (!whatsappService.verifyWebhookToken(auth)) {
+    throw validationError("Invalid Gupshup webhook token", 401);
   }
-  const payload = parseJsonBuffer(rawBody, "WhatsApp webhook");
-  let statusUpdates = 0;
-  let inboundMessages = 0;
-  for (const entry of payload.entry || []) {
-    for (const change of entry.changes || []) {
-      const value = change.value || {};
-      for (const status of value.statuses || []) {
-        const reason = status.errors?.map(function (error) {
-          return error.title || error.message || error.code;
-        }).join("; ") || "";
-        const result = await communicationService.updateDeliveryStatus(status.id, status.status, {
-          reason,
-          timestamp: status.timestamp || "",
-          conversation: status.conversation || null,
-          pricing: status.pricing || null,
-          errors: status.errors || [],
-        });
-        statusUpdates += result.matched;
-      }
-      const contacts = value.contacts || [];
-      for (const message of value.messages || []) {
-        const contact = contacts.find(function (item) {
-          return item.wa_id === message.from;
-        });
-        await communicationService.createInbound({
-          recipientName: contact?.profile?.name || "",
-          recipientContact: message.from || "",
-          providerMessageId: message.id || "",
-          message: extractWhatsAppMessageText(message),
-          externalResponse: message,
-        });
-        inboundMessages += 1;
-      }
-    }
+  const event = parseJsonBuffer(rawBody, "Gupshup WhatsApp webhook");
+  if (event.type === "message-event") {
+    const payload = event.payload || {};
+    const providerMessageId = payload.gsId || payload.id || "";
+    if (!providerMessageId) return { ignored: true, reason: "missing_message_id" };
+    const details = payload.payload || {};
+    const result = await communicationService.updateDeliveryStatus(
+      providerMessageId,
+      gupshupStatus(payload.type),
+      {
+        reason: details.reason || payload.reason || "",
+        code: details.code || "",
+        destination: payload.destination || "",
+        event,
+      },
+    );
+    return { statusUpdates: result.matched, inboundMessages: 0 };
   }
-  return { statusUpdates, inboundMessages };
+  if (event.type === "message") {
+    const payload = event.payload || {};
+    await communicationService.createInbound({
+      recipientName: payload.sender?.name || "",
+      recipientContact: payload.source || payload.sender?.phone || "",
+      providerMessageId: payload.id || "",
+      message: extractWhatsAppMessageText(payload),
+      externalResponse: event,
+    });
+    return { statusUpdates: 0, inboundMessages: 1 };
+  }
+  return { ignored: true, reason: "unsupported_event" };
 };
 
 const validSnsCertificateUrl = function (value) {

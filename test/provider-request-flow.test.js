@@ -63,12 +63,14 @@ test("manual provider creation is prefilled and converts the request only throug
   assert.match(service, /status:\s*"converted"/);
 });
 
-test("request status transitions reject converted records and require a rejection note", () => {
+test("request status transitions keep converted records final while rejected requests can reopen or convert", () => {
   const service = read("services/provider-request/provider-request-service.js");
   assert.match(service, /Converted provider requests cannot be changed/);
-  assert.match(service, /Rejected provider requests cannot be converted/);
-  assert.match(service, /required:\s*status === "rejected"/);
-  assert.match(service, /status: \{ \$in: OPEN_STATUSES \}/);
+  assert.match(service, /MUTABLE_STATUSES/);
+  assert.match(service, /Update the internal note to explain why this rejected request is being reopened/);
+  assert.match(service, /Add a new note explaining why this rejected request is being converted/);
+  assert.match(service, /statusHistory/);
+  assert.match(service, /status:\s*initial\.status/);
   assert.match(service, /conversionLockAt/);
   assert.match(service, /conversionLockBy/);
   assert.match(service, /CONVERSION_LOCK_TTL_MS/);

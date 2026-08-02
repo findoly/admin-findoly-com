@@ -5,6 +5,7 @@ const CommunicationRule = require("../../models/CommunicationRule");
 
 const EMAIL_TEMPLATE_NAME = "findoly_provider_account_created_email";
 const WHATSAPP_TEMPLATE_NAME = "findoly_provider_account_created";
+const NEARBY_LEAD_WHATSAPP_TEMPLATE_NAME = "findoly_nearby_lead_available";
 
 const emailTemplate = Object.freeze({
   name: EMAIL_TEMPLATE_NAME,
@@ -100,6 +101,43 @@ const whatsappTemplate = Object.freeze({
   isActive: true,
 });
 
+const nearbyLeadWhatsappTemplate = Object.freeze({
+  name: NEARBY_LEAD_WHATSAPP_TEMPLATE_NAME,
+  displayName: "Nearby lead available",
+  channel: "whatsapp",
+  category: "utility",
+  language: "en_US",
+  subject: "",
+  headerType: "none",
+  headerText: "",
+  body: [
+    "Hello {{1}},",
+    "",
+    "A new customer enquiry matching your services is available on Findoly.",
+    "",
+    "Service: {{2}}",
+    "Location: {{3}}",
+    "Requirement: {{4}}",
+    "",
+    "Review and unlock the lead in your Provider Portal:",
+    "{{5}}",
+    "",
+    "Thank you,",
+    "Team Findoly",
+  ].join("\n"),
+  bodyHtml: "",
+  footer: "",
+  sampleVariables: [
+    "Provider name",
+    "Painting",
+    "Malad West, Mumbai, 400064",
+    "Interior painting requirement",
+    "https://provider.findoly.com/leads?status=marketplace",
+  ],
+  status: "draft",
+  isActive: true,
+});
+
 async function ensureTemplate(definition) {
   const query = {
     channel: definition.channel,
@@ -123,23 +161,12 @@ async function ensureTemplate(definition) {
   }
 }
 
-async function linkProviderRule(email, whatsapp) {
-  const rule = await CommunicationRule.findOne({
-    event: "provider_created",
-    recipientSource: "provider",
-  }).lean();
+async function linkRule({ event, recipientSource, templateField, template, defaultName }) {
+  const rule = await CommunicationRule.findOne({ event, recipientSource }).lean();
   if (!rule) return null;
-
   const update = {};
-  if (!rule.name || rule.name === "Provider registration") {
-    update.name = "Provider account created";
-  }
-  if (!String(rule.emailTemplateId || "").trim()) {
-    update.emailTemplateId = email.templateId;
-  }
-  if (!String(rule.whatsappTemplateId || "").trim()) {
-    update.whatsappTemplateId = whatsapp.templateId;
-  }
+  if (!rule.name || (event === "provider_created" && rule.name === "Provider registration")) update.name = defaultName;
+  if (!String(rule[templateField] || "").trim()) update[templateField] = template.templateId;
   if (Object.keys(update).length) {
     update.updatedBy = "system";
     await CommunicationRule.updateOne({ ruleId: rule.ruleId }, { $set: update });
@@ -148,16 +175,40 @@ async function linkProviderRule(email, whatsapp) {
 }
 
 async function ensureDefaultProviderTemplates() {
-  const [email, whatsapp] = await Promise.all([
+  const [email, whatsapp, nearbyLeadWhatsapp] = await Promise.all([
     ensureTemplate(emailTemplate),
     ensureTemplate(whatsappTemplate),
+    ensureTemplate(nearbyLeadWhatsappTemplate),
   ]);
-  const rule = await linkProviderRule(email, whatsapp);
-  return { email, whatsapp, rule };
+  const [providerRule, nearbyLeadRule] = await Promise.all([
+    linkRule({
+      event: "provider_created",
+      recipientSource: "provider",
+      templateField: "emailTemplateId",
+      template: email,
+      defaultName: "Provider account created",
+    }),
+    linkRule({
+      event: "nearby_lead_available",
+      recipientSource: "provider",
+      templateField: "whatsappTemplateId",
+      template: nearbyLeadWhatsapp,
+      defaultName: "Nearby lead available",
+    }),
+  ]);
+  if (providerRule && !String(providerRule.whatsappTemplateId || "").trim()) {
+    await CommunicationRule.updateOne(
+      { ruleId: providerRule.ruleId },
+      { $set: { whatsappTemplateId: whatsapp.templateId, updatedBy: "system" } },
+    );
+    providerRule.whatsappTemplateId = whatsapp.templateId;
+  }
+  return { email, whatsapp, nearbyLeadWhatsapp, rule: providerRule, nearbyLeadRule };
 }
 
 module.exports = {
   ensureDefaultProviderTemplates,
   EMAIL_TEMPLATE_NAME,
   WHATSAPP_TEMPLATE_NAME,
+  NEARBY_LEAD_WHATSAPP_TEMPLATE_NAME,
 };

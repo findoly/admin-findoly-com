@@ -9,20 +9,17 @@ const deliveryMode = function () {
   return mode === "lambda" ? "lambda" : "local";
 };
 
-const metaApiVersion = function () {
-  return textValue(process.env.META_WHATSAPP_API_VERSION || "v25.0", {
-    label: "Meta API version",
+const gupshupBaseUrl = function () {
+  return textValue(process.env.CRM_GUPSHUP_API_BASE_URL || "https://api.gupshup.io", {
+    label: "Gupshup API base URL",
     required: true,
-    maxLength: 20,
-  });
-};
-
-const metaBaseUrl = function () {
-  return `https://graph.facebook.com/${metaApiVersion()}`;
+    maxLength: 500,
+  }).replace(/\/+$/, "");
 };
 
 const defaultCountryCode = function () {
-  return String(process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, "") || "91";
+  return String(process.env.CRM_WHATSAPP_DEFAULT_COUNTRY_CODE || process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || "91")
+    .replace(/\D/g, "") || "91";
 };
 
 const retentionDays = function (value, fallback) {
@@ -36,20 +33,20 @@ const configurationStatus = function () {
   return {
     deliveryMode: mode,
     whatsapp: {
-      accessToken: Boolean(process.env.META_WHATSAPP_ACCESS_TOKEN),
-      phoneNumberId: Boolean(process.env.META_WHATSAPP_PHONE_NUMBER_ID),
-      businessAccountId: Boolean(process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID),
-      webhookVerifyToken: Boolean(process.env.META_WEBHOOK_VERIFY_TOKEN),
-      appSecret: Boolean(process.env.META_APP_SECRET),
-      apiVersion: metaApiVersion(),
+      provider: "gupshup",
+      apiKey: Boolean(process.env.CRM_GUPSHUP_API_KEY),
+      appName: Boolean(process.env.CRM_GUPSHUP_APP_NAME),
+      sourceNumber: Boolean(process.env.CRM_GUPSHUP_SOURCE_NUMBER),
+      webhookToken: Boolean(process.env.CRM_GUPSHUP_WEBHOOK_TOKEN),
+      apiBaseUrl: gupshupBaseUrl(),
       defaultCountryCode: defaultCountryCode(),
     },
     email: {
       region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "ap-south-1",
       credentials: Boolean(
-        (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-          process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
-          process.env.AWS_WEB_IDENTITY_TOKEN_FILE,
+        (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+          || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+          || process.env.AWS_WEB_IDENTITY_TOKEN_FILE,
       ),
       fromEmail: Boolean(process.env.SES_FROM_EMAIL),
       fromName: process.env.SES_FROM_NAME || process.env.APP_NAME || "Findoly",
@@ -60,18 +57,16 @@ const configurationStatus = function () {
       defaultChannelId: process.env.SLACK_DEFAULT_CHANNEL_ID || "",
       defaultChannelName: process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
       channelCacheSeconds: Math.max(30, Number(process.env.SLACK_CHANNEL_CACHE_SECONDS || 300) || 300),
-      available: mode === "lambda"
-        ? Boolean(process.env.MESSAGE_LAMBDA_URL)
-        : Boolean(process.env.SLACK_BOT_TOKEN),
+      available: mode === "lambda" ? Boolean(process.env.MESSAGE_LAMBDA_URL) : Boolean(process.env.SLACK_BOT_TOKEN),
     },
     systemRouting: {
-      slackAllEvents: process.env.SYSTEM_EVENT_SLACK_ENABLED === undefined
-        ? true
-        : truthy(process.env.SYSTEM_EVENT_SLACK_ENABLED),
-      providerUnlockAndStatusEmail: process.env.PROVIDER_EVENT_EMAIL_ENABLED === undefined
-        ? true
-        : truthy(process.env.PROVIDER_EVENT_EMAIL_ENABLED),
-      whatsappIntegrated: false,
+      slackAllEvents: process.env.SYSTEM_EVENT_SLACK_ENABLED === undefined ? true : truthy(process.env.SYSTEM_EVENT_SLACK_ENABLED),
+      providerUnlockAndStatusEmail: process.env.PROVIDER_EVENT_EMAIL_ENABLED === undefined ? true : truthy(process.env.PROVIDER_EVENT_EMAIL_ENABLED),
+      whatsappIntegrated: Boolean(
+        process.env.CRM_GUPSHUP_API_KEY
+          && process.env.CRM_GUPSHUP_APP_NAME
+          && process.env.CRM_GUPSHUP_SOURCE_NUMBER,
+      ),
     },
     lambda: {
       url: Boolean(process.env.MESSAGE_LAMBDA_URL),
@@ -91,11 +86,4 @@ const configurationStatus = function () {
   };
 };
 
-module.exports = {
-  truthy,
-  deliveryMode,
-  metaApiVersion,
-  metaBaseUrl,
-  defaultCountryCode,
-  configurationStatus,
-};
+module.exports = { truthy, deliveryMode, gupshupBaseUrl, defaultCountryCode, configurationStatus };

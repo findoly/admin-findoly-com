@@ -1,5 +1,4 @@
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
-const whatsappService = require("./whatsapp-service");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { buildSearchAlternatives } = require("../../utils/search-query");
 const {
@@ -132,6 +131,10 @@ const normalizeTemplateInput = function (input, current) {
       label: "Template active state",
       fallback: existing.isActive !== false,
     }),
+    externalTemplateId: textValue(input.externalTemplateId ?? existing.externalTemplateId, {
+      label: "Gupshup template ID",
+      maxLength: 500,
+    }),
   };
   if (channel === "email" && !data.bodyHtml) data.bodyHtml = body;
   if (channel === "whatsapp" && data.headerType !== "text") data.headerText = "";
@@ -207,12 +210,17 @@ const update = async function (templateId, input, actor) {
   const data = normalizeTemplateInput(input || {}, current);
   data.updatedBy = actor || "admin";
   if (current.channel === "whatsapp" && current.status === "approved") {
-    const editableFields = ["displayName", "isActive"];
+    const editableFields = ["displayName", "isActive", "externalTemplateId"];
     const changedProviderField = Object.keys(data).some(function (key) {
       return !editableFields.includes(key) && JSON.stringify(data[key]) !== JSON.stringify(current[key]);
     });
     if (changedProviderField) {
       throw validationError("Approved WhatsApp template content cannot be edited; create a new template version");
+    }
+    if (data.externalTemplateId !== current.externalTemplateId) {
+      data.status = "draft";
+      data.submittedAt = null;
+      data.syncedAt = null;
     }
   }
   try {
@@ -225,18 +233,14 @@ const update = async function (templateId, input, actor) {
 
 const submit = async function (templateId, actor) {
   const current = await get(templateId);
-  if (current.channel !== "whatsapp") throw validationError("Only WhatsApp templates are submitted to Meta");
-  if (!["draft", "rejected"].includes(current.status)) {
-    throw validationError("Only draft or rejected WhatsApp templates can be submitted");
-  }
-  const response = await whatsappService.submitTemplate(current);
+  if (current.channel !== "whatsapp") throw validationError("Only WhatsApp templates use a Gupshup template ID");
+  if (!current.externalTemplateId) throw validationError("Enter the approved Gupshup template ID before activating this template");
   await CommunicationTemplate.updateOne(
     { templateId: current.templateId },
     {
       $set: {
-        externalTemplateId: response.id || current.externalTemplateId || "",
-        status: String(response.status || "pending").toLowerCase(),
-        providerPayload: response,
+        status: "approved",
+        providerPayload: { provider: "gupshup", managedExternally: true, templateId: current.externalTemplateId },
         rejectionReason: "",
         submittedAt: new Date(),
         syncedAt: new Date(),
@@ -247,63 +251,8 @@ const submit = async function (templateId, actor) {
   return get(current.templateId);
 };
 
-const providerStatus = function (value) {
-  const status = String(value || "pending").toLowerCase();
-  if (["approved", "rejected", "paused", "disabled", "pending"].includes(status)) return status;
-  return "pending";
-};
-
-const remoteComponent = function (remote, type) {
-  return (remote.components || []).find(function (component) {
-    return String(component.type || "").toUpperCase() === type;
-  }) || {};
-};
-
-const sync = async function (actor) {
-  const remoteTemplates = await whatsappService.listTemplates();
-  let updated = 0;
-  let imported = 0;
-  for (const remote of remoteTemplates) {
-    const bodyComponent = remoteComponent(remote, "BODY");
-    const headerComponent = remoteComponent(remote, "HEADER");
-    const footerComponent = remoteComponent(remote, "FOOTER");
-    const buttonsComponent = remoteComponent(remote, "BUTTONS");
-    const query = {
-      channel: "whatsapp",
-      name: String(remote.name || "").toLowerCase(),
-      language: remote.language || "en_US",
-    };
-    const result = await CommunicationTemplate.updateOne(
-      query,
-      {
-        $set: {
-          externalTemplateId: remote.id || "",
-          category: String(remote.category || "utility").toLowerCase(),
-          status: providerStatus(remote.status),
-          rejectionReason: remote.rejected_reason || remote.rejection_reason || "",
-          providerPayload: remote,
-          syncedAt: new Date(),
-          updatedBy: actor || "system",
-        },
-        $setOnInsert: {
-          displayName: remote.name || "WhatsApp template",
-          headerType: headerComponent.text ? "text" : "none",
-          headerText: headerComponent.text || "",
-          body: bodyComponent.text || (String(remote.category || "").toLowerCase() === "authentication" ? "Authentication code" : "Imported WhatsApp template"),
-          footer: footerComponent.text || "",
-          buttons: buttonsComponent.buttons || [],
-          sampleVariables: [],
-          otpExpiryMinutes: Number(footerComponent.code_expiration_minutes || 5),
-          isActive: true,
-          createdBy: actor || "system",
-        },
-      },
-      { upsert: true },
-    );
-    if (result.upsertedCount) imported += result.upsertedCount;
-    else updated += result.matchedCount || 0;
-  }
-  return { remoteCount: remoteTemplates.length, updated, imported };
+const sync = async function () {
+  return { remoteCount: 0, updated: 0, imported: 0, managedExternally: true };
 };
 
 module.exports = {

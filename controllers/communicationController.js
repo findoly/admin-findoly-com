@@ -10,7 +10,6 @@ const otpService = require("../services/communication/otp-service");
 const notificationService = require("../services/communication/notification-service");
 const systemEventService = require("../services/communication/system-event-service");
 const webhookService = require("../services/communication/webhook-service");
-const whatsappService = require("../services/communication/whatsapp-service");
 const slackService = require("../services/communication/slack-service");
 const { configurationStatus } = require("../services/communication/communication-config");
 const providerStatusService = require("../services/provider-unlock/provider-status-service");
@@ -384,17 +383,12 @@ const listOtp = async function (req, res, next) {
   }
 };
 
-const verifyWhatsAppWebhook = function (req, res, next) {
-  try {
-    res.status(200).send(whatsappService.webhookChallenge(req.query));
-  } catch (error) {
-    next(error);
-  }
-};
-
 const whatsappWebhook = async function (req, res, next) {
   try {
-    const data = await webhookService.processWhatsApp(req.body, req.get("x-hub-signature-256"));
+    const data = await webhookService.processWhatsApp(req.body, {
+      queryToken: req.query?.token || "",
+      headerToken: req.get("x-webhook-token") || req.get("x-gupshup-signature") || "",
+    });
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -446,7 +440,6 @@ module.exports = {
   sendOtp,
   verifyOtp,
   listOtp,
-  verifyWhatsAppWebhook,
   whatsappWebhook,
   sesWebhook,
   lambdaDeliveryWebhook,

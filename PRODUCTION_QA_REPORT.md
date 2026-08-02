@@ -160,7 +160,7 @@ A provider saved through manual location fallback has no verified latitude/longi
 - Run migrations/backfills on a database backup before switching traffic.
 - Verify MongoDB indexes completed successfully.
 - Configure all production secrets in the hosting environment, never in the ZIP.
-- Test OTP, SES, Meta, Slack, Razorpay, Google Maps and S3 against staging credentials.
+- Test OTP, SES, Gupshup, Slack, Razorpay, Google Maps and S3 against staging credentials.
 - Confirm `TRUST_PROXY` for the hosting platform before enabling secure-cookie traffic.
 - Add every authorised external portal origin to `CORS_ORIGINS`.
 - Back up MongoDB and keep the prior deployment package available for rollback.

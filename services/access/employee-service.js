@@ -106,6 +106,8 @@ async function create(input = {}, actor) {
         entityType: "employee",
         entityId: employeeId,
         contacts: { mobile, email },
+        allowEmployeeRoleOverlap: true,
+        allowEmployeeProviderOverlap: true,
         session,
       });
       const rows = await Employee.create([{
@@ -167,6 +169,8 @@ async function update(employeeId, input = {}, actor) {
         entityType: "employee",
         entityId: current.employeeId,
         contacts: { mobile, email },
+        allowEmployeeRoleOverlap: true,
+        allowEmployeeProviderOverlap: true,
         session,
       });
       updated = await Employee.findOneAndUpdate(
