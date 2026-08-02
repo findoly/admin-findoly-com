@@ -22,6 +22,7 @@ const {
   OTP_SERVICE_BASE_URL,
   SEND_OTP_URL,
   VERIFY_OTP_URL,
+  isExplicitOtpVerificationSuccess,
 } = require("../services/access/otp-proxy-client");
 
 function employeeMobile(value, label = "Mobile number") {
@@ -158,7 +159,10 @@ async function verifyOtp(req, res, next) {
     }
 
     await claimIpVerifySlot(requestAddress(req));
-    await requestOtpApi(VERIFY_OTP_URL, { mobile, otp });
+    const verification = await requestOtpApi(VERIFY_OTP_URL, { mobile, otp });
+    if (!isExplicitOtpVerificationSuccess(verification)) {
+      throw Object.assign(new Error("Invalid or expired OTP"), { status: 401, code: "OTP_INVALID" });
+    }
     await assertLoginAllowed(mobile);
 
     await ensureDefaultRoles();

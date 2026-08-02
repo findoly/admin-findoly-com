@@ -378,7 +378,8 @@ Each rule stores the Slack channel ID used by `chat.postMessage` and the channel
 
 ## Provider portal synchronization
 
-The Provider Portal and CRM share compatible `enquiries`, `providerleadunlocks`, `providers`, `paymentorders`, and credit collections. CRM approval publishes the enquiry directly; provider eligibility does not create database records. One compact unlock record is created only after a provider unlocks.
+The Provider Portal and CRM share compatible `enquiries`, `providerleadunlocks`, `providers`, `paymentorders`, and credit collections. Provider-to-CRM delivery is persisted separately in the Provider Portal-owned `providercrmsyncevents` transactional outbox. CRM approval publishes the enquiry directly; provider eligibility does not create database records. One compact unlock record is created only after a provider unlocks.
+Provider feedback events include a monotonic per-unlock sequence; stale or unsequenced replays are accepted as no-ops once sequencing is active.
 
 Provider browsers call only the Provider Portal host. The Provider backend notifies CRM through:
 
@@ -387,7 +388,7 @@ POST /api/communication/events/provider_lead_unlocked
 POST /api/communication/events/provider_feedback_updated
 ```
 
-Both services must share `COMMUNICATION_EVENT_API_TOKEN`. Slack/email delivery failures are logged independently and never roll back a committed lead action. See `PROVIDER_CRM_SYNC_SETUP.md` for coordinated deployment and reservation-cleanup instructions.
+Both services must share `COMMUNICATION_EVENT_API_TOKEN`. The Provider Portal persists every CRM event in a transactional outbox, retries with an atomic lease and exponential backoff, moves exhausted events to dead-letter state, and expires successful rows after retention; CRM communication processing remains idempotent by outbox event ID. Slack/email delivery failures are logged independently and never roll back a committed lead action. See `PROVIDER_CRM_SYNC_SETUP.md` for coordinated deployment, retry and reservation-cleanup instructions.
 
 ## Scalable marketplace maintenance
 

@@ -8,6 +8,18 @@ const REQUEST_TIMEOUT_MS = Math.min(
   60000,
 );
 
+function isExplicitOtpVerificationSuccess(body) {
+  const verificationFlags = [
+    body?.verified,
+    body?.verify,
+    body?.data?.verified,
+    body?.data?.verify,
+  ].filter((value) => value !== undefined);
+
+  return verificationFlags.length > 0
+    && verificationFlags.every((value) => value === true);
+}
+
 async function requestOtpApi(url, payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -98,4 +110,5 @@ module.exports = {
   SEND_OTP_URL,
   VERIFY_OTP_URL,
   REQUEST_TIMEOUT_MS,
+  isExplicitOtpVerificationSuccess,
 };

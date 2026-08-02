@@ -112,6 +112,24 @@ function normalizeFeedback(input = {}, current = {}) {
   return { outcome, outcomeNote, activityStatus, reason, note };
 }
 
+function parseIntegrationEventSequence(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw validationError("Integration event sequence must be a positive integer number");
+  }
+  return value;
+}
+
+function storedSequence(value, label) {
+  const sequence = Number(value || 0);
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw Object.assign(new Error(`${label} is invalid in shared CRM state`), {
+      code: "CRM_SYNC_SEQUENCE_STATE_INVALID",
+    });
+  }
+  return sequence;
+}
+
 async function syncSaleConversion(enquiryId, { actor = "provider-status-sync", notify = false } = {}) {
   const lead = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
@@ -143,10 +161,60 @@ async function syncSaleConversion(enquiryId, { actor = "provider-status-sync", n
 
 async function updateProviderLeadFeedback(input = {}, actor = "provider-integration") {
   const lookup = unlockLookup(input);
+  const incomingSequence = parseIntegrationEventSequence(input.integrationEventSequence);
+  const integrationEventId = String(input.integrationEventId || "").trim();
+
   const result = await withTransaction(async (session) => {
     const unlock = await ProviderLeadUnlock.findOne(lookup).session(session);
     if (!unlock) {
       throw Object.assign(new Error("Provider lead unlock not found"), { status: 404 });
+    }
+
+    const appliedSequence = storedSequence(
+      unlock.crmSyncAppliedSequence,
+      "Applied CRM sync sequence",
+    );
+    const committedSequence = storedSequence(
+      unlock.crmSyncSequence,
+      "Committed CRM sync sequence",
+    );
+    const latestSequence = Math.max(appliedSequence, committedSequence);
+    if (incomingSequence > 0 && committedSequence > 0 && incomingSequence > committedSequence) {
+      throw Object.assign(
+        validationError("Integration event sequence is newer than the committed provider state"),
+        { code: "CRM_SYNC_SEQUENCE_AHEAD" },
+      );
+    }
+    const isStale = incomingSequence > 0 && incomingSequence < latestSequence;
+    const isDuplicate = incomingSequence > 0
+      && incomingSequence === appliedSequence
+      && incomingSequence === latestSequence;
+    const isUnsequencedReplay = incomingSequence === 0
+      && latestSequence > 0
+      && Boolean(integrationEventId);
+
+    // Once sequenced events have been applied, never let an older or
+    // unsequenced replay overwrite the latest provider feedback. A duplicate of
+    // the currently applied sequence is a state no-op, but the controller may
+    // still retry idempotent communications if the previous response was lost.
+    if (isStale || isDuplicate || isUnsequencedReplay) {
+      const lead = await Enquiry.findOne(enquiryQuery(unlock.enquiryId)).session(session);
+      if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+      const confirmedCount = Math.max(0, Number(lead.providerConfirmedCount || 0));
+      const conversionStatus = lead.providerSaleConversionStatus
+        || (confirmedCount > 0 ? "converted" : "not_converted");
+      return {
+        unlock: unlock.toObject(),
+        lead: lead.toObject(),
+        conversionChanged: false,
+        conversionStatus,
+        confirmedCount,
+        outcomeChanged: false,
+        activityChanged: false,
+        updateActor: actor || statusActor(unlock),
+        stale: isStale || isUnsequencedReplay,
+        duplicate: isDuplicate,
+      };
     }
 
     const feedback = normalizeFeedback(input, unlock.toObject());
@@ -178,9 +246,17 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
     unlock.providerLeadStatusUpdatedBy = activityChanged && feedback.activityStatus
       ? updateActor
       : unlock.providerLeadStatusUpdatedBy || "";
-    unlock.crmSyncStatus = "synced";
-    unlock.crmSyncError = "";
-    unlock.crmSyncUpdatedAt = now;
+    if (incomingSequence > appliedSequence) {
+      unlock.crmSyncAppliedSequence = incomingSequence;
+    }
+    const eventMatchesCurrent = !integrationEventId
+      || !unlock.crmSyncCurrentEventId
+      || integrationEventId === unlock.crmSyncCurrentEventId;
+    if (eventMatchesCurrent) {
+      unlock.crmSyncStatus = "synced";
+      unlock.crmSyncError = "";
+      unlock.crmSyncUpdatedAt = now;
+    }
     if (outcomeChanged) {
       unlock.outcomeVerificationStatus = "pending_review";
       unlock.outcomeVerificationNote = "";
@@ -225,10 +301,12 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
       outcomeChanged,
       activityChanged,
       updateActor,
+      stale: false,
+      duplicate: false,
     };
   });
 
-  if (result.conversionChanged) {
+  if (!result.stale && !result.duplicate && result.conversionChanged) {
     await notificationService.triggerSafe("sale_conversion_updated", {
       lead: result.lead,
       status: result.conversionStatus,
@@ -242,6 +320,8 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
   return {
     unlock: result.unlock,
     lead: result.lead,
+    stale: result.stale,
+    duplicate: result.duplicate,
     changes: {
       outcomeChanged: result.outcomeChanged,
       activityChanged: result.activityChanged,
@@ -269,4 +349,6 @@ module.exports = {
   updateProviderLeadStatus,
   unlockLookup,
   normalizeFeedback,
+  parseIntegrationEventSequence,
+  storedSequence,
 };

@@ -317,6 +317,7 @@ async function sendSlack(event, context, variables, actor) {
     return { channel: "slack", skipped: true, reason: "System Slack events are disabled" };
   }
   const reference = context.providerLeadUnlockId || context.enquiryId || context.providerId || "crm";
+  const eventIdentity = context.integrationEventId || context.idempotencySuffix || context.eventAt;
   return communicationService.send(
     {
       channel: "slack",
@@ -330,7 +331,7 @@ async function sendSlack(event, context, variables, actor) {
       automatic: true,
       enquiryId: context.enquiryId || "",
       providerId: context.providerId || "",
-      idempotencyKey: `system-event:slack:${token(event)}:${token(reference)}:${token(context.eventAt)}`,
+      idempotencyKey: `system-event:slack:${token(event)}:${token(reference)}:${token(eventIdentity)}`,
       metadata: {
         event,
         providerLeadUnlockId: context.providerLeadUnlockId || "",
@@ -354,6 +355,7 @@ async function sendProviderEmail(event, context, variables, actor) {
   }
   const template = await ensureEmailTemplate(event);
   const reference = context.providerLeadUnlockId || context.enquiryId || context.providerId || "provider";
+  const eventIdentity = context.integrationEventId || context.idempotencySuffix || context.eventAt;
   return communicationService.send(
     {
       channel: "email",
@@ -366,7 +368,7 @@ async function sendProviderEmail(event, context, variables, actor) {
       enquiryId: context.enquiryId || "",
       providerId: context.providerId || "",
       variables,
-      idempotencyKey: `system-event:email:${token(event)}:${token(reference)}:${token(context.eventAt)}`,
+      idempotencyKey: `system-event:email:${token(event)}:${token(reference)}:${token(eventIdentity)}`,
       metadata: {
         event,
         providerLeadUnlockId: context.providerLeadUnlockId || "",

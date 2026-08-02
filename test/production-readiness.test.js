@@ -234,6 +234,7 @@ test("runtime configuration keeps optional incomplete S3 disabled without crashi
     CORS_ORIGINS: "https://admin.findoly.com",
     CRM_ADMIN_ORIGIN: "https://admin.findoly.com",
     PUBLIC_INTAKE_API_TOKEN: "p".repeat(48),
+    COMMUNICATION_EVENT_API_TOKEN: "e".repeat(48),
   });
   assert.deepEqual(result.errors, []);
   assert.ok(result.warnings.some((message) => message.includes("S3 configuration is incomplete")));

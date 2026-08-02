@@ -167,7 +167,7 @@ function validateRuntimeConfig(env = process.env) {
     }
   }
   if (production && !present(env.COMMUNICATION_EVENT_API_TOKEN)) {
-    warnings.push("COMMUNICATION_EVENT_API_TOKEN is not configured; communication integration events will reject requests");
+    errors.push("COMMUNICATION_EVENT_API_TOKEN is required for the linked Provider CRM integration");
   }
   if (production && !present(env.COMMUNICATION_OTP_API_TOKEN)) {
     warnings.push("COMMUNICATION_OTP_API_TOKEN is not configured; unauthenticated communication OTP APIs will return 503");

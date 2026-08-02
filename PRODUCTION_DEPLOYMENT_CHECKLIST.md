@@ -1,5 +1,9 @@
 # Findoly CRM production deployment and manual QA checklist
 
+## 0. Empty-database path
+
+For the current clean deployment, skip every `migrate:*` and backfill command in this checklist. There is no legacy data to transform. Deploy CRM first, create and verify its indexes, then deploy the matching Provider Portal package and complete the linked smoke tests. Migration steps below apply only to a future environment that already contains legacy records.
+
 ## 1. Release gate
 
 - [ ] Use Node.js 20 or newer.
@@ -214,6 +218,10 @@ npm run verify:query-plans
 - [ ] A lead already unlocked by the Provider is excluded from Available Leads.
 - [ ] Expired, closed, fully unlocked, unavailable or category-mismatched leads are excluded.
 - [ ] Dashboard Available Leads count matches the Lead Marketplace result set for the same Provider.
+- [ ] Stop CRM, unlock a lead in Provider Portal, and confirm the committed unlock is marked pending/failed for CRM sync without being rolled back.
+- [ ] Restart CRM and confirm the automatic or manual `npm run retry:crm-sync -- --max=100` pass changes the same event to `synced` without duplicate communication.
+- [ ] Deliver a newer provider feedback event before an older queued event and confirm CRM preserves the newer state and suppresses stale notifications.
+- [ ] Production startup fails when either CRM integration variable is absent or when the shared token is weak.
 
 ## 10. Existing feature smoke tests
 
@@ -249,3 +257,5 @@ Broad free-text search should move to Atlas Search or dedicated normalized searc
 - [ ] Enable traffic gradually, CRM first and then Provider Portal.
 - [ ] Monitor transactions, duplicate-key errors, query timeouts and rate-limit responses.
 - [ ] If a release blocker appears, stop traffic, restore the previous release, and follow the verified database rollback/restore procedure.
+
+> Current empty-database release: no migration or backfill is required. Run `ensure:indexes` in CRM first and Provider second, then deploy the two packages together.

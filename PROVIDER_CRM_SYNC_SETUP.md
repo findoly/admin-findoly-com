@@ -24,7 +24,7 @@ npm ci
 npm run ensure:indexes
 ```
 
-The shared lead-flow collections are `enquiries`, `providerleadunlocks`, `providers`, `paymentorders`, `wallettransactions`, and `creditallocations`. Catalog and billing also share `categories`, `servicetypes`, and `providersubscriptions`.
+The shared lead-flow collections are `enquiries`, `providerleadunlocks`, `providers`, `paymentorders`, `wallettransactions`, and `creditallocations`. Provider-to-CRM delivery additionally uses the Provider Portal-owned transactional outbox collection `providercrmsyncevents`. Catalog and billing also share `categories`, `servicetypes`, and `providersubscriptions`.
 
 One approved enquiry remains one database record regardless of how many providers can see it. A `providerleadunlocks` record is created only after a provider completes an unlock.
 
@@ -79,7 +79,15 @@ CRM_API_TIMEOUT_MS=10000
 COMMUNICATION_EVENT_API_TOKEN=<same-secret>
 ```
 
-Notification delivery failures are logged and never roll back a successful unlock or outcome update.
+Notification delivery failures never roll back a successful unlock or outcome update. Each action creates its own `providercrmsyncevents` row inside the same MongoDB transaction, so an unlock and later feedback cannot overwrite one another. Every event carries a monotonic per-unlock sequence; CRM accepts duplicate retries idempotently and ignores stale or unsequenced replays after sequencing is active. The Provider Portal claims due events with a lease and retries with exponential backoff. After `CRM_SYNC_MAX_ATTEMPTS` (default 20), an event moves to dead-letter state; successful rows expire after `CRM_SYNC_EVENT_RETENTION_DAYS` (default 30). The in-process worker runs automatically; bounded manual passes are available with:
+
+```bash
+cd /path/to/provider-portal
+npm run retry:crm-sync -- --max=100
+npm run retry:crm-sync -- --max=100 --include-dead-letter
+```
+
+Atomic leases and CRM idempotency protect against duplicate concurrent delivery.
 
 ## 5. Bounded marketplace cleanup jobs
 
@@ -125,15 +133,17 @@ GOOGLE_MAPS_TIMEOUT_MS=8000
 
 CRM owns lead and provider service-location data. Provider Portal treats provider location as read-only and applies bounded distance checks only to database-filtered candidates.
 
-## 8. Deployment order
+## 8. Empty-database deployment order
 
-1. Back up the pre-production database.
-2. Deploy matching CRM and Provider Portal releases.
-3. Confirm both use the same `MONGODB_URI` and transaction-capable cluster.
-4. Run `npm ci` in both projects.
-5. Run CRM `npm run migrate:structure` once. This intentionally removes obsolete distribution data.
-6. Run `npm run ensure:indexes` in both projects with `MONGO_AUTO_INDEX=false`.
-7. Schedule Provider Portal `npm run cleanup:lead-reservations` every five minutes.
-8. Schedule CRM `npm run cleanup:marketplace-leads` every five minutes.
+1. Create one explicitly named, transaction-capable MongoDB database for both services.
+2. Configure the same strong `COMMUNICATION_EVENT_API_TOKEN` in CRM and Provider Portal.
+3. Run `npm ci` in both projects.
+4. Deploy CRM first and run `npm run ensure:indexes` with `MONGO_AUTO_INDEX=false`.
+5. Start CRM and verify its health/readiness endpoint before starting Provider Portal.
+6. Deploy Provider Portal and run `npm run ensure:indexes` with `MONGO_AUTO_INDEX=false`.
+7. Start Provider Portal and run `npm run retry:crm-sync -- --max=1` to verify authenticated acknowledgement connectivity. An empty queue is a valid result.
+8. Schedule Provider Portal `npm run cleanup:lead-reservations` and CRM `npm run cleanup:marketplace-leads` every five minutes.
 9. Run `npm run qa:production`, `npm run check`, and `npm test` on the deployment host.
-10. Test approval, marketplace listing, credit unlock, direct-payment unlock, cancellation/expiry and provider outcome updates.
+10. Smoke-test approval, marketplace listing/count parity, credit unlock, direct-payment unlock, CRM outage/recovery, cancellation/expiry and provider outcome updates.
+
+Do **not** run structure, contact, location, date or other backfill migrations for this empty database. They are retained only for future deployments that already contain legacy data. Deploy these CRM and Provider packages as a matched pair because the Provider outbox requires CRM's explicit acknowledgement contract.

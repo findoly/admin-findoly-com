@@ -18,6 +18,38 @@ const actor = function (req) {
   return req.admin?.email || "api";
 };
 
+function integrationIdentity(context = {}, eventName = "") {
+  const normalizedEvent = String(eventName || "").trim().toLowerCase();
+  const providerEvents = new Set([
+    "provider_lead_unlocked",
+    "provider-lead-unlocked",
+    "provider_feedback_updated",
+    "provider-feedback-updated",
+    "provider_outcome_updated",
+    "provider-outcome-updated",
+  ]);
+  if (!providerEvents.has(normalizedEvent)) return null;
+  const integrationEventId = String(context.integrationEventId || "").trim();
+  const providerLeadUnlockId = String(context.providerLeadUnlockId || "").trim();
+  const integrationEventSequence = context.integrationEventSequence;
+  if (!integrationEventId || integrationEventId.length > 120 || /[\0\r\n]/.test(integrationEventId)) {
+    throw Object.assign(new Error("Integration event ID is required and must be valid"), { status: 400 });
+  }
+  if (!providerLeadUnlockId || providerLeadUnlockId.length > 120 || /[\0\r\n]/.test(providerLeadUnlockId)) {
+    throw Object.assign(new Error("Provider lead unlock ID is required and must be valid"), { status: 400 });
+  }
+  if (typeof integrationEventSequence !== "number" || !Number.isSafeInteger(integrationEventSequence) || integrationEventSequence < 1) {
+    throw Object.assign(new Error("Integration event sequence must be a positive whole number"), { status: 400 });
+  }
+  return {
+    accepted: true,
+    eventName: String(eventName || ""),
+    integrationEventId,
+    providerLeadUnlockId,
+    integrationEventSequence,
+  };
+}
+
 const list = async function (req, res, next) {
   try {
     const result = await service.list(req.query);
@@ -266,6 +298,7 @@ const triggerEvent = async function (req, res, next) {
 const integrationEvent = async function (req, res, next) {
   try {
     const context = { ...(req.body || {}) };
+    const acknowledgement = integrationIdentity(context, req.params.event);
     const providerLeadStatus = providerStatusService.providerStatusFromEvent(
       req.params.event,
       context.activityStatus || context.status,
@@ -302,6 +335,18 @@ const integrationEvent = async function (req, res, next) {
       context.providerLeadUnlockId = providerStatusUpdate.unlock.providerLeadUnlockId;
       context.outcome = providerStatusUpdate.unlock.providerSaleOutcome;
       context.activityStatus = providerStatusUpdate.unlock.providerLeadStatus;
+      if (providerStatusUpdate.stale) {
+        return res.json({
+          success: true,
+          data: {
+            channelDeliveries: [],
+            notification: [],
+            notificationEvents: [],
+            providerStatusUpdate,
+            ...(acknowledgement ? { acknowledgement: { ...acknowledgement, stale: true } } : {}),
+          },
+        });
+      }
     } else if (!context.lead && context.enquiryId) {
       const lead = await Enquiry.findOne({ enquiryId: context.enquiryId }).lean();
       if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
@@ -351,6 +396,7 @@ const integrationEvent = async function (req, res, next) {
         notification,
         notificationEvents,
         providerStatusUpdate,
+        ...(acknowledgement ? { acknowledgement: { ...acknowledgement, stale: false } } : {}),
       },
     });
   } catch (error) {

@@ -77,7 +77,16 @@ const providerLeadUnlockSchema = new mongoose.Schema(
     outcomeVerifiedBy: { type: String, default: "" },
 
     crmSyncStatus: { type: String, enum: ["", "pending", "synced", "failed"], default: "", index: true },
+    crmSyncEvent: { type: String, enum: ["", "provider_lead_unlocked", "provider_feedback_updated"], default: "", index: true },
+    crmSyncCurrentEventId: { type: String, default: "", index: true, maxlength: 120 },
+    crmSyncSequence: { type: Number, default: 0, min: 0 },
+    crmSyncAppliedSequence: { type: Number, default: 0, min: 0 },
+    crmSyncAttemptCount: { type: Number, default: 0, min: 0 },
     crmSyncError: { type: String, default: "", maxlength: 1000 },
+    crmSyncLastAttemptAt: { type: Date, default: null },
+    crmSyncNextAttemptAt: { type: Date, default: null, index: true },
+    crmSyncLockedAt: { type: Date, default: null },
+    crmSyncLockToken: { type: String, default: "", maxlength: 120 },
     crmSyncUpdatedAt: { type: Date, default: null },
   },
   {
@@ -94,6 +103,7 @@ providerLeadUnlockSchema.index({ providerId: 1, providerSaleOutcome: 1, unlocked
 providerLeadUnlockSchema.index({ providerId: 1, providerLeadStatus: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerId: 1, categorySlug: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerId: 1, cityKey: 1, unlockedAt: -1, _id: -1 });
+providerLeadUnlockSchema.index({ crmSyncStatus: 1, crmSyncNextAttemptAt: 1, crmSyncLockedAt: 1, _id: 1 });
 
 module.exports = mongoose.model(
   "ProviderLeadUnlock",
