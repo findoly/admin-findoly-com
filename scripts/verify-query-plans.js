@@ -30,7 +30,7 @@ const CASES = Object.freeze([
   ["providers/category", "Provider", { categorySlugs: "example-category" }, { createdAt: -1, _id: -1 }],
   ["providers/city", "Provider", { city: "Mumbai" }, { createdAt: -1, _id: -1 }],
   ["agents/status", "Agent", { status: "active" }, { createdAt: -1, _id: -1 }],
-  ["agents/category", "Agent", { categorySlug: "example-category" }, { createdAt: -1, _id: -1 }],
+  ["agents/category", "Agent", { categorySlugs: "example-category" }, { createdAt: -1, _id: -1 }],
   ["employees/status", "Employee", { status: "active" }, { updatedAt: -1, _id: -1 }],
   ["employees/role", "Employee", { status: "active", roleId: "example-role" }, { createdAt: -1, _id: -1 }],
   ["enquiries/status", "Enquiry", { status: "new", isActive: { $ne: false } }, { createdAt: -1, _id: -1 }],
