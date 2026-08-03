@@ -5496,3 +5496,25 @@ th .d-flex {
   .crm-catalog-definition-grid { grid-template-columns: 1fr; }
   .crm-catalog-definition-card { padding: .8rem; }
 }
+
+
+/* Partner multi-category Bootstrap Select */
+.crm-bootstrap-select + .dropdown-toggle,
+.bootstrap-select.crm-bootstrap-select > .dropdown-toggle {
+  min-height: 38px;
+  border: 1px solid var(--bs-border-color, #d9e0e7);
+  background: #fff;
+  color: #1f2937;
+  border-radius: .375rem;
+}
+.bootstrap-select.crm-bootstrap-select.show > .dropdown-toggle,
+.bootstrap-select.crm-bootstrap-select > .dropdown-toggle:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 .2rem rgba(0,123,255,.16);
+  outline: 0 !important;
+}
+.bootstrap-select.crm-bootstrap-select .dropdown-menu { max-width: min(520px, calc(100vw - 32px)); }
+.bootstrap-select.crm-bootstrap-select .dropdown-item.active,
+.bootstrap-select.crm-bootstrap-select .dropdown-item:active { background: #e9f2ff; color: #0b57a3; }
+.crm-category-stack { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+.crm-category-chip { display:inline-flex; align-items:center; border-radius:999px; background:#eef5ff; color:#235b91; font-size:.72rem; font-weight:700; padding:.28rem .55rem; }

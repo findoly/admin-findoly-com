@@ -1,6 +1,15 @@
 const mongoose = require("mongoose");
 const uuid = require("../utils/uuid");
 
+const categorySnapshotSchema = new mongoose.Schema(
+  {
+    categoryId: { type: String, default: "", trim: true },
+    categorySlug: { type: String, required: true, trim: true, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ },
+    categoryName: { type: String, required: true, trim: true, maxlength: 120 },
+  },
+  { _id: false },
+);
+
 const agentSchema = new mongoose.Schema(
   {
     agentId: { type: String, default: uuid, unique: true, index: true, immutable: true, match: /^[a-f0-9]{32}$/ },
@@ -19,6 +28,8 @@ const agentSchema = new mongoose.Schema(
     categoryId: { type: String, default: "", trim: true, index: true },
     categorySlug: { type: String, required: true, trim: true, index: true },
     categoryName: { type: String, required: true, trim: true, maxlength: 120 },
+    categories: { type: [categorySnapshotSchema], default: [] },
+    categorySlugs: { type: [{ type: String, trim: true, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ }], default: [] },
     status: { type: String, enum: ["active", "inactive", "pending", "blocked"], default: "active", index: true },
     portalAccessEnabled: { type: Boolean, default: true, index: true },
     notes: { type: String, default: "", maxlength: 5000 },
@@ -36,11 +47,13 @@ const agentSchema = new mongoose.Schema(
 );
 
 agentSchema.index({ status: 1, portalAccessEnabled: 1, categorySlug: 1 });
+agentSchema.index({ status: 1, portalAccessEnabled: 1, categorySlugs: 1 });
 agentSchema.index({ createdAt: -1, _id: -1 });
 agentSchema.index({ updatedAt: -1, _id: -1 });
 agentSchema.index({ status: 1, createdAt: -1, _id: -1 });
 agentSchema.index({ status: 1, updatedAt: -1, _id: -1 });
 agentSchema.index({ categorySlug: 1, createdAt: -1, _id: -1 });
+agentSchema.index({ categorySlugs: 1, createdAt: -1, _id: -1 });
 agentSchema.index(
   { normalizedEmail: 1 },
   { unique: true, partialFilterExpression: { normalizedEmail: { $exists: true, $gt: "" } }, name: "agent_email_unique" },

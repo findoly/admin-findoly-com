@@ -409,3 +409,7 @@ npm run migrate:marketplace-location
 ```
 
 The script keeps existing lead/provider records intact and caches PIN-code coordinates used by bounded marketplace distance checks.
+
+## Partner multiple Categories
+
+CRM Partner records keep the legacy primary `categoryId`, `categorySlug`, and `categoryName` fields and also store `categories[]` plus `categorySlugs[]`. The Agent/Partner form uses locally served Bootstrap Select assets from the installed `jquery` and `bootstrap-select` packages. Run `npm ci` before starting the application.

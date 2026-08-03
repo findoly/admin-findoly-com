@@ -76,6 +76,21 @@ app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 app.use(cookieParser());
 app.post("/api/webhooks/message-delivery", communicationController.lambdaDeliveryWebhook);
+app.use("/vendor/bootstrap", express.static(path.join(__dirname, "node_modules", "bootstrap", "dist"), {
+  etag: true,
+  maxAge: production ? "30d" : 0,
+  index: false,
+}));
+app.use("/vendor/jquery", express.static(path.join(__dirname, "node_modules", "jquery", "dist"), {
+  etag: true,
+  maxAge: production ? "30d" : 0,
+  index: false,
+}));
+app.use("/vendor/bootstrap-select", express.static(path.join(__dirname, "node_modules", "bootstrap-select", "dist"), {
+  etag: true,
+  maxAge: production ? "30d" : 0,
+  index: false,
+}));
 app.use(express.static(path.join(__dirname, "public"), {
   etag: true,
   maxAge: production ? "1h" : 0,

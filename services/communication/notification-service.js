@@ -146,7 +146,7 @@ const variablesFor = function (context) {
     agent_id: agent.agentId || "",
     referral_id: agent.referralId || "",
     agent_type: agent.agentType || "",
-    category_name: agent.categoryName || "",
+    category_name: (agent.categories || []).map((category) => category.categoryName).filter(Boolean).join(", ") || agent.categoryName || "",
     assigned_location: agentLocation,
     employee_name: employee.name || "",
     employee_id: employee.employeeId || "",

@@ -33,11 +33,14 @@
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1086.0",
+    "bootstrap": "5.3.8",
+    "bootstrap-select": "1.14.0-beta3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
+    "jquery": "3.7.1",
     "mongoose": "^8.24.1",
     "morgan": "^1.10.0",
     "uuid": "^11.1.1"
