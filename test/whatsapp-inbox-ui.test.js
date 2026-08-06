@@ -30,6 +30,9 @@ test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply comp
   assert.match(view, /Mark unread/);
   assert.match(view, /Related requirements/);
   assert.match(view, /Type a WhatsApp message/);
+  assert.match(view, /upsertThreadMessage\(body\.data\.message\)/);
+  assert.match(view, /Message sent\. Chat history is syncing/);
+  assert.match(view, /threadError/);
   assert.match(view, /setInterval\(\(\) => this\.poll\(\), 7000\)/);
   assert.match(css, /\.crm-whatsapp-inbox/);
   assert.match(css, /@media \(max-width: 991\.98px\)/);

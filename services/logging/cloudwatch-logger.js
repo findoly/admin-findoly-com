@@ -272,7 +272,13 @@ function createCloudWatchLogger({
       logGroup: validLogGroup(logGroup) ? logGroup : defaultLogGroup,
       streamPrefix: streamPrefix.slice(0, 180),
       level: normalizeLogLevel(source.CLOUDWATCH_LOG_LEVEL),
-      flushMs: clampNumber(source.CLOUDWATCH_LOG_FLUSH_MS, 2000, 250, 60000),
+      flushMs: clampNumber(source.CLOUDWATCH_LOG_FLUSH_MS, 60000, 250, 60000),
+      batchEvents: clampNumber(
+        source.CLOUDWATCH_LOG_BATCH_EVENTS,
+        20,
+        1,
+        MAX_BATCH_EVENTS,
+      ),
       maxQueue: clampNumber(source.CLOUDWATCH_LOG_MAX_QUEUE, 1000, 100, 10000),
       requestTimeoutMs: clampNumber(source.CLOUDWATCH_LOG_TIMEOUT_MS, 5000, 1000, 15000),
     };
@@ -303,7 +309,7 @@ function createCloudWatchLogger({
     timer = null;
   }
 
-  function scheduleFlush(delay = config.flushMs || 2000) {
+  function scheduleFlush(delay = config.flushMs || 60000) {
     if (!canSend() || timer || queue.length === 0) return;
     timer = setTimeout(() => {
       timer = null;
@@ -354,7 +360,12 @@ function createCloudWatchLogger({
       droppedCount += 1;
     }
     queue.push({ timestamp, message, streamName: streamNameFor(timestamp) });
-    void flush();
+    if (queue.length >= config.batchEvents) {
+      clearTimer();
+      void flush({ drainAll: false });
+    } else {
+      scheduleFlush();
+    }
     return true;
   }
 
@@ -466,11 +477,15 @@ function createCloudWatchLogger({
     readyStreams.add(streamName);
   }
 
-  function takeBatch() {
+  function takeBatch(maxEvents = config.batchEvents || 20) {
     const batch = [];
     let bytes = 0;
+    const eventLimit = Math.min(
+      MAX_BATCH_EVENTS,
+      Math.max(1, Math.trunc(Number(maxEvents) || 1)),
+    );
     const streamName = queue[0]?.streamName || "";
-    while (queue.length && batch.length < MAX_BATCH_EVENTS) {
+    while (queue.length && batch.length < eventLimit) {
       const candidate = queue[0];
       if (candidate.streamName !== streamName) break;
       const candidateBytes = Buffer.byteLength(candidate.message, "utf8") + EVENT_OVERHEAD_BYTES;
@@ -483,13 +498,15 @@ function createCloudWatchLogger({
     return { batch, streamName };
   }
 
-  async function performFlush() {
+  async function performFlush({ drainAll = true } = {}) {
     clearTimer();
     if (!canSend() || queue.length === 0) return { sent: 0, pending: queue.length };
     let sent = 0;
+    let batchesSent = 0;
+    const batchLimit = drainAll ? Number.POSITIVE_INFINITY : 1;
 
-    while (queue.length) {
-      const { batch, streamName } = takeBatch();
+    while (queue.length && batchesSent < batchLimit) {
+      const { batch, streamName } = takeBatch(config.batchEvents);
       if (!batch.length) break;
       try {
         await ensureStream(streamName);
@@ -499,6 +516,7 @@ function createCloudWatchLogger({
           logEvents: batch,
         });
         sent += batch.length;
+        batchesSent += 1;
       } catch (error) {
         if (error.awsType === "ResourceNotFoundException") readyStreams.delete(streamName);
         queue = [...batch, ...queue].slice(0, config.maxQueue);
@@ -508,23 +526,51 @@ function createCloudWatchLogger({
     return { sent, pending: queue.length };
   }
 
-  async function flush({ timeoutMs } = {}) {
-    if (!flushPromise) {
-      flushPromise = performFlush()
-        .catch((error) => {
-          internalWarning(error && error.name === "AbortError" ? "request timed out" : error.message);
-          scheduleFlush(Math.max(config.flushMs || 2000, 5000));
-          return { sent: 0, pending: queue.length, failed: true };
-        })
-        .finally(() => {
-          flushPromise = null;
-        });
-    }
+  function startFlush({ drainAll = true } = {}) {
+    if (flushPromise) return flushPromise;
 
-    if (!Number.isFinite(Number(timeoutMs))) return flushPromise;
+    let failed = false;
+    flushPromise = performFlush({ drainAll })
+      .catch((error) => {
+        failed = true;
+        internalWarning(error && error.name === "AbortError" ? "request timed out" : error.message);
+        return { sent: 0, pending: queue.length, failed: true };
+      })
+      .finally(() => {
+        flushPromise = null;
+        if (!canSend() || queue.length === 0) return;
+        if (failed) {
+          scheduleFlush(Math.max(config.flushMs || 60000, 5000));
+        } else if (queue.length >= config.batchEvents) {
+          void startFlush({ drainAll: false });
+        } else {
+          scheduleFlush();
+        }
+      });
+    return flushPromise;
+  }
+
+  async function flushAll() {
+    let sent = 0;
+    while (queue.length || flushPromise) {
+      const result = await startFlush({ drainAll: true });
+      sent += Number(result?.sent || 0);
+      if (result?.failed || queue.length === 0) {
+        return { ...result, sent, pending: queue.length };
+      }
+    }
+    return { sent, pending: queue.length };
+  }
+
+  async function flush({ timeoutMs, drainAll = true } = {}) {
+    const operation = drainAll
+      ? flushAll()
+      : startFlush({ drainAll: false });
+
+    if (!Number.isFinite(Number(timeoutMs))) return operation;
     const timeout = Math.max(100, Math.trunc(Number(timeoutMs)));
     return Promise.race([
-      flushPromise,
+      operation,
       new Promise((resolve) => {
         const timerHandle = setTimeout(
           () => resolve({ sent: 0, pending: queue.length, timedOut: true }),
@@ -551,6 +597,8 @@ function createCloudWatchLogger({
       logStream: streamNameFor(now().getTime()),
       level: config.level || "info",
       queueLength: queue.length,
+      flushMs: config.flushMs || 0,
+      batchEvents: config.batchEvents || 0,
       maxQueue: config.maxQueue || 0,
       droppedCount,
       streamReady: readyStreams.has(streamNameFor(now().getTime())),

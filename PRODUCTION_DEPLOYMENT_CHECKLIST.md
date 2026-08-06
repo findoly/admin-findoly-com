@@ -83,6 +83,16 @@ DASHBOARD_COUNT_CAP=10000
 COMMUNICATION_DASHBOARD_CACHE_TTL_MS=30000
 ```
 
+Recommended CloudWatch batching settings:
+
+```env
+CLOUDWATCH_LOG_FLUSH_MS=60000
+CLOUDWATCH_LOG_BATCH_EVENTS=20
+CLOUDWATCH_LOG_MAX_QUEUE=1000
+```
+
+Logs are queued in memory and sent when either 60 seconds elapse or 20 events are waiting, whichever happens first. Pending events are also flushed during graceful shutdown.
+
 Required Gupshup and Provider Marketplace values:
 
 ```env

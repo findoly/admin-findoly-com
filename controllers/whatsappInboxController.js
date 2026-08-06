@@ -28,6 +28,13 @@ async function listMessages(req, res, next) {
     const result = await service.listMessages(req.params.conversationId, req.query || {});
     res.json({ success: true, data: result.data, pagination: result.pagination });
   } catch (error) {
+    console.error({
+      event: "whatsapp_inbox_message_list_failed",
+      requestId: req.requestId || req.id || "",
+      conversationId: String(req.params.conversationId || "").slice(0, 120),
+      code: String(error.code || "WHATSAPP_INBOX_MESSAGE_LIST_FAILED"),
+      message: service.safeLogMessage(error.message, "WhatsApp inbox message list failed"),
+    });
     next(error);
   }
 }

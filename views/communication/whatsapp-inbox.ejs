@@ -127,6 +127,10 @@
                   </div>
 
                   <div class="crm-wa-messages" x-ref="messages" :class="{'crm-loading': threadLoading}">
+                    <div x-show="threadError" x-cloak class="alert alert-danger m-3">
+                      <span x-text="threadError"></span>
+                      <button type="button" class="btn btn-sm btn-light ms-2" @click="loadMessages(true)">Retry</button>
+                    </div>
                     <div class="crm-wa-load-older" x-show="messagePagination.hasNext">
                       <button type="button" class="btn btn-light btn-sm" @click="loadOlderMessages()" :disabled="olderLoading" x-text="olderLoading ? 'Loading…' : 'Load older messages'"></button>
                     </div>
@@ -154,6 +158,7 @@
 
                   <form class="crm-wa-composer" @submit.prevent="sendReply()">
                     <div x-show="sendError" x-cloak class="alert alert-danger mb-2" x-text="sendError"></div>
+                    <div x-show="sendNotice" x-cloak class="alert alert-info mb-2" x-text="sendNotice"></div>
                     <div class="crm-wa-composer-row">
                       <textarea class="form-control" x-model="draft" maxlength="4096" rows="2" placeholder="Type a WhatsApp message" aria-label="WhatsApp reply" @keydown.enter="handleComposerEnter($event)"></textarea>
                       <button type="submit" class="btn btn-primary" :disabled="sending || !draft.trim()" x-text="sending ? 'Sending…' : 'Send'"></button>
@@ -188,6 +193,8 @@
           draft: '',
           error: '',
           sendError: '',
+          sendNotice: '',
+          threadError: '',
           mobileChatOpen: false,
           pollTimer: null,
           async init() {
@@ -255,6 +262,7 @@
             this.mobileChatOpen = mobile;
             this.messages = [];
             this.enquiries = [];
+            this.threadError = '';
             this.messagePagination = { nextCursor: '', hasNext: false };
             this.syncUrl();
             await Promise.all([this.loadConversationDetails(), this.loadMessages(true), this.markSelectedRead()]);
@@ -271,13 +279,19 @@
           async loadMessages(scrollToBottom = false, silent = false) {
             if (!this.selectedId) return;
             this.threadLoading = !silent;
+            if (!silent) this.threadError = '';
             try {
               const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/messages?limit=50');
               const incoming = body.data || [];
               if (silent && this.messages.length) {
-                const byId = new Map(this.messages.map((message) => [message.messageId, message]));
-                incoming.forEach((message) => byId.set(message.messageId, message));
-                this.messages = [...byId.values()].sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+                const merged = [...this.messages];
+                incoming.forEach((message) => {
+                  const identities = new Set([message.messageId, message.communicationId, message.providerMessageId].filter(Boolean));
+                  const index = merged.findIndex((item) => [item.messageId, item.communicationId, item.providerMessageId].some((value) => value && identities.has(value)));
+                  if (index >= 0) merged[index] = { ...merged[index], ...message, pendingPersistence: false };
+                  else merged.push(message);
+                });
+                this.messages = merged.sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
               } else {
                 this.messages = incoming;
               }
@@ -285,9 +299,10 @@
                 nextCursor: body.pagination?.nextCursor || '',
                 hasNext: Boolean(body.pagination?.hasNext),
               };
+              this.threadError = '';
               if (scrollToBottom || silent) this.$nextTick(() => this.scrollToBottom());
             } catch (error) {
-              if (!silent) this.error = error.message;
+              if (!silent) this.threadError = error.message;
             } finally {
               this.threadLoading = false;
             }
@@ -375,22 +390,47 @@
             event.preventDefault();
             this.sendReply();
           },
+          upsertThreadMessage(message) {
+            if (!message?.messageId) return;
+            const identities = new Set([
+              message.messageId,
+              message.communicationId,
+              message.providerMessageId,
+            ].filter(Boolean));
+            const existingIndex = this.messages.findIndex((item) => [
+              item.messageId,
+              item.communicationId,
+              item.providerMessageId,
+            ].some((value) => value && identities.has(value)));
+            if (existingIndex >= 0) {
+              this.messages[existingIndex] = { ...this.messages[existingIndex], ...message };
+            } else {
+              this.messages.push(message);
+            }
+            this.messages = [...this.messages].sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+          },
           async sendReply() {
             const message = this.draft.trim();
             if (!message || !this.selectedId || this.sending) return;
             this.sending = true;
             this.sendError = '';
+            this.sendNotice = '';
             const key = window.crypto?.randomUUID?.() || (Date.now() + '-' + Math.random().toString(16).slice(2));
             try {
-              await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/reply', {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/reply', {
                 method: 'POST',
                 body: JSON.stringify({ message, idempotencyKey: key }),
               });
+              if (body.data?.message) this.upsertThreadMessage(body.data.message);
               this.draft = '';
-              await Promise.all([this.loadMessages(true), this.loadConversationDetails(), this.loadConversations({ silent: true })]);
+              this.$nextTick(() => this.scrollToBottom());
+              if (body.data?.inboxSyncStatus === 'pending') {
+                this.sendNotice = 'Message sent. Chat history is syncing and will refresh automatically.';
+              }
+              await Promise.all([this.loadMessages(false, true), this.loadConversationDetails(), this.loadConversations({ silent: true })]);
             } catch (error) {
               this.sendError = error.message;
-              await this.loadMessages(true, true);
+              await this.loadMessages(false, true);
             } finally {
               this.sending = false;
             }
