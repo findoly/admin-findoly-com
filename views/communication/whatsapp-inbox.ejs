@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header">
+          <div class="page-header-content crm-page-heading">
+            <div>
+              <div class="crm-page-eyebrow">Communication Center</div>
+              <h1 class="page-title mb-1"><%= title %></h1>
+              <p class="crm-page-subtitle mb-0">Manage customer WhatsApp messages and replies from one shared inbox.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <a href="/communications/logs?channel=whatsapp" class="btn btn-light crm-primary-action">View message logs</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="content" x-data="whatsappInbox()" x-init="init()">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+          <%- include('_navigation', { active: 'inbox' }) %>
+
+          <section class="crm-whatsapp-inbox" :class="{'is-chat-open': mobileChatOpen}">
+            <aside class="crm-wa-conversations" aria-label="WhatsApp conversations">
+              <div class="crm-wa-list-head">
+                <div>
+                  <h2>Conversations</h2>
+                  <p><span x-text="conversations.length"></span> on this page</p>
+                </div>
+                <button type="button" class="btn btn-light btn-sm" @click="refreshAll()" :disabled="listLoading" aria-label="Refresh conversations">Refresh</button>
+              </div>
+
+              <form class="crm-wa-filters" @submit.prevent="searchConversations()">
+                <label class="crm-search-control crm-wa-search">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  <input type="search" x-model="filters.q" placeholder="Search name or mobile" maxlength="120" aria-label="Search WhatsApp conversations">
+                </label>
+                <div class="crm-wa-filter-row">
+                  <select class="form-select" x-model="filters.status" @change="searchConversations()" aria-label="Conversation status">
+                    <option value="open">Open</option>
+                    <option value="closed">Closed</option>
+                    <option value="">All</option>
+                  </select>
+                  <label class="crm-wa-unread-filter">
+                    <input type="checkbox" x-model="filters.unread" @change="searchConversations()">
+                    <span>Unread only</span>
+                  </label>
+                  <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+              </form>
+
+              <div class="crm-wa-list" :class="{'crm-loading': listLoading}">
+                <template x-if="listLoading && !conversations.length">
+                  <div class="crm-wa-empty"><div class="crm-table-loading"><span></span><span></span><span></span></div></div>
+                </template>
+                <template x-for="conversation in conversations" :key="conversation.conversationId">
+                  <button type="button" class="crm-wa-conversation" :class="{'is-active': selectedId === conversation.conversationId, 'has-unread': conversation.unreadCount > 0}" @click="openConversation(conversation)">
+                    <span class="crm-wa-avatar" x-text="avatarText(conversation)"></span>
+                    <span class="crm-wa-conversation-body">
+                      <span class="crm-wa-conversation-top">
+                        <strong x-text="conversation.displayName || conversation.latestEnquiryName || formatMobile(conversation.contactNumber)"></strong>
+                        <time x-text="shortTime(conversation.lastMessageAt)"></time>
+                      </span>
+                      <span class="crm-wa-conversation-bottom">
+                        <span class="crm-wa-preview" x-text="conversation.lastMessagePreview || 'No messages yet'"></span>
+                        <span class="crm-wa-unread-badge" x-show="conversation.unreadCount > 0" x-text="conversation.unreadCount > 99 ? '99+' : conversation.unreadCount"></span>
+                      </span>
+                      <span class="crm-wa-conversation-meta">
+                        <span x-text="formatMobile(conversation.contactNumber)"></span>
+                        <span x-show="conversation.status === 'closed'">Closed</span>
+                      </span>
+                    </span>
+                  </button>
+                </template>
+                <div class="crm-wa-empty" x-show="!listLoading && !conversations.length">
+                  <strong>No WhatsApp conversations</strong>
+                  <span>New customer messages will appear here automatically.</span>
+                </div>
+              </div>
+
+              <div class="crm-wa-list-pagination">
+                <button type="button" class="btn btn-light btn-sm" :disabled="conversationPagination.page <= 1 || listLoading" @click="previousConversationPage()">Previous</button>
+                <span>Page <strong x-text="conversationPagination.page"></strong></span>
+                <button type="button" class="btn btn-light btn-sm" :disabled="!conversationPagination.hasNext || listLoading" @click="nextConversationPage()">Next</button>
+              </div>
+            </aside>
+
+            <main class="crm-wa-thread" aria-label="Selected WhatsApp conversation">
+              <template x-if="!selectedId">
+                <div class="crm-wa-thread-empty">
+                  <div class="crm-wa-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg></div>
+                  <h2>Select a conversation</h2>
+                  <p>Choose a customer from the list to review messages and send a reply.</p>
+                </div>
+              </template>
+
+              <template x-if="selectedId">
+                <div class="crm-wa-thread-shell">
+                  <header class="crm-wa-thread-head">
+                    <button type="button" class="crm-wa-back d-lg-none" @click="mobileChatOpen=false" aria-label="Back to conversations">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+                    </button>
+                    <span class="crm-wa-avatar" x-text="avatarText(selected || {})"></span>
+                    <div class="crm-wa-thread-identity">
+                      <h2 x-text="selected?.displayName || selected?.latestEnquiryName || formatMobile(selected?.contactNumber)"></h2>
+                      <div>
+                        <span x-text="formatMobile(selected?.contactNumber)"></span>
+                        <span x-show="selected?.matchedEnquiryCount">· <span x-text="selected?.matchedEnquiryCount"></span> requirement<span x-show="selected?.matchedEnquiryCount !== 1">s</span></span>
+                      </div>
+                    </div>
+                    <div class="crm-wa-thread-actions">
+                      <button type="button" class="btn btn-light btn-sm" @click="markSelectedUnread()" :disabled="actionLoading">Mark unread</button>
+                      <button type="button" class="btn btn-light btn-sm" @click="toggleConversationStatus()" :disabled="actionLoading" x-text="selected?.status === 'closed' ? 'Reopen' : 'Close'"></button>
+                    </div>
+                  </header>
+
+                  <div class="crm-wa-related" x-show="enquiries.length">
+                    <span>Related requirements:</span>
+                    <template x-for="enquiry in enquiries.slice(0, 5)" :key="enquiry.enquiryId">
+                      <a :href="'/enquiries/' + enquiry.enquiryId" target="_blank" rel="noopener" x-text="enquiry.requirementTitle || enquiry.enquiryId"></a>
+                    </template>
+                    <span x-show="enquiries.length > 5" x-text="'+' + (enquiries.length - 5) + ' more'"></span>
+                  </div>
+
+                  <div class="crm-wa-messages" x-ref="messages" :class="{'crm-loading': threadLoading}">
+                    <div class="crm-wa-load-older" x-show="messagePagination.hasNext">
+                      <button type="button" class="btn btn-light btn-sm" @click="loadOlderMessages()" :disabled="olderLoading" x-text="olderLoading ? 'Loading…' : 'Load older messages'"></button>
+                    </div>
+                    <template x-if="threadLoading && !messages.length">
+                      <div class="crm-wa-empty"><div class="crm-table-loading"><span></span><span></span><span></span></div></div>
+                    </template>
+                    <template x-for="message in messages" :key="message.messageId">
+                      <article class="crm-wa-message-row" :class="message.direction === 'outbound' ? 'is-outbound' : 'is-inbound'">
+                        <div class="crm-wa-bubble">
+                          <div class="crm-wa-message-type" x-show="message.messageType !== 'text'" x-text="humanize(message.messageType)"></div>
+                          <div class="crm-wa-message-text" x-text="message.text || '[' + humanize(message.messageType) + ']'"></div>
+                          <div class="crm-wa-message-footer">
+                            <span x-show="message.direction === 'outbound' && message.employeeName" x-text="message.employeeName"></span>
+                            <time x-text="formatMessageTime(message.occurredAt)"></time>
+                            <span class="crm-wa-message-status" x-show="message.direction === 'outbound'" :class="{'is-failed': ['failed','rejected','bounced','complained'].includes(message.status)}" x-text="humanize(message.status)"></span>
+                          </div>
+                          <div class="crm-wa-message-failure" x-show="message.failureReason" x-text="message.failureReason"></div>
+                        </div>
+                      </article>
+                    </template>
+                    <div class="crm-wa-empty" x-show="!threadLoading && !messages.length">
+                      <strong>No messages in this conversation</strong>
+                    </div>
+                  </div>
+
+                  <form class="crm-wa-composer" @submit.prevent="sendReply()">
+                    <div x-show="sendError" x-cloak class="alert alert-danger mb-2" x-text="sendError"></div>
+                    <div class="crm-wa-composer-row">
+                      <textarea class="form-control" x-model="draft" maxlength="4096" rows="2" placeholder="Type a WhatsApp message" aria-label="WhatsApp reply" @keydown.enter="handleComposerEnter($event)"></textarea>
+                      <button type="submit" class="btn btn-primary" :disabled="sending || !draft.trim()" x-text="sending ? 'Sending…' : 'Send'"></button>
+                    </div>
+                    <div class="crm-wa-composer-note"><span x-text="draft.length"></span>/4096 · Press Enter to send, Shift+Enter for a new line.</div>
+                  </form>
+                </div>
+              </template>
+            </main>
+          </section>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+
+    <script>
+      function whatsappInbox() {
+        return {
+          conversations: [],
+          selectedId: '',
+          selected: null,
+          enquiries: [],
+          messages: [],
+          filters: { q: queryValue('q'), status: queryValue('status', 'open'), unread: queryValue('unread') === '1' },
+          conversationPagination: createCursorPagination(30),
+          messagePagination: { nextCursor: '', hasNext: false },
+          listLoading: false,
+          threadLoading: false,
+          olderLoading: false,
+          actionLoading: false,
+          sending: false,
+          draft: '',
+          error: '',
+          sendError: '',
+          mobileChatOpen: false,
+          pollTimer: null,
+          async init() {
+            const requestedConversation = queryValue('conversation');
+            await this.loadConversations();
+            const initial = requestedConversation
+              ? this.conversations.find((item) => item.conversationId === requestedConversation)
+              : null;
+            if (initial) await this.openConversation(initial, false);
+            this.pollTimer = window.setInterval(() => this.poll(), 7000);
+            window.addEventListener('pagehide', () => window.clearInterval(this.pollTimer), { once: true });
+          },
+          conversationQuery(includeCursor = true) {
+            const values = {
+              q: this.filters.q,
+              status: this.filters.status,
+              unread: this.filters.unread ? '1' : '',
+              limit: this.conversationPagination.limit,
+              cursor: includeCursor ? this.conversationPagination.cursor : '',
+            };
+            const query = new URLSearchParams(values);
+            [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
+            return query.toString();
+          },
+          syncUrl() {
+            const query = new URLSearchParams();
+            if (this.filters.q) query.set('q', this.filters.q);
+            if (this.filters.status !== 'open') query.set('status', this.filters.status);
+            if (this.filters.unread) query.set('unread', '1');
+            if (this.selectedId) query.set('conversation', this.selectedId);
+            history.replaceState({}, '', '/communications/whatsapp-inbox' + (query.toString() ? '?' + query.toString() : ''));
+          },
+          async loadConversations(options = {}) {
+            if (this.listLoading && !options.silent) return;
+            this.listLoading = !options.silent;
+            if (!options.silent) this.error = '';
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations?' + this.conversationQuery());
+              this.conversations = body.data || [];
+              applyCursorPagination(this.conversationPagination, body.pagination || {});
+              if (this.selectedId) {
+                const updated = this.conversations.find((item) => item.conversationId === this.selectedId);
+                if (updated) this.selected = { ...(this.selected || {}), ...updated };
+              }
+            } catch (error) {
+              if (!options.silent) this.error = error.message;
+            } finally {
+              this.listLoading = false;
+            }
+          },
+          async searchConversations() {
+            resetCursorPagination(this.conversationPagination);
+            this.selectedId = '';
+            this.selected = null;
+            this.messages = [];
+            this.enquiries = [];
+            this.mobileChatOpen = false;
+            this.syncUrl();
+            await this.loadConversations();
+          },
+          async openConversation(conversation, mobile = true) {
+            if (!conversation?.conversationId) return;
+            this.selectedId = conversation.conversationId;
+            this.selected = conversation;
+            this.mobileChatOpen = mobile;
+            this.messages = [];
+            this.enquiries = [];
+            this.messagePagination = { nextCursor: '', hasNext: false };
+            this.syncUrl();
+            await Promise.all([this.loadConversationDetails(), this.loadMessages(true), this.markSelectedRead()]);
+          },
+          async loadConversationDetails() {
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId));
+              this.selected = body.data?.conversation || this.selected;
+              this.enquiries = body.data?.enquiries || [];
+            } catch (error) {
+              this.error = error.message;
+            }
+          },
+          async loadMessages(scrollToBottom = false, silent = false) {
+            if (!this.selectedId) return;
+            this.threadLoading = !silent;
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/messages?limit=50');
+              const incoming = body.data || [];
+              if (silent && this.messages.length) {
+                const byId = new Map(this.messages.map((message) => [message.messageId, message]));
+                incoming.forEach((message) => byId.set(message.messageId, message));
+                this.messages = [...byId.values()].sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+              } else {
+                this.messages = incoming;
+              }
+              this.messagePagination = {
+                nextCursor: body.pagination?.nextCursor || '',
+                hasNext: Boolean(body.pagination?.hasNext),
+              };
+              if (scrollToBottom || silent) this.$nextTick(() => this.scrollToBottom());
+            } catch (error) {
+              if (!silent) this.error = error.message;
+            } finally {
+              this.threadLoading = false;
+            }
+          },
+          async loadOlderMessages() {
+            if (!this.selectedId || !this.messagePagination.hasNext || this.olderLoading) return;
+            this.olderLoading = true;
+            const container = this.$refs.messages;
+            const oldHeight = container?.scrollHeight || 0;
+            try {
+              const query = new URLSearchParams({ limit: '50', cursor: this.messagePagination.nextCursor });
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/messages?' + query.toString());
+              const existing = new Set(this.messages.map((message) => message.messageId));
+              const older = (body.data || []).filter((message) => !existing.has(message.messageId));
+              this.messages = [...older, ...this.messages];
+              this.messagePagination = {
+                nextCursor: body.pagination?.nextCursor || '',
+                hasNext: Boolean(body.pagination?.hasNext),
+              };
+              this.$nextTick(() => { if (container) container.scrollTop = container.scrollHeight - oldHeight; });
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.olderLoading = false;
+            }
+          },
+          async markSelectedRead() {
+            if (!this.selectedId) return;
+            try {
+              await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/read', { method: 'POST', body: '{}' });
+              const readAt = new Date().toISOString();
+              this.messages = this.messages.map((message) => message.direction === 'inbound' ? { ...message, crmReadAt: message.crmReadAt || readAt } : message);
+              if (this.selected) this.selected.unreadCount = 0;
+              const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+              if (item) item.unreadCount = 0;
+            } catch (error) {
+              this.error = error.message;
+            }
+          },
+          async markSelectedUnread() {
+            if (!this.selectedId || this.actionLoading) return;
+            this.actionLoading = true;
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/unread', { method: 'POST', body: '{}' });
+              const count = body.data?.unreadCount || 1;
+              for (let index = this.messages.length - 1; index >= 0; index -= 1) {
+                if (this.messages[index].direction === 'inbound') {
+                  this.messages[index] = { ...this.messages[index], crmReadAt: null };
+                  break;
+                }
+              }
+              if (this.selected) this.selected.unreadCount = count;
+              const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+              if (item) item.unreadCount = count;
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.actionLoading = false;
+            }
+          },
+          async toggleConversationStatus() {
+            if (!this.selectedId || this.actionLoading) return;
+            this.actionLoading = true;
+            const nextStatus = this.selected?.status === 'closed' ? 'open' : 'closed';
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/status', {
+                method: 'PATCH',
+                body: JSON.stringify({ status: nextStatus }),
+              });
+              this.selected = body.data || { ...this.selected, status: nextStatus };
+              if (this.filters.status && this.filters.status !== nextStatus) {
+                await this.searchConversations();
+              } else {
+                const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+                if (item) item.status = nextStatus;
+              }
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.actionLoading = false;
+            }
+          },
+          handleComposerEnter(event) {
+            if (event.shiftKey) return;
+            event.preventDefault();
+            this.sendReply();
+          },
+          async sendReply() {
+            const message = this.draft.trim();
+            if (!message || !this.selectedId || this.sending) return;
+            this.sending = true;
+            this.sendError = '';
+            const key = window.crypto?.randomUUID?.() || (Date.now() + '-' + Math.random().toString(16).slice(2));
+            try {
+              await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/reply', {
+                method: 'POST',
+                body: JSON.stringify({ message, idempotencyKey: key }),
+              });
+              this.draft = '';
+              await Promise.all([this.loadMessages(true), this.loadConversationDetails(), this.loadConversations({ silent: true })]);
+            } catch (error) {
+              this.sendError = error.message;
+              await this.loadMessages(true, true);
+            } finally {
+              this.sending = false;
+            }
+          },
+          async refreshAll() {
+            await this.loadConversations();
+            if (this.selectedId) await Promise.all([this.loadConversationDetails(), this.loadMessages(false, true)]);
+          },
+          async poll() {
+            if (document.hidden || this.sending || this.listLoading || this.conversationPagination.page !== 1) return;
+            await this.loadConversations({ silent: true });
+            if (this.selectedId) {
+              await this.loadMessages(false, true);
+              const hasUnread = this.messages.some((message) => message.direction === 'inbound' && !message.crmReadAt);
+              if (hasUnread) await this.markSelectedRead();
+            }
+          },
+          nextConversationPage() { if (cursorNext(this.conversationPagination)) this.loadConversations(); },
+          previousConversationPage() { if (cursorPrevious(this.conversationPagination)) this.loadConversations(); },
+          scrollToBottom() { const element = this.$refs.messages; if (element) element.scrollTop = element.scrollHeight; },
+          avatarText(conversation) {
+            const name = String(conversation?.displayName || conversation?.latestEnquiryName || '').trim();
+            if (name) return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+            return String(conversation?.contactNumber || '').slice(-2) || 'WA';
+          },
+          formatMobile(value) { const digits = String(value || '').replace(/\D/g, ''); return digits.length === 10 ? '+91 ' + digits.slice(0, 5) + ' ' + digits.slice(5) : (value || 'Unknown number'); },
+          shortTime(value) {
+            const date = safeDate(value); if (!date) return '';
+            const today = new Date();
+            if (date.toDateString() === today.toDateString()) return new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(date);
+            return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(date);
+          },
+          formatMessageTime(value) { const date = safeDate(value); return date ? new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date) : ''; },
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

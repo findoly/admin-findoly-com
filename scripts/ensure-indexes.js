@@ -11,6 +11,8 @@ const MODELS = Object.freeze([
   require("../models/Communication"),
   require("../models/CommunicationRule"),
   require("../models/CommunicationTemplate"),
+  require("../models/WhatsAppConversation"),
+  require("../models/WhatsAppMessage"),
   require("../models/ContactIdentity"),
   require("../models/CreditAllocation"),
   require("../models/CrmOtpRateLimit"),

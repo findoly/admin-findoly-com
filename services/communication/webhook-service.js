@@ -3,6 +3,7 @@ const Communication = require("../../models/Communication");
 const communicationService = require("./communication-service");
 const whatsappService = require("./whatsapp-service");
 const providerWhatsappActionService = require("./provider-whatsapp-action-service");
+const whatsappInboxService = require("./whatsapp-inbox-service");
 const templateService = require("./template-service");
 const { truthy } = require("./communication-config");
 const { textValue, validationError } = require("../../utils/validation");
@@ -31,6 +32,26 @@ const extractWhatsAppMessageText = function (message) {
   if (content.caption) return content.caption;
   if (content.postbackText) return content.postbackText;
   return `[${message?.type || content?.type || "message"}]`;
+};
+
+const extractWhatsAppMessageType = function (message) {
+  const content = message?.payload || message || {};
+  return whatsappInboxService.normalizeMessageType(message?.type || content?.type || "text");
+};
+
+const syncInboxDeliverySafely = async function (input) {
+  try {
+    return await whatsappInboxService.syncDeliveryStatus(input);
+  } catch (error) {
+    console.error({
+      event: "whatsapp_inbox_delivery_sync_failed",
+      communicationId: input.communicationId || "",
+      status: input.status || "",
+      code: String(error.code || "WHATSAPP_INBOX_SYNC_FAILED"),
+      message: whatsappInboxService.safeLogMessage(error.message, "WhatsApp inbox delivery sync failed"),
+    });
+    return { matched: 0, modified: 0, failed: true };
+  }
 };
 
 
@@ -98,6 +119,12 @@ const processWhatsApp = async function (rawBody, auth = {}) {
     };
     const result = await communicationService.updateDeliveryStatus(messageIds, status, deliveryDetails);
     if (result.matched) {
+      await syncInboxDeliverySafely({
+        communicationId: result.communicationId || "",
+        messageIds,
+        status,
+        details: deliveryDetails,
+      });
       return {
         statusUpdates: result.matched,
         inboundMessages: 0,
@@ -134,14 +161,33 @@ const processWhatsApp = async function (rawBody, auth = {}) {
       return { statusUpdates: 0, inboundMessages: 1, action: actionResult };
     }
     const payload = event.payload || {};
-    await communicationService.createInbound({
+    const occurredAt = whatsappEventAt(event, payload);
+    const inbound = await communicationService.createInbound({
       recipientName: payload.sender?.name || "",
       recipientContact: payload.source || payload.sender?.phone || "",
       providerMessageId: payload.id || "",
       message: extractWhatsAppMessageText(payload),
+      metadata: {
+        accountType: "customer",
+        whatsappMessageType: extractWhatsAppMessageType(payload),
+      },
       externalResponse: event,
     });
-    return { statusUpdates: 0, inboundMessages: 1 };
+    try {
+      await whatsappInboxService.recordInbound({
+        communication: inbound,
+        messageType: extractWhatsAppMessageType(payload),
+        occurredAt,
+      });
+    } catch (error) {
+      console.error({
+        event: "whatsapp_inbox_inbound_sync_failed",
+        communicationId: inbound?.communicationId || "",
+        code: String(error.code || "WHATSAPP_INBOX_SYNC_FAILED"),
+        message: whatsappInboxService.safeLogMessage(error.message, "WhatsApp inbox inbound sync failed"),
+      });
+    }
+    return { statusUpdates: 0, inboundMessages: 1, inboxConversation: true };
   }
   return { ignored: true, reason: "unsupported_event" };
 };
@@ -293,4 +339,5 @@ module.exports = {
   verifySnsSignature,
   snsCanonicalString,
   extractWhatsAppMessageText,
+  extractWhatsAppMessageType,
 };

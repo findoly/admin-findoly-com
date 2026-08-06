@@ -38,6 +38,7 @@ router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followU
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);
 router.get("/communications", ...protectedPage("communications.view"), page.communications);
 router.get("/communications/logs", ...protectedPage("communications.view"), page.communicationLogs);
+router.get("/communications/whatsapp-inbox", ...protectedPage("communications.view"), page.whatsappInbox);
 router.get("/communications/send", ...protectedPage("communications.send"), page.communicationSend);
 router.get("/communications/templates", ...protectedPage("communications.view"), page.communicationTemplates);
 router.get("/communications/templates/new", ...protectedPage("communications.manage"), page.communicationTemplateCreate);
