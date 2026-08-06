@@ -36,6 +36,7 @@ const frontendController = {
   followUpEdit: render("follow-up/form", "Edit follow-up"),
   communications: render("communication/index", "Communication Center"),
   communicationLogs: render("communication/logs", "Message logs"),
+  whatsappInbox: render("communication/whatsapp-inbox", "WhatsApp Inbox"),
   communicationShow: render("communication/show", "Communication details"),
   communicationSend: render("communication/send", "Send message"),
   communicationTemplates: render("communication/templates", "Manage templates"),

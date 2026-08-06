@@ -38,6 +38,8 @@ router.use("/agents", require("./agent"));
 router.use("/providers", require("./provider"));
 router.use("/follow-up", require("./follow-up"));
 router.use("/follow-ups", require("./follow-up"));
+router.use("/communication/whatsapp-inbox", require("./whatsapp-inbox"));
+router.use("/communications/whatsapp-inbox", require("./whatsapp-inbox"));
 router.use("/communication", require("./communication"));
 router.use("/communications", require("./communication"));
 router.use("/provider-subscriptions", require("./provider-subscription"));

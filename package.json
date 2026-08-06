@@ -25,6 +25,7 @@
     "migrate:withdrawal-slots": "node scripts/run-with-runtime.js scripts/backfill-active-withdrawal-slots.js",
     "preflight:production": "npm run qa:production && npm run verify:indexes && npm run verify:query-plans",
     "migrate:contact-identities": "node scripts/run-with-runtime.js scripts/backfill-contact-identities.js",
+    "migrate:whatsapp-inbox": "node scripts/run-with-runtime.js scripts/backfill-whatsapp-inbox.js",
     "qa:hardening": "node --test test/production-hardening-expanded.test.js test/production-hardening-runtime.test.js",
     "verify:query-plans": "node scripts/run-with-runtime.js scripts/verify-query-plans.js"
   },

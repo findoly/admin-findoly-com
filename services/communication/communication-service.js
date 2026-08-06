@@ -35,6 +35,28 @@ let communicationDashboardCache = null;
 let communicationDashboardExpiresAt = 0;
 let communicationDashboardBuildPromise = null;
 
+const safeWhatsappInboxLogMessage = function (value) {
+  return String(value || "WhatsApp inbox outbound sync failed")
+    .replace(/\+?\d[\d\s().-]{8,}\d/g, "[redacted-number]")
+    .replace(/(authorization|token|secret|api[-_ ]?key)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .slice(0, 1000);
+};
+
+const recordWhatsappInboxSafely = async function (communication, employee = {}) {
+  if (!communication || communication.channel !== "whatsapp") return;
+  try {
+    const inboxService = require("./whatsapp-inbox-service");
+    await inboxService.recordOutbound(communication, employee);
+  } catch (error) {
+    console.error({
+      event: "whatsapp_inbox_outbound_sync_failed",
+      communicationId: communication.communicationId || "",
+      code: String(error.code || "WHATSAPP_INBOX_SYNC_FAILED"),
+      message: safeWhatsappInboxLogMessage(error.message),
+    });
+  }
+};
+
 const historyPush = function (entry) {
   return { $each: [entry], $slice: -COMMUNICATION_HISTORY_LIMIT };
 };
@@ -318,6 +340,7 @@ const send = async function (input, actor) {
         channel,
         purpose: String(source.purpose || ""),
       });
+      if (channel === "whatsapp") await recordWhatsappInboxSafely(existing);
       return existing;
     }
   }
@@ -507,9 +530,15 @@ const send = async function (input, actor) {
       message: String(error.message || "Message delivery failed").slice(0, 2000),
       postbackLength: Number(error.postbackLength || 0),
     });
+    if (channel === "whatsapp") {
+      const failedCommunication = await get(communication.communicationId).catch(() => null);
+      await recordWhatsappInboxSafely(failedCommunication);
+    }
     throw error;
   }
-  return get(communication.communicationId);
+  const completedCommunication = await get(communication.communicationId);
+  if (channel === "whatsapp") await recordWhatsappInboxSafely(completedCommunication);
+  return completedCommunication;
 };
 
 const sendWhatsappSession = async function (input, actor = "system") {
@@ -535,6 +564,7 @@ const sendWhatsappSession = async function (input, actor = "system") {
         channel: "whatsapp",
         purpose: String(source.purpose || "whatsapp_session"),
       });
+      await recordWhatsappInboxSafely(existing);
       return existing;
     }
   }
@@ -625,9 +655,13 @@ const sendWhatsappSession = async function (input, actor = "system") {
       code: String(error.code || "DELIVERY_FAILED"),
       message: String(error.message || "Message delivery failed").slice(0, 2000),
     });
+    const failedCommunication = await get(communication.communicationId).catch(() => null);
+    await recordWhatsappInboxSafely(failedCommunication);
     throw error;
   }
-  return get(communication.communicationId);
+  const completedCommunication = await get(communication.communicationId);
+  await recordWhatsappInboxSafely(completedCommunication);
+  return completedCommunication;
 };
 
 const retry = async function (communicationId, actor) {
