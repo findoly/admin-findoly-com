@@ -470,3 +470,33 @@ test("failed outbound unlock messages are marked send_failed instead of remainin
   assert.match(communication, /metadata\.whatsappUnlock\.status"\]\s*=\s*"send_failed"/);
   assert.match(communication, /WHATSAPP_POSTBACK_TOO_LONG|postbackLength/);
 });
+
+test("provider-facing WhatsApp action responses use enquiry wording and never mention unlock", () => {
+  const actionService = loadWithStubs("services/communication/provider-whatsapp-action-service.js", {
+    "../../models/Communication": {},
+    "./communication-service": {},
+    "../integration/provider-action-service": {},
+  });
+  const messages = [
+    actionService.responseMessage({
+      status: "unlocked",
+      lead: {
+        enquiryId: "enquiry-1",
+        category: "Painting",
+        customerName: "Customer",
+        customerMobile: "9999999999",
+        chargedCredits: 10,
+      },
+      provider: { availableCredits: 90 },
+    }),
+    actionService.responseMessage({ status: "already_unlocked", lead: { enquiryId: "enquiry-1" }, provider: {} }),
+    actionService.responseMessage({ status: "insufficient_credits", requiredCredits: 10, availableCredits: 2 }),
+    actionService.responseMessage({ status: "direct_payment_pending" }),
+    actionService.responseMessage({ status: "provider_ineligible" }),
+    actionService.responseMessage({ status: "lead_unavailable" }),
+    actionService.responseMessage({ status: "failed" }),
+  ];
+  messages.forEach((message) => assert.doesNotMatch(message, /unlock/i));
+  assert.match(messages[0], /enquiry details are now available/i);
+  assert.match(messages.at(-1), /could not open this enquiry from WhatsApp/i);
+});

@@ -109,7 +109,7 @@ function successMessage(result = {}) {
   const lead = result.lead || {};
   const provider = result.provider || {};
   const lines = [
-    result.status === "already_unlocked" ? "This lead was already unlocked for your account." : "Lead unlocked successfully.",
+    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "The enquiry details are now available.",
     "",
     `Service: ${lead.serviceType || lead.category || "Service"}`,
     `Customer: ${lead.customerName || "Not provided"}`,
@@ -122,7 +122,7 @@ function successMessage(result = {}) {
   lines.push(`Credits used: ${Number(lead.chargedCredits || 0)}`);
   lines.push(`Remaining balance: ${Number(provider.availableCredits ?? provider.walletCredits ?? 0)} credits`);
   lines.push("");
-  lines.push(`Lead reference: ${lead.enquiryId || ""}`);
+  lines.push(`Enquiry reference: ${lead.enquiryId || ""}`);
   return lines.join("\n");
 }
 
@@ -130,7 +130,7 @@ function failureMessage(result = {}) {
   const status = String(result.status || "failed");
   if (status === "insufficient_credits") {
     return [
-      "This lead could not be unlocked because your wallet does not have enough credits.",
+      "Your wallet does not have enough credits to view this enquiry.",
       "",
       `Required: ${Number(result.requiredCredits || 0)} credits`,
       `Available: ${Number(result.availableCredits || 0)} credits`,
@@ -139,15 +139,15 @@ function failureMessage(result = {}) {
     ].join("\n");
   }
   if (status === "direct_payment_pending") {
-    return "A direct-payment checkout is already reserving this lead. Complete or cancel that checkout in the Provider Portal first.";
+    return "A direct-payment checkout is already reserving this enquiry. Complete or cancel that checkout in the Provider Portal first.";
   }
   if (status === "provider_ineligible") {
-    return "Your provider account is not currently eligible to unlock this lead. Please contact Findoly support.";
+    return "Your provider account is not currently eligible to view this enquiry. Please contact Findoly support.";
   }
   if (status === "lead_unavailable") {
-    return "This lead is no longer available for unlocking. It may have expired or reached its provider limit.";
+    return "This enquiry is no longer available. It may have expired or reached its provider limit.";
   }
-  return "We could not unlock this lead from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
+  return "We could not open this enquiry from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
 }
 
 function responseMessage(result) {
@@ -388,7 +388,7 @@ async function processInbound(event, options = {}) {
     recipientName: original.recipientName,
     recipientContact: details.source,
     providerMessageId: inboundReference,
-    message: details.visibleText || "Unlock Lead",
+    message: details.visibleText || "View Enquiry",
     purpose: "whatsapp_unlock_request",
     trigger: "gupshup_quick_reply",
     externalResponse: redactedEvent(event, details.postbackText),
