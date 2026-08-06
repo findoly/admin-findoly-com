@@ -4,6 +4,8 @@ const crypto = require("crypto");
 const { gupshupBaseUrl, defaultCountryCode } = require("./communication-config");
 const { validationError } = require("../../utils/validation");
 
+const MAX_GUPSHUP_POSTBACK_LENGTH = 128;
+
 function timeoutSignal(milliseconds) {
   if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(milliseconds);
   const controller = new AbortController();
@@ -48,8 +50,16 @@ function normalizedPostbackTexts(value) {
   return value.slice(0, 10).map((entry) => {
     const index = Number(entry?.index);
     const text = String(entry?.text || "").trim();
-    if (!Number.isInteger(index) || index < 0 || index > 9 || !text || text.length > 1000) {
+    if (!Number.isInteger(index) || index < 0 || index > 9 || !text) {
       throw validationError("WhatsApp postback text is invalid");
+    }
+    if (text.length > MAX_GUPSHUP_POSTBACK_LENGTH) {
+      const error = validationError(
+        `WhatsApp quick-reply postback exceeds Gupshup's ${MAX_GUPSHUP_POSTBACK_LENGTH}-character limit`,
+      );
+      error.code = "WHATSAPP_POSTBACK_TOO_LONG";
+      error.postbackLength = text.length;
+      throw error;
     }
     if (seen.has(index)) throw validationError("WhatsApp postback button indexes must be unique");
     seen.add(index);
@@ -57,34 +67,94 @@ function normalizedPostbackTexts(value) {
   });
 }
 
-async function request(pathname, form) {
+function lastFour(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.slice(-4);
+}
+
+function providerErrorCode(data = {}, message = "") {
+  const direct = String(data.code || data.errorCode || data.statusCode || "").trim();
+  if (direct) return direct.slice(0, 120);
+  return String(message || "").match(/#(\d{2,12})/)?.[1] || "";
+}
+
+async function request(pathname, form, context = {}) {
   const config = requireGupshupConfig();
-  const response = await fetch(`${gupshupBaseUrl()}${pathname}`, {
-    method: "POST",
-    headers: {
-      apikey: config.apiKey,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form.toString(),
-    signal: timeoutSignal(Number(process.env.COMMUNICATION_HTTP_TIMEOUT_MS || 15000)),
+  const startedAt = process.hrtime.bigint();
+  console.info({
+    event: "gupshup_request_started",
+    pathname,
+    communicationId: String(context.communicationId || ""),
+    purpose: String(context.purpose || ""),
+    templateId: String(context.templateId || ""),
+    parameterCount: Number(context.parameterCount || 0),
+    quickReplyCount: Number(context.quickReplyCount || 0),
+    postbackLength: Number(context.postbackLength || 0),
+    recipientLast4: lastFour(context.recipient),
   });
-  const data = parseResponse(await response.text());
-  const providerStatus = String(data.status || "").toLowerCase();
-  if (!response.ok || providerStatus === "error") {
-    const message = data.message || data.error || `Gupshup API request failed with status ${response.status}`;
-    throw Object.assign(new Error(String(message)), {
-      status: response.status >= 400 && response.status < 500 ? 400 : 502,
-      providerResponse: data,
+  try {
+    const response = await fetch(`${gupshupBaseUrl()}${pathname}`, {
+      method: "POST",
+      headers: {
+        apikey: config.apiKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
+      signal: timeoutSignal(Number(process.env.COMMUNICATION_HTTP_TIMEOUT_MS || 15000)),
     });
+    const data = parseResponse(await response.text());
+    const providerStatus = String(data.status || "").toLowerCase();
+    const durationMs = Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2));
+    if (!response.ok || providerStatus === "error") {
+      const message = data.message || data.error || `Gupshup API request failed with status ${response.status}`;
+      console.error({
+        event: "gupshup_request_failed",
+        pathname,
+        communicationId: String(context.communicationId || ""),
+        httpStatus: response.status,
+        providerStatus: providerStatus || "error",
+        providerCode: providerErrorCode(data, message),
+        providerMessage: String(message).slice(0, 2000),
+        postbackLength: Number(context.postbackLength || 0),
+        durationMs,
+      });
+      throw Object.assign(new Error(String(message)), {
+        status: response.status >= 400 && response.status < 500 ? 400 : 502,
+        providerResponse: data,
+      });
+    }
+    console.info({
+      event: "gupshup_request_completed",
+      pathname,
+      communicationId: String(context.communicationId || ""),
+      httpStatus: response.status,
+      providerStatus: providerStatus || "accepted",
+      providerMessageId: String(data.messageId || data.id || ""),
+      durationMs,
+    });
+    return {
+      provider: "gupshup",
+      providerMessageId: data.messageId || data.id || "",
+      status: providerStatus === "submitted" || providerStatus === "success"
+        ? "accepted"
+        : (providerStatus || "accepted"),
+      response: data,
+    };
+  } catch (error) {
+    if (!error?.providerResponse) {
+      const durationMs = Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2));
+      console.error({
+        event: "gupshup_request_failed",
+        pathname,
+        communicationId: String(context.communicationId || ""),
+        providerCode: String(error.code || error.name || "REQUEST_FAILED"),
+        providerMessage: String(error.message || error).slice(0, 2000),
+        postbackLength: Number(context.postbackLength || 0),
+        durationMs,
+      });
+    }
+    throw error;
   }
-  return {
-    provider: "gupshup",
-    providerMessageId: data.messageId || data.id || "",
-    status: providerStatus === "submitted" || providerStatus === "success"
-      ? "accepted"
-      : (providerStatus || "accepted"),
-    response: data,
-  };
 }
 
 async function sendTemplate(payload) {
@@ -103,7 +173,15 @@ async function sendTemplate(payload) {
   });
   const postbackTexts = normalizedPostbackTexts(payload.postbackTexts);
   if (postbackTexts.length) form.set("postbackTexts", JSON.stringify(postbackTexts));
-  return request("/wa/api/v1/template/msg", form);
+  return request("/wa/api/v1/template/msg", form, {
+    communicationId: payload.communicationId,
+    purpose: payload.purpose,
+    templateId: externalTemplateId,
+    parameterCount: params.length,
+    quickReplyCount: postbackTexts.length,
+    postbackLength: Math.max(0, ...postbackTexts.map((entry) => entry.text.length)),
+    recipient: payload.to,
+  });
 }
 
 async function sendText(payload) {
@@ -123,7 +201,11 @@ async function sendText(payload) {
     "src.name": config.appName,
     message: JSON.stringify(message),
   });
-  return request("/wa/api/v1/msg", form);
+  return request("/wa/api/v1/msg", form, {
+    communicationId: payload.communicationId,
+    purpose: payload.purpose,
+    recipient: payload.to,
+  });
 }
 
 function constantTimeEqual(left, right) {
@@ -139,6 +221,7 @@ function verifyWebhookToken({ queryToken = "", headerToken = "" } = {}) {
 }
 
 module.exports = {
+  MAX_GUPSHUP_POSTBACK_LENGTH,
   normalizeWhatsAppAddress,
   normalizedPostbackTexts,
   sendTemplate,

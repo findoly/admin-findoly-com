@@ -434,6 +434,12 @@ async function ensureEnquiryLocation(enquiry) {
 }
 
 async function publishMarketplace(enquiryId, actor = "system") {
+  const startedAt = process.hrtime.bigint();
+  console.info({
+    event: "marketplace_publish_started",
+    enquiryId: String(enquiryId || ""),
+    actor: String(actor || "system"),
+  });
   let lead = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
   if (lead.isActive === false) {
@@ -486,13 +492,31 @@ async function publishMarketplace(enquiryId, actor = "system") {
   });
 
   const publishedLead = await get(enquiryId);
+  let alertSummary = null;
   if (remainingUnlocks > 0) {
     try {
-      await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
+      alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
     } catch (error) {
-      console.error(`Nearby provider WhatsApp alerts failed for ${publishedLead.enquiryId}:`, error.message);
+      console.error({
+        event: "nearby_alert_dispatch_failed",
+        enquiryId: publishedLead.enquiryId,
+        code: String(error.code || "NEARBY_ALERT_DISPATCH_FAILED"),
+        message: String(error.message || error).slice(0, 2000),
+        stack: error.stack,
+      });
     }
   }
+  console.info({
+    event: "marketplace_publish_completed",
+    enquiryId: publishedLead.enquiryId,
+    marketplaceStatus: publishedLead.marketplaceStatus,
+    remainingUnlocks: Number(publishedLead.remainingUnlocks || 0),
+    categorySlug: publishedLead.categorySlug || "",
+    coordinatesAvailable: [publishedLead.locationLatitude, publishedLead.locationLongitude]
+      .every((value) => value !== null && value !== undefined && Number.isFinite(Number(value))),
+    alertSummary,
+    durationMs: Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2)),
+  });
   return publishedLead;
 }
 

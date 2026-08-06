@@ -19,6 +19,8 @@ let mongoose = null;
 let shuttingDown = false;
 let runPromise = null;
 let signalHandlersInstalled = false;
+let processErrorHandlersInstalled = false;
+let fatalErrorHandling = false;
 let activeHandler = startupHandler;
 let bootstrapState = "starting";
 
@@ -97,6 +99,42 @@ function installSignalHandlers() {
   process.once("SIGINT", () => shutdown("SIGINT"));
 }
 
+function installProcessErrorHandlers() {
+  if (processErrorHandlersInstalled) return;
+  processErrorHandlersInstalled = true;
+
+  process.on("unhandledRejection", (reason) => {
+    console.error({
+      event: "unhandled_rejection",
+      error: reason instanceof Error
+        ? { name: reason.name, message: reason.message, stack: reason.stack }
+        : String(reason),
+    });
+  });
+
+  process.on("uncaughtException", async (error) => {
+    if (fatalErrorHandling) return;
+    fatalErrorHandling = true;
+    console.error({
+      event: "uncaught_exception",
+      error: {
+        name: error?.name || "Error",
+        message: error?.message || String(error),
+        stack: error?.stack || "",
+      },
+    });
+    process.exitCode = 1;
+    await closeServer().catch(() => {});
+    if (mongoose && mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect().catch((disconnectError) => {
+        console.error("MongoDB disconnect error after uncaught exception:", disconnectError);
+      });
+    }
+    await cloudwatchLogger.flush({ timeoutMs: 2000 });
+    process.exit(1);
+  });
+}
+
 async function start({
   loadSecrets = loadAwsSecrets,
   loadApp = () => require("../app"),
@@ -141,6 +179,7 @@ async function start({
 function run() {
   if (runPromise) return runPromise;
   installSignalHandlers();
+  installProcessErrorHandlers();
   runPromise = start().catch(async (error) => {
     console.error("CRM startup failed:", error.message);
     process.exitCode = 1;
@@ -155,6 +194,7 @@ run().catch(() => {});
 module.exports = {
   cloudwatchLogger,
   dispatchRequest,
+  installProcessErrorHandlers,
   installSignalHandlers,
   listen,
   resolvePort,

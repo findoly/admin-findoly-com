@@ -1,3 +1,5 @@
+const { requestPath } = require("./request-logging");
+
 const SAFE_OPERATIONAL_CODES = new Set([
   "GEOCODING_NOT_CONFIGURED",
   "GEOCODING_UNAVAILABLE",
@@ -96,12 +98,13 @@ function safeErrorForLog(error = {}) {
 
 function errorHandler(error, req, res, next) {
   const normalized = normalizedError(error);
-  if (normalized.status >= 500 && error?.logged !== true) {
-    console.error({
+  if (error?.logged !== true) {
+    const log = normalized.status >= 500 ? console.error : console.warn;
+    log({
       event: "http_request_error",
       requestId: req.requestId,
       method: req.method,
-      path: req.originalUrl,
+      path: requestPath(req),
       status: normalized.status,
       code: normalized.code,
       error: safeErrorForLog(error),

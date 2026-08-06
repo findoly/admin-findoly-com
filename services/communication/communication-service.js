@@ -311,7 +311,15 @@ const send = async function (input, actor) {
   });
   if (idempotencyKey) {
     const existing = await Communication.findOne({ idempotencyKey }).lean();
-    if (existing) return existing;
+    if (existing) {
+      console.info({
+        event: "communication_deduplicated",
+        communicationId: existing.communicationId || "",
+        channel,
+        purpose: String(source.purpose || ""),
+      });
+      return existing;
+    }
   }
 
   const metadata = plainObjectValue(source.metadata || {}, {
@@ -366,6 +374,15 @@ const send = async function (input, actor) {
     statusHistory: [{ status: "queued", at: new Date(), actor: actor || "system" }],
     metadata,
   });
+  console.info({
+    event: "communication_queued",
+    communicationId: communication.communicationId,
+    enquiryId: communication.enquiryId,
+    providerId: communication.providerId,
+    ruleId: communication.ruleId,
+    channel: communication.channel,
+    purpose: communication.purpose,
+  });
 
   try {
     let postbackTexts = [];
@@ -397,6 +414,17 @@ const send = async function (input, actor) {
       postbackTexts = [{ index: buttonIndex, text: actionToken }];
     }
 
+    console.info({
+      event: "communication_delivery_started",
+      communicationId: communication.communicationId,
+      enquiryId: communication.enquiryId,
+      providerId: communication.providerId,
+      ruleId: communication.ruleId,
+      channel,
+      purpose: communication.purpose,
+      templateId: communication.templateId,
+      postbackLength: postbackTexts[0]?.text?.length || 0,
+    });
     const result = await messageGateway.send({
       channel,
       to: recipientContact,
@@ -438,20 +466,47 @@ const send = async function (input, actor) {
         $push: { statusHistory: historyPush({ status, at: new Date(), actor: actor || "system" }) },
       },
     );
+    console.info({
+      event: "communication_delivery_completed",
+      communicationId: communication.communicationId,
+      channel,
+      purpose: communication.purpose,
+      status,
+      deliveryProvider: result.provider || "manual",
+      providerMessageId: result.providerMessageId || "",
+    });
   } catch (error) {
+    const failureFields = {
+      status: "failed",
+      failedAt: new Date(),
+      failureReason: String(error.message || "Message delivery failed").slice(0, 3000),
+      externalResponse: boundedJsonValue(error.providerResponse || null),
+      updatedAt: new Date(),
+    };
+    if (communication.metadata?.whatsappUnlock?.type === "unlock_lead") {
+      failureFields["metadata.whatsappUnlock.status"] = "send_failed";
+      failureFields["metadata.whatsappUnlock.processing"] = false;
+      failureFields["metadata.whatsappUnlock.completedAt"] = new Date();
+    }
     await Communication.updateOne(
       { communicationId: communication.communicationId },
       {
-        $set: {
-          status: "failed",
-          failedAt: new Date(),
-          failureReason: String(error.message || "Message delivery failed").slice(0, 3000),
-          externalResponse: boundedJsonValue(error.providerResponse || null),
-          updatedAt: new Date(),
-        },
+        $set: failureFields,
         $push: { statusHistory: historyPush({ status: "failed", at: new Date(), reason: error.message || "Message delivery failed" }) },
       },
     );
+    console.error({
+      event: "communication_delivery_failed",
+      communicationId: communication.communicationId,
+      enquiryId: communication.enquiryId,
+      providerId: communication.providerId,
+      ruleId: communication.ruleId,
+      channel,
+      purpose: communication.purpose,
+      code: String(error.code || "DELIVERY_FAILED"),
+      message: String(error.message || "Message delivery failed").slice(0, 2000),
+      postbackLength: Number(error.postbackLength || 0),
+    });
     throw error;
   }
   return get(communication.communicationId);
@@ -473,7 +528,15 @@ const sendWhatsappSession = async function (input, actor = "system") {
   });
   if (idempotencyKey) {
     const existing = await Communication.findOne({ idempotencyKey }).lean();
-    if (existing) return existing;
+    if (existing) {
+      console.info({
+        event: "communication_deduplicated",
+        communicationId: existing.communicationId || "",
+        channel: "whatsapp",
+        purpose: String(source.purpose || "whatsapp_session"),
+      });
+      return existing;
+    }
   }
   const communication = await Communication.create({
     enquiryId: optionalIdentifier(source.enquiryId, "Requirement ID"),
@@ -495,12 +558,22 @@ const sendWhatsappSession = async function (input, actor = "system") {
     statusHistory: [{ status: "queued", at: new Date(), actor }],
     metadata: plainObjectValue(source.metadata || {}, { label: "Communication metadata", maxBytes: 50000 }),
   });
+  console.info({
+    event: "communication_queued",
+    communicationId: communication.communicationId,
+    enquiryId: communication.enquiryId,
+    providerId: communication.providerId,
+    channel: "whatsapp",
+    purpose: communication.purpose,
+  });
   try {
     const result = await whatsappService.sendText({
       to: recipientContact,
       text: message,
       previewUrl: source.previewUrl === true,
       contextMessageId: String(source.contextMessageId || "").trim(),
+      communicationId: communication.communicationId,
+      purpose: communication.purpose,
     });
     const status = String(result.status || "accepted").toLowerCase();
     await Communication.updateOne(
@@ -519,6 +592,15 @@ const sendWhatsappSession = async function (input, actor = "system") {
         $push: { statusHistory: historyPush({ status, at: new Date(), actor }) },
       },
     );
+    console.info({
+      event: "communication_delivery_completed",
+      communicationId: communication.communicationId,
+      channel: "whatsapp",
+      purpose: communication.purpose,
+      status,
+      deliveryProvider: result.provider || "gupshup",
+      providerMessageId: result.providerMessageId || "",
+    });
   } catch (error) {
     await Communication.updateOne(
       { communicationId: communication.communicationId },
@@ -533,6 +615,16 @@ const sendWhatsappSession = async function (input, actor = "system") {
         $push: { statusHistory: historyPush({ status: "failed", at: new Date(), reason: error.message || "Message delivery failed" }) },
       },
     );
+    console.error({
+      event: "communication_delivery_failed",
+      communicationId: communication.communicationId,
+      enquiryId: communication.enquiryId,
+      providerId: communication.providerId,
+      channel: "whatsapp",
+      purpose: communication.purpose,
+      code: String(error.code || "DELIVERY_FAILED"),
+      message: String(error.message || "Message delivery failed").slice(0, 2000),
+    });
     throw error;
   }
   return get(communication.communicationId);

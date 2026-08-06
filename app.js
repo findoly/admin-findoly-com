@@ -9,6 +9,10 @@ const { assertRuntimeConfig } = require("./utils/runtime-config");
 const { attachAdmin } = require("./middleware/auth");
 const { sameOriginAdminMutation } = require("./middleware/same-origin");
 const { requestIdMiddleware } = require("./middleware/request-id");
+const {
+  morganCloudWatchStream,
+  requestLoggingMiddleware,
+} = require("./middleware/request-logging");
 const { notFound, errorHandler } = require("./middleware/error");
 const frontendRoutes = require("./routes/frontend");
 const apiRoutes = require("./routes/main");
@@ -25,6 +29,7 @@ else app.set("trust proxy", trustProxy);
 
 app.disable("x-powered-by");
 app.use(requestIdMiddleware);
+app.use(requestLoggingMiddleware);
 app.locals.appName = process.env.APP_NAME || "Service CRM Admin";
 app.locals.apiBase = "/api";
 app.locals.databaseError = null;
@@ -54,7 +59,9 @@ app.use((req, res, next) => {
   if (production) res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
-app.use(morgan(production ? "combined" : "dev"));
+app.use(morgan(production ? "combined" : "dev", {
+  stream: morganCloudWatchStream(),
+}));
 
 const communicationController = require("./controllers/communicationController");
 app.post(
