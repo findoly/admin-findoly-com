@@ -31,12 +31,27 @@ function response(status, body = {}) {
   };
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitFor(predicate, { timeoutMs = 1000, intervalMs = 10 } = {}) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await wait(intervalMs);
+  }
+}
+
 function env(overrides = {}) {
   return {
     NODE_ENV: "production",
     CLOUDWATCH_LOGS_ENABLED: "true",
     CLOUDWATCH_LOG_GROUP: "/findoly/test/production",
     CLOUDWATCH_LOG_FLUSH_MS: "60000",
+    CLOUDWATCH_LOG_BATCH_EVENTS: "20",
     CLOUDWATCH_LOG_MAX_QUEUE: "100",
     TEST_SECRETS_REGION: "ap-south-1",
     TEST_SECRETS_ACCESS_KEY_ID: "AKIAEXAMPLE000000000",
@@ -90,6 +105,114 @@ test("redaction removes credentials, tokens, cookies, request bodies and MongoDB
     redactString("mongodb://admin:password@localhost/db Bearer abc.def.ghi"),
     "mongodb://[REDACTED]@localhost/db Bearer [REDACTED]",
   );
+});
+
+test("CloudWatch batching defaults to 60 seconds or 20 events", () => {
+  const logger = createCloudWatchLogger({
+    service: "test-service",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env({
+      CLOUDWATCH_LOG_FLUSH_MS: undefined,
+      CLOUDWATCH_LOG_BATCH_EVENTS: undefined,
+    }),
+    consoleObject: fakeConsole(),
+    fetchImpl: async () => response(200, {}),
+  });
+
+  logger.configureFromEnv();
+  const state = logger.diagnostics();
+  assert.equal(state.flushMs, 60000);
+  assert.equal(state.batchEvents, 20);
+});
+
+test("a partial batch stays queued instead of sending one AWS request per log", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "test-service",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env(),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  consoleObject.log("queued event");
+  await wait(25);
+  assert.equal(requests.length, 0);
+  assert.equal(logger.diagnostics().queueLength, 1);
+
+  await logger.shutdown();
+  const putRequests = requests.filter((request) => Array.isArray(request.logEvents));
+  assert.equal(putRequests.length, 1);
+  assert.equal(putRequests[0].logEvents.length, 1);
+});
+
+test("20 queued events flush immediately in one batch and later partial events wait", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "test-service",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env(),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  for (let index = 0; index < 45; index += 1) {
+    consoleObject.log("message", index);
+  }
+
+  await waitFor(
+    () => requests.filter((request) => Array.isArray(request.logEvents)).length === 2,
+  );
+  await wait(25);
+
+  const immediateBatches = requests.filter((request) => Array.isArray(request.logEvents));
+  assert.deepEqual(immediateBatches.map((request) => request.logEvents.length), [20, 20]);
+  assert.equal(logger.diagnostics().queueLength, 5);
+
+  await logger.shutdown();
+  const allBatches = requests.filter((request) => Array.isArray(request.logEvents));
+  assert.deepEqual(allBatches.map((request) => request.logEvents.length), [20, 20, 5]);
+});
+
+test("the time threshold flushes a partial batch", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "test-service",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env({ CLOUDWATCH_LOG_FLUSH_MS: "250" }),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  consoleObject.info("time-based batch");
+  await waitFor(
+    () => requests.some((request) => Array.isArray(request.logEvents)),
+    { timeoutMs: 1000 },
+  );
+
+  const putRequests = requests.filter((request) => Array.isArray(request.logEvents));
+  assert.equal(putRequests.length, 1);
+  assert.equal(putRequests[0].logEvents.length, 1);
+  logger.uninstall();
 });
 
 test("console output is preserved and exact plain text is forwarded to CloudWatch", async () => {
@@ -196,7 +319,10 @@ test("queue limits drop the oldest CloudWatch entries without affecting console 
     service: "test-service",
     credentialPrefix: "TEST_SECRETS_",
     defaultLogGroup: "/findoly/test/production",
-    env: env({ CLOUDWATCH_LOG_MAX_QUEUE: "100" }),
+    env: env({
+      CLOUDWATCH_LOG_BATCH_EVENTS: "10000",
+      CLOUDWATCH_LOG_MAX_QUEUE: "100",
+    }),
     consoleObject,
     fetchImpl: async () => response(200, {}),
   });

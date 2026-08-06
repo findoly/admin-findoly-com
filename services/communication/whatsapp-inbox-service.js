@@ -193,14 +193,54 @@ function providerIdsFromCommunication(communication = {}) {
     .slice(0, 20);
 }
 
+function messageLookupQuery(document = {}) {
+  const conditions = [];
+  const idempotencyKey = String(document.idempotencyKey || "").trim();
+  const communicationId = String(document.communicationId || "").trim();
+  const providerMessageId = String(document.providerMessageId || "").trim();
+  if (idempotencyKey) conditions.push({ idempotencyKey });
+  if (communicationId) conditions.push({ communicationId });
+  if (providerMessageId) {
+    conditions.push({ providerMessageId });
+    conditions.push({ providerMessageIds: providerMessageId });
+  }
+  if (!conditions.length) return null;
+  return conditions.length === 1 ? conditions[0] : { $or: conditions };
+}
+
+async function findExistingMessage(document) {
+  const query = messageLookupQuery(document);
+  if (!query) return null;
+  return WhatsAppMessage.findOne(query).lean();
+}
+
 async function insertMessageOnce(document) {
-  const result = await WhatsAppMessage.updateOne(
-    { idempotencyKey: document.idempotencyKey },
-    { $setOnInsert: document },
-    { upsert: true },
-  );
+  const existing = await findExistingMessage(document);
+  if (existing) return { inserted: false, message: existing };
+
+  // Mongoose timestamps adds updatedAt through $set for update operations. Keeping
+  // updatedAt inside $setOnInsert would put the same path in two operators and
+  // MongoDB rejects the upsert with an update-path conflict.
+  const insertDocument = { ...document };
+  delete insertDocument.createdAt;
+  delete insertDocument.updatedAt;
+
+  let result;
+  try {
+    result = await WhatsAppMessage.updateOne(
+      { idempotencyKey: insertDocument.idempotencyKey },
+      { $setOnInsert: insertDocument },
+      { upsert: true },
+    );
+  } catch (error) {
+    if (Number(error?.code) !== 11000) throw error;
+    const duplicate = await findExistingMessage(document);
+    if (!duplicate) throw error;
+    return { inserted: false, message: duplicate };
+  }
+
   const inserted = Number(result.upsertedCount || 0) > 0;
-  const message = await WhatsAppMessage.findOne({ idempotencyKey: document.idempotencyKey }).lean();
+  const message = await findExistingMessage(document);
   return { inserted, message };
 }
 
@@ -540,18 +580,81 @@ async function reply(conversationId, input = {}, employee = {}) {
     if (communication) await recordOutbound(communication, employee).catch(() => {});
     throw error;
   }
-  await recordOutbound(communication, employee);
+
+  console.info({
+    event: "whatsapp_inbox_reply_delivery_completed",
+    conversationId,
+    communicationId: communication.communicationId || "",
+    status: communication.status || "accepted",
+    employeeId: employee.employeeId || "",
+    contact: maskedContact(conversation.contactNumber),
+  });
+
+  let persistence = { status: "completed", message: null };
+  try {
+    const recorded = await recordOutbound(communication, employee);
+    persistence.message = recorded.message || null;
+    if (!persistence.message) persistence.status = "pending";
+    console.info({
+      event: "whatsapp_inbox_reply_persisted",
+      conversationId,
+      communicationId: communication.communicationId || "",
+      messageId: persistence.message?.messageId || "",
+      inserted: recorded.inserted === true,
+    });
+  } catch (error) {
+    persistence = { status: "pending", message: null };
+    console.error({
+      event: "whatsapp_inbox_reply_persistence_failed",
+      conversationId,
+      communicationId: communication.communicationId || "",
+      code: String(error.code || "WHATSAPP_INBOX_PERSISTENCE_FAILED"),
+      message: safeLogMessage(error.message, "WhatsApp reply was delivered but inbox persistence failed"),
+    });
+  }
+
   if (conversation.status === "closed") {
     await updateConversationStatus(conversationId, "open", actor);
   }
+
+  const occurredAt = communication.sentAt || communication.createdAt || new Date();
+  const responseMessage = persistence.message || {
+    messageId: `pending:${communication.communicationId || uuid()}`,
+    conversationId,
+    communicationId: communication.communicationId || "",
+    providerMessageId: communication.providerMessageId || "",
+    providerMessageIds: providerIdsFromCommunication(communication),
+    direction: "outbound",
+    messageType: "text",
+    text: communication.message || message,
+    status: communication.status || "accepted",
+    actor: communication.actor || actor,
+    employeeId: employee.employeeId || "",
+    employeeName: employee.name || employee.email || "",
+    failureReason: communication.failureReason || "",
+    occurredAt,
+    sentAt: communication.sentAt || occurredAt,
+    deliveredAt: communication.deliveredAt || null,
+    readAt: communication.readAt || null,
+    failedAt: communication.failedAt || null,
+    pendingPersistence: true,
+  };
+
   console.info({
     event: "whatsapp_inbox_reply_sent",
     conversationId,
     communicationId: communication.communicationId || "",
     employeeId: employee.employeeId || "",
     contact: maskedContact(conversation.contactNumber),
+    inboxSyncStatus: persistence.status,
   });
-  return communication;
+
+  return {
+    deliveryAccepted: !["failed", "rejected", "bounced", "complained"].includes(String(communication.status || "").toLowerCase()),
+    inboxSyncStatus: persistence.status,
+    communicationId: communication.communicationId || "",
+    message: responseMessage,
+  };
 }
 
 async function syncDeliveryStatus({ communicationId = "", messageIds = [], status, details = {} }) {

@@ -186,9 +186,139 @@ test("manual inbox replies enrich an existing message with the sending employee"
   }, { employeeId: "employee-1", name: "Dhiraj" });
 
   assert.equal(result.skipped, false);
-  assert.deepEqual(messageUpdates[1].filter, { messageId: "message-1" });
-  assert.equal(messageUpdates[1].update.$set.employeeId, "employee-1");
-  assert.equal(messageUpdates[1].update.$set.employeeName, "Dhiraj");
+  const enrichment = messageUpdates.find((entry) => entry.filter?.messageId === "message-1");
+  assert.ok(enrichment);
+  assert.equal(enrichment.update.$set.employeeId, "employee-1");
+  assert.equal(enrichment.update.$set.employeeName, "Dhiraj");
+});
+
+test("message upserts do not place timestamp fields in setOnInsert", async () => {
+  const updates = [];
+  let messageExists = false;
+  const inbox = loadWithStubs("services/communication/whatsapp-inbox-service.js", {
+    "../../models/WhatsAppConversation": {
+      findOne() { return chainResult({ conversationId: "conversation-1" }); },
+      findOneAndUpdate() {
+        return { lean: async () => ({ conversationId: "conversation-1", contactNumber: "9876543210" }) };
+      },
+      async updateOne() { return { modifiedCount: 1 }; },
+    },
+    "../../models/WhatsAppMessage": {
+      findOne() {
+        return { lean: async () => messageExists ? ({
+          messageId: "message-1",
+          conversationId: "conversation-1",
+          communicationId: "communication-1",
+          idempotencyKey: "outbound:provider:provider-1",
+          direction: "outbound",
+          messageType: "text",
+          text: "Hello",
+          status: "accepted",
+          occurredAt: new Date(),
+        }) : null };
+      },
+      async updateOne(filter, update, options) {
+        updates.push({ filter, update, options });
+        if (options?.upsert) messageExists = true;
+        return options?.upsert ? { upsertedCount: 1 } : { modifiedCount: 1 };
+      },
+    },
+    "../../models/Communication": {
+      findOne() { return { lean: async () => null }; },
+    },
+    "../../models/Enquiry": {
+      find() { return chainResult([]); },
+      countDocuments() { return { maxTimeMS: async () => 0 }; },
+    },
+    "./communication-service": {},
+    "../../utils/uuid": () => "generated-id",
+    "../../utils/pagination": { cursorPaginate() {}, getPagination() { return { limit: 20, cursor: "" }; } },
+  });
+
+  const result = await inbox.recordOutbound({
+    communicationId: "communication-1",
+    providerMessageId: "provider-1",
+    channel: "whatsapp",
+    direction: "outbound",
+    purpose: "whatsapp_inbox_reply",
+    recipientContact: "9876543210",
+    message: "Hello",
+    status: "accepted",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  assert.equal(result.inserted, true);
+  const upsert = updates.find((entry) => entry.options?.upsert);
+  assert.ok(upsert);
+  assert.equal(Object.hasOwn(upsert.update.$setOnInsert, "updatedAt"), false);
+  assert.equal(Object.hasOwn(upsert.update.$setOnInsert, "createdAt"), false);
+});
+
+test("reply reports accepted delivery when inbox persistence needs retry", async () => {
+  const now = new Date();
+  const inbox = loadWithStubs("services/communication/whatsapp-inbox-service.js", {
+    "../../models/WhatsAppConversation": {
+      findOne() {
+        return chainResult({
+          conversationId: "conversation-1",
+          contactNumber: "9876543210",
+          displayName: "Customer",
+          latestEnquiryId: "",
+          status: "open",
+        });
+      },
+      findOneAndUpdate() {
+        return { lean: async () => ({ conversationId: "conversation-1", contactNumber: "9876543210" }) };
+      },
+      async updateOne() { return { modifiedCount: 1 }; },
+    },
+    "../../models/WhatsAppMessage": {
+      findOne() { return { lean: async () => null }; },
+      async updateOne() {
+        const error = new Error("temporary MongoDB failure");
+        error.code = "MONGO_TEMPORARY";
+        throw error;
+      },
+    },
+    "../../models/Communication": {
+      findOne() { return { lean: async () => null }; },
+    },
+    "../../models/Enquiry": {
+      find() { return chainResult([]); },
+      countDocuments() { return { maxTimeMS: async () => 0 }; },
+    },
+    "./communication-service": {
+      async sendWhatsappSession(input) {
+        return {
+          communicationId: "communication-1",
+          providerMessageId: "provider-1",
+          channel: "whatsapp",
+          direction: "outbound",
+          purpose: "whatsapp_inbox_reply",
+          recipientContact: input.recipientContact,
+          recipientName: input.recipientName,
+          message: input.message,
+          status: "accepted",
+          sentAt: now,
+          createdAt: now,
+        };
+      },
+    },
+    "../../utils/uuid": () => "generated-id",
+    "../../utils/pagination": { cursorPaginate() {}, getPagination() { return { limit: 20, cursor: "" }; } },
+  });
+
+  const result = await inbox.reply("conversation-1", {
+    message: "Hello",
+    idempotencyKey: "client-key",
+  }, { employeeId: "employee-1", name: "Dhiraj", email: "employee@example.com" });
+
+  assert.equal(result.deliveryAccepted, true);
+  assert.equal(result.inboxSyncStatus, "pending");
+  assert.equal(result.message.text, "Hello");
+  assert.equal(result.message.pendingPersistence, true);
+  assert.equal(result.message.direction, "outbound");
 });
 
 test("WhatsApp inbox log errors redact phone numbers and credentials", () => {

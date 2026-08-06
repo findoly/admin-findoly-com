@@ -1,7 +1,0 @@
-npm run ensure:indexes
-
-npm run migrate:whatsapp-inbox -- --dry-run
-npm run migrate:whatsapp-inbox
-
-npm run verify:indexes
-npm run verify:query-plans
