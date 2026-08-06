@@ -28,8 +28,23 @@ function integrationIdentity(context = {}, eventName = "") {
     "provider_outcome_updated",
     "provider-outcome-updated",
   ]);
-  if (!providerEvents.has(normalizedEvent)) return null;
   const integrationEventId = String(context.integrationEventId || "").trim();
+  if (normalizedEvent === "partner_lead_submitted") {
+    const enquiryId = String(context.enquiryId || context.lead?.enquiryId || "").trim();
+    if (!integrationEventId || integrationEventId.length > 120 || /[\0\r\n]/.test(integrationEventId)) {
+      throw Object.assign(new Error("Integration event ID is required and must be valid"), { status: 400 });
+    }
+    if (!enquiryId || enquiryId.length > 120 || /[\0\r\n]/.test(enquiryId)) {
+      throw Object.assign(new Error("Enquiry ID is required and must be valid"), { status: 400 });
+    }
+    return {
+      accepted: true,
+      eventName: "partner_lead_submitted",
+      integrationEventId,
+      enquiryId,
+    };
+  }
+  if (!providerEvents.has(normalizedEvent)) return null;
   const providerLeadUnlockId = String(context.providerLeadUnlockId || "").trim();
   const integrationEventSequence = context.integrationEventSequence;
   if (!integrationEventId || integrationEventId.length > 120 || /[\0\r\n]/.test(integrationEventId)) {
@@ -175,7 +190,14 @@ const listTemplates = async function (req, res, next) {
   try {
     await notificationService.ensureDefaultRules();
     const result = await templateService.list(req.query);
-    res.json({ success: true, data: result.data, pagination: result.pagination });
+    res.json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+      metadata: {
+        gupshupSyncConfigured: Boolean(process.env.CRM_GUPSHUP_API_KEY && process.env.CRM_GUPSHUP_APP_ID),
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -253,6 +275,8 @@ const listRules = async function (req, res, next) {
       metadata: {
         events: ruleService.EVENTS,
         recipientSources: ruleService.RECIPIENT_SOURCES,
+        eventVariables: ruleService.EVENT_VARIABLES,
+        eventVariableMetadata: ruleService.EVENT_VARIABLE_METADATA,
       },
     });
   } catch (error) {
@@ -298,7 +322,8 @@ const triggerEvent = async function (req, res, next) {
 const integrationEvent = async function (req, res, next) {
   try {
     const context = { ...(req.body || {}) };
-    const acknowledgement = integrationIdentity(context, req.params.event);
+    const normalizedIntegrationEvent = String(req.params.event || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const acknowledgement = integrationIdentity(context, normalizedIntegrationEvent);
     const providerLeadStatus = providerStatusService.providerStatusFromEvent(
       req.params.event,
       context.activityStatus || context.status,
@@ -353,15 +378,18 @@ const integrationEvent = async function (req, res, next) {
       context.lead = lead;
     }
 
-    const channelDeliveries = await systemEventService.dispatch(
-      req.params.event,
-      {
-        ...context,
-        source: "provider-portal",
-        trigger: req.params.event,
-      },
-      "integration-api",
-    );
+    const sourcePortal = normalizedIntegrationEvent === "partner_lead_submitted" ? "partner-portal" : "provider-portal";
+    const channelDeliveries = normalizedIntegrationEvent === "partner_lead_submitted"
+      ? []
+      : await systemEventService.dispatch(
+        normalizedIntegrationEvent,
+        {
+          ...context,
+          source: sourcePortal,
+          trigger: normalizedIntegrationEvent,
+        },
+        "integration-api",
+      );
 
     const notificationEvents = [];
     if (isProviderFeedbackEvent) {
@@ -369,7 +397,7 @@ const integrationEvent = async function (req, res, next) {
       if (context.outcome === "not_confirmed") notificationEvents.push("provider_not_confirmed");
       if (context.activityStatus) notificationEvents.push(`provider_${context.activityStatus}`);
     } else {
-      notificationEvents.push(req.params.event);
+      notificationEvents.push(normalizedIntegrationEvent);
     }
 
     const notification = [];
@@ -383,6 +411,7 @@ const integrationEvent = async function (req, res, next) {
               ? eventName.replace(/^provider_/, "")
               : context.status,
             trigger: eventName,
+            source: sourcePortal,
             skipSystemDispatch: true,
           },
           "integration-api",
@@ -434,6 +463,7 @@ const whatsappWebhook = async function (req, res, next) {
     const data = await webhookService.processWhatsApp(req.body, {
       queryToken: req.query?.token || "",
       headerToken: req.get("x-webhook-token") || req.get("x-gupshup-signature") || "",
+      requestId: req.requestId || "",
     });
     res.json({ success: true, data });
   } catch (error) {

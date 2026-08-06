@@ -22,6 +22,13 @@ const communicationRuleSchema = new mongoose.Schema(
     enabled: { type: Boolean, default: false, index: true },
     whatsappEnabled: { type: Boolean, default: false },
     whatsappTemplateId: { type: String, default: "", index: true },
+    whatsappParameterMappings: { type: [String], default: [] },
+    whatsappActionType: {
+      type: String,
+      default: "",
+      enum: ["", "unlock_lead"],
+    },
+    whatsappActionButtonIndex: { type: Number, default: null, min: 0, max: 9 },
     emailEnabled: { type: Boolean, default: false },
     emailTemplateId: { type: String, default: "", index: true },
     slackEnabled: { type: Boolean, default: false },

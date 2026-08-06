@@ -63,7 +63,7 @@ function integerSettingError(env, key, { min, max, optional = true } = {}) {
 
 function strongToken(value, minimum = 32) {
   const text = String(value || "").trim();
-  return text.length >= minimum && !/(replace|placeholder|example|dummy|your[_ -]?token)/i.test(text);
+  return text.length >= minimum && !/(replace|placeholder|example|dummy|your[_ -]?(?:token|secret|key))/i.test(text);
 }
 
 function validateRuntimeConfig(env = process.env) {
@@ -126,6 +126,8 @@ function validateRuntimeConfig(env = process.env) {
     ["CRM_OTP_IP_VERIFY_WINDOW_SECONDS", 60, 86400],
     ["PUBLIC_INTAKE_RATE_MAX", 10, 10000],
     ["PUBLIC_INTAKE_RATE_WINDOW_MS", 60000, 86400000],
+    ["CRM_PROVIDER_ACTION_API_TIMEOUT_MS", 3000, 30000],
+    ["CRM_WHATSAPP_ACTION_EXPIRY_MINUTES", 5, 10080],
   ];
   for (const [key, min, max] of integerSettings) {
     const message = integerSettingError(env, key, { min, max });
@@ -174,6 +176,32 @@ function validateRuntimeConfig(env = process.env) {
   }
   if (production && !present(env.CUSTOMER_PORTAL_API_TOKEN)) {
     warnings.push("CUSTOMER_PORTAL_API_TOKEN is not configured; customer portal APIs will return 503");
+  }
+
+  if (production) {
+    if (!validHttpUrl(env.CRM_PROVIDER_ACTION_API_URL, { httpsOnly: true })) {
+      errors.push("CRM_PROVIDER_ACTION_API_URL must be a valid HTTPS URL");
+    }
+    if (!strongToken(env.CRM_PROVIDER_ACTION_API_TOKEN, 32)) {
+      errors.push("CRM_PROVIDER_ACTION_API_TOKEN must be a non-placeholder random value of at least 32 characters");
+    }
+    if (!strongToken(env.CRM_WHATSAPP_ACTION_SIGNING_SECRET, 32)) {
+      errors.push("CRM_WHATSAPP_ACTION_SIGNING_SECRET must be a non-placeholder random value of at least 32 characters");
+    }
+    if (!strongToken(env.CRM_GUPSHUP_WEBHOOK_TOKEN, 32)) {
+      errors.push("CRM_GUPSHUP_WEBHOOK_TOKEN must be a non-placeholder random value of at least 32 characters");
+    }
+    for (const key of [
+      "CRM_GUPSHUP_API_KEY",
+      "CRM_GUPSHUP_APP_ID",
+      "CRM_GUPSHUP_APP_NAME",
+      "CRM_GUPSHUP_SOURCE_NUMBER",
+    ]) {
+      if (!present(env[key])) errors.push(`${key} is required for Gupshup WhatsApp integration`);
+    }
+  }
+  if (present(env.PROVIDER_PORTAL_BASE_URL) && !validOrigin(env.PROVIDER_PORTAL_BASE_URL, { httpsOnly: production })) {
+    errors.push(`PROVIDER_PORTAL_BASE_URL must be a valid${production ? " HTTPS" : ""} origin without a path`);
   }
 
   return { production, errors, warnings };

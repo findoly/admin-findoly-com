@@ -23,13 +23,21 @@ SYSTEM_EVENT_SLACK_ENABLED=true
 PROVIDER_EVENT_EMAIL_ENABLED=true
 
 CRM_GUPSHUP_API_KEY=replace-with-gupshup-api-key
+CRM_GUPSHUP_APP_ID=replace-with-gupshup-app-id
 CRM_GUPSHUP_APP_NAME=replace-with-gupshup-app-name
 CRM_GUPSHUP_SOURCE_NUMBER=919999999999
 CRM_GUPSHUP_API_BASE_URL=https://api.gupshup.io
 CRM_GUPSHUP_WEBHOOK_TOKEN=replace-with-a-random-webhook-token
 CRM_WHATSAPP_DEFAULT_COUNTRY_CODE=91
 CRM_NEARBY_LEAD_ALERT_BATCH_SIZE=25
+CRM_PROVIDER_ACTION_API_URL=https://provider.findoly.com/api/internal/whatsapp/lead-unlock
+CRM_PROVIDER_ACTION_API_TOKEN=replace-with-a-shared-random-provider-action-token
+CRM_PROVIDER_ACTION_API_TIMEOUT_MS=15000
+CRM_WHATSAPP_ACTION_SIGNING_SECRET=replace-with-a-separate-random-signing-secret
+CRM_WHATSAPP_ACTION_EXPIRY_MINUTES=1440
+PROVIDER_PORTAL_BASE_URL=https://provider.findoly.com
 PROVIDER_PORTAL_MARKETPLACE_URL=https://provider.findoly.com/leads?status=marketplace
+PROVIDER_PORTAL_WALLET_URL=https://provider.findoly.com/wallet
 
 AWS_REGION=ap-south-1
 SES_FROM_EMAIL=verified-sender@example.com
@@ -110,3 +118,13 @@ Content-Type: application/json
 ```
 
 The channel ID controls the actual Slack destination. The channel name is retained for display and seven-day communication logs.
+
+## Partner Portal event integration
+
+The Partner Portal and CRM must share the same strong token:
+
+```env
+COMMUNICATION_EVENT_API_TOKEN=<long-random-shared-token>
+```
+
+Partner Portal additionally uses `CRM_API_BASE_URL=https://admin.findoly.com` and `CRM_COMMUNICATION_EVENT_PATH=/api/communication/events`.

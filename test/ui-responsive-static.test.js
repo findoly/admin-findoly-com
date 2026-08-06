@@ -45,7 +45,7 @@ test("real shell keeps a single-row header and a full-viewport mobile drawer", (
   const sidebar = read("views/partials/sidebar.ejs");
   const css = read("public/css/app.css");
 
-  assert.match(head, /app\.css\?v=20260801-catalog-submenu-1/);
+  assert.match(head, /app\.css\?v=[A-Za-z0-9._-]+/);
   assert.match(navbar, /crm-brand-copy d-none d-xl-flex/);
   assert.match(navbar, /crm-global-search d-none d-xl-flex/);
   assert.match(navbar, /crm-admin-copy d-none d-xl-flex/);

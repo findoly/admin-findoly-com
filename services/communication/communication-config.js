@@ -35,6 +35,7 @@ const configurationStatus = function () {
     whatsapp: {
       provider: "gupshup",
       apiKey: Boolean(process.env.CRM_GUPSHUP_API_KEY),
+      appId: Boolean(process.env.CRM_GUPSHUP_APP_ID),
       appName: Boolean(process.env.CRM_GUPSHUP_APP_NAME),
       sourceNumber: Boolean(process.env.CRM_GUPSHUP_SOURCE_NUMBER),
       webhookToken: Boolean(process.env.CRM_GUPSHUP_WEBHOOK_TOKEN),
@@ -64,6 +65,7 @@ const configurationStatus = function () {
       providerUnlockAndStatusEmail: process.env.PROVIDER_EVENT_EMAIL_ENABLED === undefined ? true : truthy(process.env.PROVIDER_EVENT_EMAIL_ENABLED),
       whatsappIntegrated: Boolean(
         process.env.CRM_GUPSHUP_API_KEY
+          && process.env.CRM_GUPSHUP_APP_ID
           && process.env.CRM_GUPSHUP_APP_NAME
           && process.env.CRM_GUPSHUP_SOURCE_NUMBER,
       ),

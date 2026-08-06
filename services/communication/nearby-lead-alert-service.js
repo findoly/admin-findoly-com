@@ -22,6 +22,23 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
   return [record[latitudeField], record[longitudeField]].every((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
 }
 
+
+function providerLeadUrl(enquiryId) {
+  const rawBase = process.env.PROVIDER_PORTAL_BASE_URL
+    || process.env.PROVIDER_PORTAL_MARKETPLACE_URL
+    || process.env.PROVIDER_PORTAL_LOGIN_URL
+    || "https://provider.findoly.com";
+  try {
+    const url = new URL(rawBase);
+    url.pathname = `/lead/${encodeURIComponent(String(enquiryId || ""))}`;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch (_error) {
+    return `https://provider.findoly.com/lead/${encodeURIComponent(String(enquiryId || ""))}`;
+  }
+}
+
 function whatsappContact(provider = {}) {
   return provider.normalizedWhatsappNumber
     || provider.whatsappNumber
@@ -66,13 +83,15 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   const pending = [];
   const flush = async () => {
     const rows = pending.splice(0, pending.length);
-    const results = await Promise.all(rows.map(async (provider) => {
+    const results = await Promise.all(rows.map(async ({ provider, distanceKm }) => {
       const output = await notificationService.triggerSafe("nearby_lead_available", {
         event: "nearby_lead_available",
         trigger: "nearby_lead_available",
         lead,
         provider,
-        marketplaceUrl: process.env.PROVIDER_PORTAL_MARKETPLACE_URL || process.env.PROVIDER_PORTAL_LOGIN_URL || "",
+        distanceKm,
+        leadUrl: providerLeadUrl(lead.enquiryId),
+        marketplaceUrl: providerLeadUrl(lead.enquiryId),
         idempotencyEntityId: `${lead.enquiryId}:${provider.providerId}`,
         idempotencySuffix: lead.marketplacePublishedAt || lead.updatedAt || lead.createdAt,
         skipSystemDispatch: true,
@@ -93,11 +112,17 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     );
     if (distanceKm === null || distanceKm > MAX_ALERT_DISTANCE_KM) continue;
     eligible += 1;
-    pending.push(provider);
+    pending.push({ provider, distanceKm });
     if (pending.length >= BATCH_SIZE) await flush();
   }
   if (pending.length) await flush();
   return { eligible, alerted, skipped };
 }
 
-module.exports = { MAX_ALERT_DISTANCE_KM, distanceKmExact, whatsappContact, dispatchNearbyLeadAlerts };
+module.exports = {
+  MAX_ALERT_DISTANCE_KM,
+  distanceKmExact,
+  providerLeadUrl,
+  whatsappContact,
+  dispatchNearbyLeadAlerts,
+};

@@ -49,14 +49,37 @@ const orderedValues = function (variables) {
   });
 };
 
-const templateParameterValues = function (template, variables) {
+const templateParameterValues = function (template, variables, options = {}) {
+  if (Array.isArray(options.override)) {
+    return options.override.map(function (value) { return String(value ?? ""); });
+  }
   const data = normalizeVariables(variables);
-  const source = [template?.headerText, template?.body, template?.footer].filter(Boolean).join("\n");
+  const definitions = Array.isArray(template?.parameterDefinitions) ? template.parameterDefinitions : [];
+  if (definitions.length) {
+    return definitions.map(function (definition, index) {
+      const positionKey = String(definition?.position || index + 1);
+      const placeholderKey = String(definition?.placeholder || "");
+      if (Object.prototype.hasOwnProperty.call(data, positionKey)) return String(data[positionKey] ?? "");
+      if (placeholderKey && Object.prototype.hasOwnProperty.call(data, placeholderKey)) return String(data[placeholderKey] ?? "");
+      return "";
+    });
+  }
+  const buttonSource = Array.isArray(template?.buttons)
+    ? template.buttons.map(function (button) { return button?.url || button?.text || ""; }).join("\n")
+    : "";
+  const source = [template?.headerText, template?.body, template?.footer, buttonSource]
+    .filter(Boolean)
+    .join("\n");
   const indexes = [...new Set(Array.from(source.matchAll(/{{\s*(\d+)\s*}}/g), function (match) {
     return Number(match[1]);
   }))].sort(function (left, right) { return left - right; });
-  if (!indexes.length) return orderedValues(data);
-  return indexes.map(function (index) { return String(data[String(index)] ?? ""); });
+  const values = indexes.length
+    ? indexes.map(function (index) { return String(data[String(index)] ?? ""); })
+    : orderedValues(data);
+  if (Array.isArray(options.buttonValues)) {
+    values.push(...options.buttonValues.map(function (value) { return String(value ?? ""); }));
+  }
+  return values;
 };
 
 module.exports = { normalizeVariables, renderText, orderedValues, templateParameterValues };

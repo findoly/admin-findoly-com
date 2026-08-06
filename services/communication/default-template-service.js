@@ -2,6 +2,7 @@
 
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const CommunicationRule = require("../../models/CommunicationRule");
+const { parameterDefinitions } = require("./gupshup-template-service");
 
 const EMAIL_TEMPLATE_NAME = "findoly_provider_account_created_email";
 const WHATSAPP_TEMPLATE_NAME = "findoly_provider_account_created";
@@ -113,26 +114,29 @@ const nearbyLeadWhatsappTemplate = Object.freeze({
   body: [
     "Hello {{1}},",
     "",
-    "A new customer enquiry matching your services is available on Findoly.",
+    "A new customer enquiry matching your service profile is available on Findoly.",
     "",
     "Service: {{2}}",
     "Location: {{3}}",
     "Requirement: {{4}}",
     "",
-    "Review and unlock the lead in your Provider Portal:",
-    "{{5}}",
+    "Tap the button below to review the enquiry details in your Provider Portal.",
     "",
     "Thank you,",
     "Team Findoly",
   ].join("\n"),
   bodyHtml: "",
   footer: "",
+  buttons: [
+    { type: "QUICK_REPLY", text: "Unlock Lead" },
+    { type: "URL", text: "View Lead", url: "https://provider.findoly.com/lead/{{1}}" },
+  ],
   sampleVariables: [
     "Provider name",
     "Painting",
     "Malad West, Mumbai, 400064",
     "Interior painting requirement",
-    "https://provider.findoly.com/leads?status=marketplace",
+    "https://provider.findoly.com/lead/ENQUIRY-ID",
   ],
   status: "draft",
   isActive: true,
@@ -175,33 +179,60 @@ async function linkRule({ event, recipientSource, templateField, template, defau
 }
 
 async function ensureDefaultProviderTemplates() {
-  const [email, whatsapp, nearbyLeadWhatsapp] = await Promise.all([
+  const [email, whatsapp] = await Promise.all([
     ensureTemplate(emailTemplate),
     ensureTemplate(whatsappTemplate),
-    ensureTemplate(nearbyLeadWhatsappTemplate),
   ]);
-  const [providerRule, nearbyLeadRule] = await Promise.all([
-    linkRule({
-      event: "provider_created",
-      recipientSource: "provider",
-      templateField: "emailTemplateId",
-      template: email,
-      defaultName: "Provider account created",
-    }),
-    linkRule({
-      event: "nearby_lead_available",
-      recipientSource: "provider",
-      templateField: "whatsappTemplateId",
-      template: nearbyLeadWhatsapp,
-      defaultName: "Nearby lead available",
-    }),
-  ]);
+  const providerRule = await linkRule({
+    event: "provider_created",
+    recipientSource: "provider",
+    templateField: "emailTemplateId",
+    template: email,
+    defaultName: "Provider account created",
+  });
   if (providerRule && !String(providerRule.whatsappTemplateId || "").trim()) {
     await CommunicationRule.updateOne(
       { ruleId: providerRule.ruleId },
       { $set: { whatsappTemplateId: whatsapp.templateId, updatedBy: "system" } },
     );
     providerRule.whatsappTemplateId = whatsapp.templateId;
+  }
+  const nearbyLeadWhatsapp = await CommunicationTemplate.findOne({
+    channel: "whatsapp",
+    name: NEARBY_LEAD_WHATSAPP_TEMPLATE_NAME,
+  }).lean();
+  let nearbyLeadRule = await CommunicationRule.findOne({
+    event: "nearby_lead_available",
+    recipientSource: "provider",
+  }).lean();
+  if (nearbyLeadRule?.whatsappTemplateId) {
+    const assignedTemplate = await CommunicationTemplate.findOne({
+      templateId: nearbyLeadRule.whatsappTemplateId,
+      channel: "whatsapp",
+    }).lean();
+    if (assignedTemplate) {
+      const definitions = Array.isArray(assignedTemplate.parameterDefinitions) && assignedTemplate.parameterDefinitions.length
+        ? assignedTemplate.parameterDefinitions
+        : parameterDefinitions(assignedTemplate);
+      const defaults = ["provider_name", "service_name", "lead_location", "requirement_title", "lead_url"];
+      const quickReply = (assignedTemplate.buttons || []).map((button, index) => ({
+        index: Number.isInteger(Number(button?.index)) ? Number(button.index) : index,
+        type: String(button?.type || button?.buttonType || "").toUpperCase(),
+      })).find((button) => button.type.includes("QUICK") || button.type === "REPLY");
+      const update = {};
+      if (!Array.isArray(nearbyLeadRule.whatsappParameterMappings) || !nearbyLeadRule.whatsappParameterMappings.length) {
+        update.whatsappParameterMappings = definitions.map((definition, index) => defaults[index] || definition.placeholder || String(index + 1));
+      }
+      if (!nearbyLeadRule.whatsappActionType && quickReply) update.whatsappActionType = "unlock_lead";
+      if ((nearbyLeadRule.whatsappActionButtonIndex === null || nearbyLeadRule.whatsappActionButtonIndex === undefined) && quickReply) {
+        update.whatsappActionButtonIndex = quickReply.index;
+      }
+      if (Object.keys(update).length) {
+        update.updatedBy = "system";
+        await CommunicationRule.updateOne({ ruleId: nearbyLeadRule.ruleId }, { $set: update });
+        nearbyLeadRule = { ...nearbyLeadRule, ...update };
+      }
+    }
   }
   return { email, whatsapp, nearbyLeadWhatsapp, rule: providerRule, nearbyLeadRule };
 }
