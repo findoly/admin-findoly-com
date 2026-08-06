@@ -58,7 +58,8 @@ test("CRM WhatsApp delivery uses Gupshup templates and has no Meta Cloud API pat
   assert.match(whatsapp, /externalTemplateId/);
   assert.match(whatsapp, /"src\.name"/);
   assert.match(webhook, /event\.type === "message-event"/);
-  assert.match(webhook, /payload\.gsId \|\| payload\.id/);
+  assert.match(webhook, /gupshupMessageId = String\(payload\.gsId/);
+  assert.match(webhook, /metaMessageId = String\(payload\.id/);
   assert.match(config, /CRM_GUPSHUP_API_KEY/);
   assert.doesNotMatch(`${whatsapp}\n${webhook}\n${config}`, /graph\.facebook|META_WHATSAPP|x-hub-signature/i);
 });

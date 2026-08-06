@@ -74,6 +74,9 @@ communicationSchema.index({ sentAt: -1, _id: -1 });
 communicationSchema.index({ status: 1, sentAt: -1, _id: -1 });
 communicationSchema.index({ purpose: 1, createdAt: -1, _id: -1 });
 communicationSchema.index({ trigger: 1, createdAt: -1, _id: -1 });
+communicationSchema.index({ "metadata.gupshupMessageId": 1 });
+communicationSchema.index({ "metadata.metaMessageId": 1 });
+communicationSchema.index({ "metadata.whatsappMessageIds": 1 });
 const communicationRetentionDays = Math.max(1, Number(process.env.COMMUNICATION_LOG_RETENTION_DAYS || 7) || 7);
 communicationSchema.index(
   { createdAt: 1 },

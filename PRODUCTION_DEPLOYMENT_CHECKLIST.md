@@ -87,17 +87,28 @@ Required Gupshup and Provider Marketplace values:
 
 ```env
 CRM_GUPSHUP_API_KEY=
+CRM_GUPSHUP_APP_ID=replace-with-gupshup-app-id
 CRM_GUPSHUP_APP_NAME=
 CRM_GUPSHUP_SOURCE_NUMBER=
 CRM_GUPSHUP_API_BASE_URL=https://api.gupshup.io
 CRM_GUPSHUP_WEBHOOK_TOKEN=
 CRM_WHATSAPP_DEFAULT_COUNTRY_CODE=91
 CRM_NEARBY_LEAD_ALERT_BATCH_SIZE=10
+CRM_PROVIDER_ACTION_API_URL=https://provider.findoly.com/api/internal/whatsapp/lead-unlock
+CRM_PROVIDER_ACTION_API_TOKEN=
+CRM_PROVIDER_ACTION_API_TIMEOUT_MS=15000
+CRM_WHATSAPP_ACTION_SIGNING_SECRET=
+CRM_WHATSAPP_ACTION_EXPIRY_MINUTES=1440
+PROVIDER_PORTAL_BASE_URL=https://provider.findoly.com
 PROVIDER_PORTAL_MARKETPLACE_URL=https://provider.findoly.com/leads
+PROVIDER_PORTAL_WALLET_URL=https://provider.findoly.com/wallet
 ```
 
-- [ ] The Gupshup API key, app name and source number match the production Gupshup application.
-- [ ] The webhook token is a non-placeholder random value and is configured on both sides.
+- [ ] The Gupshup API key, app ID, app name and source number match the production Gupshup application.
+- [ ] The webhook token is a non-placeholder random value and matches the Gupshup callback URL.
+- [ ] The Provider action API token is a separate strong secret and matches `PROVIDER_CRM_ACTION_API_TOKEN` in the Provider Portal.
+- [ ] The WhatsApp action signing secret is different from both the webhook and Provider action API tokens.
+- [ ] An approved, locally enabled nearby-lead template is assigned in Communication Center, all parameters are mapped, and the correct Unlock Lead quick-reply button is selected.
 - [ ] The Provider Marketplace URL opens the production Lead Marketplace.
 - [ ] No `META_WHATSAPP_*` or Meta Graph API values are required by this release.
 

@@ -235,6 +235,15 @@ test("runtime configuration keeps optional incomplete S3 disabled without crashi
     CRM_ADMIN_ORIGIN: "https://admin.findoly.com",
     PUBLIC_INTAKE_API_TOKEN: "p".repeat(48),
     COMMUNICATION_EVENT_API_TOKEN: "e".repeat(48),
+    CRM_PROVIDER_ACTION_API_URL: "https://provider.findoly.com/api/internal/whatsapp/lead-unlock",
+    CRM_PROVIDER_ACTION_API_TOKEN: "a".repeat(48),
+    CRM_WHATSAPP_ACTION_SIGNING_SECRET: "s".repeat(48),
+    CRM_GUPSHUP_API_KEY: "g".repeat(48),
+    CRM_GUPSHUP_APP_ID: "app-12345678",
+    CRM_GUPSHUP_APP_NAME: "FindolyWhatsapp",
+    CRM_GUPSHUP_SOURCE_NUMBER: "917058313770",
+    CRM_GUPSHUP_WEBHOOK_TOKEN: "w".repeat(48),
+    PROVIDER_PORTAL_BASE_URL: "https://provider.findoly.com",
   });
   assert.deepEqual(result.errors, []);
   assert.ok(result.warnings.some((message) => message.includes("S3 configuration is incomplete")));

@@ -413,3 +413,17 @@ The script keeps existing lead/provider records intact and caches PIN-code coord
 ## Partner multiple Categories
 
 CRM Partner records keep the legacy primary `categoryId`, `categorySlug`, and `categoryName` fields and also store `categories[]` plus `categorySlugs[]`. The Agent/Partner form uses locally served Bootstrap Select assets from the installed `jquery` and `bootstrap-select` packages. Run `npm ci` before starting the application.
+
+## WhatsApp lead unlock
+
+Nearby providers can unlock an eligible lead from the approved Gupshup quick-reply button without opening the Provider Portal. Configuration and deployment checks are documented in `WHATSAPP_LEAD_UNLOCK_SETUP.md`.
+
+## Gupshup template synchronization
+
+WhatsApp templates are synchronized from Gupshup in **Communication Center → Templates** using `CRM_GUPSHUP_APP_ID` and `CRM_GUPSHUP_API_KEY`. Admins control the local enabled state and assign an approved template, variable mappings and quick-reply action to each communication rule. Template IDs are not hard-coded in deployment environment variables.
+
+## Partner lead submitted event
+
+The Partner Portal sends `partner_lead_submitted` to the protected communication-event API after a requirement is committed. CRM loads the authoritative Enquiry record, exposes Partner and lead variables to Communication Center, and delivers only through the configured rule. The event bypasses the legacy all-system-events Slack route so administrators have complete enable/disable and channel control from **Communication Center → Manage Rules**.
+
+Default Slack variables include `agent_name`, `agent_id`, `referral_id`, `lead_id`, `customer_name`, `service_types`, `category`, `lead_location`, and `requirement_title`.

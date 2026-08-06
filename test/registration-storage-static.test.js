@@ -8,13 +8,15 @@ function source(relativePath) {
 }
 
 test("registration events and recipients are available in Communication Center", () => {
-  const rules = source("services/communication/notification-service.js");
+  const notifications = source("services/communication/notification-service.js");
+  const rules = source("services/communication/rule-service.js");
   const model = source("models/CommunicationRule.js");
   const view = source("views/communication/rules.ejs");
   for (const event of ["provider_created", "agent_created", "employee_created"]) {
+    assert.match(notifications, new RegExp(event));
     assert.match(rules, new RegExp(event));
-    assert.match(view, new RegExp(event));
   }
+  assert.match(view, /metadata\?\.events/);
   assert.match(model, /"employee"/);
   assert.match(view, /value="employee"/);
 });

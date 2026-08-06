@@ -47,6 +47,7 @@ router.get("/communications/otp", ...protectedPage("communications.view"), page.
 router.get("/communications/settings", ...protectedPage("communications.manage"), page.communicationSettings);
 router.get("/communications/new", ...protectedPage("communications.send"), page.communicationCreate);
 router.get("/communications/:communicationId/edit", ...protectedPage("communications.manage"), page.communicationEdit);
+router.get("/communications/:communicationId", ...protectedPage("communications.view"), page.communicationShow);
 router.get("/billing", ...protectedPage("billing.view"), page.invoices);
 router.get("/billing/provider-subscriptions", ...protectedPage("billing.view"), page.providerSubscriptions);
 router.get("/billing/new", ...protectedPage("billing.create"), page.invoiceCreate);

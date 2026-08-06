@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const Communication = require("../../models/Communication");
 const communicationService = require("./communication-service");
 const whatsappService = require("./whatsapp-service");
+const providerWhatsappActionService = require("./provider-whatsapp-action-service");
+const templateService = require("./template-service");
 const { truthy } = require("./communication-config");
 const { textValue, validationError } = require("../../utils/validation");
 const { boundedJsonValue } = require("../../utils/bounded-json");
@@ -31,6 +33,30 @@ const extractWhatsAppMessageText = function (message) {
   return `[${message?.type || content?.type || "message"}]`;
 };
 
+
+const uniqueTextValues = function (values) {
+  return (Array.isArray(values) ? values : [values])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, entries) => entries.indexOf(value) === index);
+};
+
+const whatsappEventAt = function (event, payload) {
+  const candidates = [event?.timestamp, payload?.timestamp, payload?.payload?.ts];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (!Number.isFinite(numeric) || numeric <= 0) continue;
+    const milliseconds = numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+    const date = new Date(milliseconds);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return new Date();
+};
+
+const whatsappEventKey = function ({ status, gupshupMessageId, metaMessageId, eventAt }) {
+  return ["gupshup", status, gupshupMessageId, metaMessageId, eventAt.toISOString()].join(":");
+};
+
 const gupshupStatus = function (value) {
   const status = String(value || "").toLowerCase();
   if (status === "enqueued") return "accepted";
@@ -43,24 +69,70 @@ const processWhatsApp = async function (rawBody, auth = {}) {
     throw validationError("Invalid Gupshup webhook token", 401);
   }
   const event = parseJsonBuffer(rawBody, "Gupshup WhatsApp webhook");
+  if (event.type === "template-event") {
+    return {
+      templateUpdates: await templateService.processProviderEvent(event),
+      statusUpdates: 0,
+      inboundMessages: 0,
+    };
+  }
   if (event.type === "message-event") {
     const payload = event.payload || {};
-    const providerMessageId = payload.gsId || payload.id || "";
-    if (!providerMessageId) return { ignored: true, reason: "missing_message_id" };
+    const gupshupMessageId = String(payload.gsId || "").trim();
+    const metaMessageId = String(payload.id || "").trim();
+    const messageIds = uniqueTextValues([gupshupMessageId, metaMessageId]);
+    if (!messageIds.length) return { ignored: true, reason: "missing_message_id" };
+    const status = gupshupStatus(payload.type);
+    const eventAt = whatsappEventAt(event, payload);
     const details = payload.payload || {};
-    const result = await communicationService.updateDeliveryStatus(
-      providerMessageId,
-      gupshupStatus(payload.type),
-      {
-        reason: details.reason || payload.reason || "",
-        code: details.code || "",
-        destination: payload.destination || "",
-        event,
-      },
-    );
-    return { statusUpdates: result.matched, inboundMessages: 0 };
+    const eventKey = whatsappEventKey({ status, gupshupMessageId, metaMessageId, eventAt });
+    const deliveryDetails = {
+      reason: details.reason || payload.reason || "",
+      code: details.code || "",
+      destination: payload.destination || "",
+      eventAt,
+      eventKey,
+      gupshupMessageId,
+      metaMessageId,
+      event,
+    };
+    const result = await communicationService.updateDeliveryStatus(messageIds, status, deliveryDetails);
+    if (result.matched) {
+      return {
+        statusUpdates: result.matched,
+        inboundMessages: 0,
+        webhookAuditUpdates: 0,
+        communicationId: result.communicationId || "",
+        duplicate: result.duplicate === true,
+      };
+    }
+    const audit = await communicationService.recordUnmatchedWhatsAppEvent({
+      messageIds,
+      status,
+      destination: payload.destination || "",
+      eventAt,
+      eventKey,
+      gupshupMessageId,
+      metaMessageId,
+      details: deliveryDetails,
+      event,
+    });
+    return {
+      statusUpdates: 0,
+      inboundMessages: 0,
+      webhookAuditUpdates: 1,
+      unmatched: true,
+      communicationId: audit.communicationId || "",
+      duplicate: audit.duplicate === true,
+    };
   }
   if (event.type === "message") {
+    const actionResult = await providerWhatsappActionService.processInbound(event, {
+      requestId: auth.requestId || "",
+    });
+    if (actionResult.handled) {
+      return { statusUpdates: 0, inboundMessages: 1, action: actionResult };
+    }
     const payload = event.payload || {};
     await communicationService.createInbound({
       recipientName: payload.sender?.name || "",

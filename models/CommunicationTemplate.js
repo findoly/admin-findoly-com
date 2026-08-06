@@ -43,6 +43,7 @@ const communicationTemplateSchema = new mongoose.Schema(
     bodyHtml: { type: String, default: "", maxlength: 100000 },
     footer: { type: String, default: "", maxlength: 1000 },
     buttons: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    parameterDefinitions: { type: [mongoose.Schema.Types.Mixed], default: [] },
     sampleVariables: { type: [String], default: [] },
     otpExpiryMinutes: { type: Number, default: 5, min: 1, max: 90 },
     status: {
@@ -55,6 +56,7 @@ const communicationTemplateSchema = new mongoose.Schema(
         "rejected",
         "paused",
         "disabled",
+        "deleted",
         "active",
         "inactive",
       ],
@@ -62,6 +64,9 @@ const communicationTemplateSchema = new mongoose.Schema(
     },
     isActive: { type: Boolean, default: true, index: true },
     externalTemplateId: { type: String, default: "", index: true },
+    gupshupAppId: { type: String, default: "", trim: true, maxlength: 160, index: true },
+    remoteTemplateType: { type: String, default: "", trim: true, maxlength: 80 },
+    remoteQuality: { type: String, default: "", trim: true, maxlength: 40 },
     rejectionReason: { type: String, default: "", maxlength: 3000 },
     providerPayload: { type: mongoose.Schema.Types.Mixed, default: null },
     submittedAt: { type: Date, default: null },
@@ -77,6 +82,7 @@ const communicationTemplateSchema = new mongoose.Schema(
 );
 
 communicationTemplateSchema.index({ channel: 1, name: 1, language: 1 }, { unique: true });
+communicationTemplateSchema.index({ channel: 1, externalTemplateId: 1, language: 1 });
 communicationTemplateSchema.index({ channel: 1, status: 1, updatedAt: -1, _id: -1 });
 communicationTemplateSchema.index({ updatedAt: -1, _id: -1 });
 communicationTemplateSchema.index({ name: 1, _id: 1 });

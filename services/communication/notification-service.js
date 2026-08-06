@@ -26,6 +26,7 @@ const DEFAULT_RULES = Object.freeze([
   ["Provider account created", "provider_created", "Welcome notification after a provider is created successfully", "provider"],
   ["Agent registration", "agent_created", "Welcome email after an agent is created successfully", "agent"],
   ["Employee registration", "employee_created", "Welcome email after an employee is created successfully", "employee"],
+  ["Partner lead submitted", "partner_lead_submitted", "Internal Slack alert after a Partner submits a new customer enquiry", "manual", "*New Partner Lead Submitted*\nPartner: {{agent_name}} ({{agent_id}})\nLead: {{lead_id}}\nCustomer: {{customer_name}}\nService: {{service_types}}\nCategory: {{category}}\nLocation: {{lead_location}}\nRequirement: {{requirement_title}}\nReferral: {{referral_id}}"],
 ]);
 
 let defaultSetupPromise = null;
@@ -46,12 +47,15 @@ const ensureDefaultRules = async function () {
               enabled: false,
               whatsappEnabled: false,
               whatsappTemplateId: "",
+              whatsappParameterMappings: [],
+              whatsappActionType: "",
+              whatsappActionButtonIndex: null,
               emailEnabled: false,
               emailTemplateId: "",
               slackEnabled: false,
               slackChannelId: "",
               slackChannelName: "",
-              slackMessage: "",
+              slackMessage: row[4] || "",
               createdBy: "system",
               updatedBy: "system",
             },
@@ -106,6 +110,17 @@ const joinLocation = function (...values) {
   return values.map((value) => String(value || "").trim()).filter(Boolean).join(", ");
 };
 
+const urlSuffix = function (value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    return parsed.pathname.split("/").filter(Boolean).pop() || "";
+  } catch (_error) {
+    return text.split("/").filter(Boolean).pop() || text;
+  }
+};
+
 const registrationDate = function (context, entity) {
   const value = context.registrationDate || entity.createdAt || context.eventAt || new Date();
   const date = new Date(value);
@@ -131,6 +146,9 @@ const variablesFor = function (context) {
     priority: lead.priority || "normal",
     lead_status: status,
     category: lead.category || lead.categorySlug || "",
+    lead_location: joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode),
+    source_channel: lead.sourceChannel || context.source || "",
+    source_website: lead.sourceWebsite || "",
     provider_name: provider.name || provider.businessName || context.providerName || "",
     provider_id: provider.providerId || "",
     business_name: provider.businessName || agent.businessName || "",
@@ -142,10 +160,10 @@ const variablesFor = function (context) {
     service_location: providerLocation,
     city: provider.city || agent.city || "",
     state: provider.state || agent.state || "",
-    agent_name: agent.name || agent.businessName || "",
-    agent_id: agent.agentId || "",
-    referral_id: agent.referralId || "",
-    agent_type: agent.agentType || "",
+    agent_name: agent.name || agent.businessName || lead.agentName || lead.agentBusinessName || "",
+    agent_id: agent.agentId || lead.agentId || "",
+    referral_id: agent.referralId || lead.referralId || "",
+    agent_type: agent.agentType || lead.agentType || "",
     category_name: (agent.categories || []).map((category) => category.categoryName).filter(Boolean).join(", ") || agent.categoryName || "",
     assigned_location: agentLocation,
     employee_name: employee.name || "",
@@ -179,12 +197,42 @@ const variablesFor = function (context) {
     values["5"] = values.login_url || "";
     values["6"] = values.support_email || "support@findoly.com";
   }
+  if (context.trigger === "partner_lead_submitted" || context.event === "partner_lead_submitted") {
+    values.agent_name = agent.name || agent.businessName || lead.agentName || lead.agentBusinessName || "Partner";
+    values.agent_id = agent.agentId || lead.agentId || "";
+    values.referral_id = agent.referralId || lead.referralId || "";
+    values.customer_name = lead.name || "Customer";
+    values.lead_id = lead.enquiryId || lead.id || "";
+    values.service_type = lead.serviceType || "";
+    values.service_types = Array.isArray(lead.serviceTypes)
+      ? lead.serviceTypes.map((item) => item?.name || item).filter(Boolean).join(", ")
+      : (lead.serviceType || "");
+    values.category = lead.category || lead.categorySlug || "";
+    values.lead_location = joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode);
+    values.requirement_title = lead.requirementTitle || lead.serviceType || "New customer enquiry";
+    values["1"] = values.agent_name;
+    values["2"] = values.lead_id;
+    values["3"] = values.customer_name;
+    values["4"] = values.service_types || values.service_type;
+    values["5"] = values.lead_location;
+    values["6"] = values.requirement_title;
+    values["7"] = values.referral_id;
+  }
   if (context.trigger === "nearby_lead_available" || context.event === "nearby_lead_available") {
-    values["1"] = provider.name || provider.businessName || "Provider";
-    values["2"] = lead.category || lead.categorySlug || lead.serviceType || "Service";
-    values["3"] = joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode);
-    values["4"] = lead.requirementTitle || lead.serviceType || "New customer requirement";
-    values["5"] = context.marketplaceUrl || process.env.PROVIDER_PORTAL_MARKETPLACE_URL || process.env.PROVIDER_PORTAL_LOGIN_URL || "";
+    const leadUrl = context.leadUrl || context.marketplaceUrl || process.env.PROVIDER_PORTAL_MARKETPLACE_URL || process.env.PROVIDER_PORTAL_LOGIN_URL || "";
+    const serviceName = lead.category || lead.categorySlug || lead.serviceType || "Service";
+    const leadLocation = joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode);
+    values.provider_name = provider.name || provider.businessName || "Provider";
+    values.service_name = serviceName;
+    values.lead_location = leadLocation;
+    values.requirement_title = lead.requirementTitle || lead.serviceType || "New customer requirement";
+    values.lead_url = leadUrl;
+    values.lead_url_suffix = urlSuffix(leadUrl);
+    values["1"] = values.provider_name;
+    values["2"] = serviceName;
+    values["3"] = leadLocation;
+    values["4"] = values.requirement_title;
+    values["5"] = leadUrl;
   }
   return values;
 };
@@ -221,6 +269,7 @@ const sendRule = async function (rule, context, actor) {
   const results = [];
   const whatsappOnly = rule.event === "nearby_lead_available";
   if (rule.whatsappEnabled && rule.whatsappTemplateId && recipient.mobile) {
+    const nearbyLead = rule.event === "nearby_lead_available";
     results.push(
       await communicationService.send(
         {
@@ -229,6 +278,27 @@ const sendRule = async function (rule, context, actor) {
           templateId: rule.whatsappTemplateId,
           recipientContact: recipient.mobile,
           idempotencyKey: `${rule.ruleId}:whatsapp:${entityId}:${suffix}`,
+          ...(Array.isArray(rule.whatsappParameterMappings) && rule.whatsappParameterMappings.length ? {
+            templateParamsOverride: rule.whatsappParameterMappings.map((key) => String(variables[key] ?? "")),
+          } : {}),
+          ...(nearbyLead ? {
+            ...(rule.whatsappActionType === "unlock_lead" ? {
+              whatsappAction: {
+                type: "unlock_lead",
+                buttonIndex: Number(rule.whatsappActionButtonIndex),
+              },
+            } : {}),
+            metadata: {
+              ...base.metadata,
+              distanceKm: Number.isFinite(Number(context.distanceKm)) ? Number(context.distanceKm) : null,
+              leadUrl: context.leadUrl || variables.lead_url || variables["5"] || "",
+              whatsappActionType: rule.whatsappActionType || "",
+              whatsappActionButtonIndex: Number.isInteger(Number(rule.whatsappActionButtonIndex))
+                ? Number(rule.whatsappActionButtonIndex)
+                : null,
+              whatsappParameterMappings: rule.whatsappParameterMappings || [],
+            },
+          } : {}),
         },
         actor,
       ),

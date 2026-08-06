@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header">
+          <div class="page-header-content crm-page-heading">
+            <div>
+              <div class="crm-page-eyebrow">Communication Center</div>
+              <h1 class="page-title mb-1"><%= title %></h1>
+              <p class="crm-page-subtitle mb-0">Review the complete WhatsApp delivery, reply and unlock-action timeline.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <a href="/communications/logs" class="btn btn-light crm-primary-action">Back to logs</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="content" x-data="communicationDetails()" x-init="load()">
+          <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+          <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+          <div x-show="loading" class="card"><div class="card-body"><div class="crm-table-loading"><span></span><span></span><span></span></div></div></div>
+
+          <template x-if="!loading && record">
+            <div>
+              <section class="card mb-3">
+                <div class="card-header crm-card-heading"><div><h5 class="mb-1">Message summary</h5><p class="text-muted mb-0" x-text="record.communicationId"></p></div><span class="crm-status" :class="statusClass(record.status)" x-text="humanize(record.status)"></span></div>
+                <div class="card-body">
+                  <div class="row g-3 crm-communication-summary-grid">
+                    <div class="col-md-3"><div class="text-muted fs-sm">Direction</div><div class="fw-semibold" x-text="humanize(record.direction)"></div></div>
+                    <div class="col-md-3"><div class="text-muted fs-sm">Channel</div><div class="fw-semibold" x-text="humanize(record.channel)"></div></div>
+                    <div class="col-md-3"><div class="text-muted fs-sm">Purpose</div><div class="fw-semibold" x-text="humanize(record.purpose)"></div></div>
+                    <div class="col-md-3"><div class="text-muted fs-sm">Trigger</div><div class="fw-semibold" x-text="humanize(record.trigger)"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Recipient / sender</div><div class="fw-semibold" x-text="record.recipientName || '—'"></div><div class="text-muted" x-text="record.recipientContact || '—'"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Requirement</div><a :href="record.enquiryId ? '/enquiries/' + record.enquiryId : '#'" x-text="record.enquiryId || '—'"></a></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Provider</div><div class="fw-semibold" x-text="record.providerId || record.metadata?.accountId || '—'"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Gupshup message ID</div><div class="crm-copy-value" x-text="record.metadata?.gupshupMessageId || record.providerMessageId || '—'"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Meta message ID</div><div class="crm-copy-value" x-text="record.metadata?.metaMessageId || '—'"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Webhook match</div><div class="fw-semibold" x-text="record.metadata?.webhookMatched === false ? 'Unmatched audit' : (record.metadata?.webhookMatched === true ? 'Matched' : '—')"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Action status</div><div class="fw-semibold" x-text="actionStatus(record)"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Created</div><div class="fw-semibold" x-text="formatDate(record.createdAt)"></div></div>
+                    <div class="col-md-4"><div class="text-muted fs-sm">Last updated</div><div class="fw-semibold" x-text="formatDate(record.updatedAt)"></div></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card mb-3">
+                <div class="card-header crm-card-heading"><div><h5 class="mb-1">Message</h5><p class="text-muted mb-0">Stored CRM message content</p></div></div>
+                <div class="card-body"><pre class="crm-message-preview" x-text="record.subject || record.message || '—'"></pre><div x-show="record.failureReason" class="alert alert-danger mt-3 mb-0" x-text="record.failureReason"></div></div>
+              </section>
+
+              <section class="card mb-3">
+                <div class="card-header crm-card-heading"><div><h5 class="mb-1">Event timeline</h5><p class="text-muted mb-0"><span x-text="timeline.length"></span> recorded events</p></div></div>
+                <div class="card-body">
+                  <div class="crm-event-timeline">
+                    <template x-for="(event, index) in timeline" :key="event.eventKey || index">
+                      <article class="crm-event-timeline-item">
+                        <div class="crm-event-timeline-marker"></div>
+                        <div class="crm-event-timeline-content">
+                          <div class="d-flex justify-content-between gap-3 flex-wrap"><strong x-text="humanize(event.status || event.type || 'event')"></strong><span class="text-muted fs-sm" x-text="formatDate(event.at)"></span></div>
+                          <div class="text-muted fs-sm" x-show="event.source" x-text="humanize(event.source)"></div>
+                          <div class="text-danger fs-sm" x-show="event.reason" x-text="event.reason"></div>
+                          <details x-show="event.details"><summary>Event details</summary><pre class="crm-json-preview" x-text="pretty(event.details)"></pre></details>
+                        </div>
+                      </article>
+                    </template>
+                    <div x-show="!timeline.length" class="text-muted">No timeline events were recorded.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card mb-3">
+                <div class="card-header crm-card-heading"><div><h5 class="mb-1">Webhook and provider response</h5><p class="text-muted mb-0">Sensitive signed postback values are redacted before storage.</p></div></div>
+                <div class="card-body row g-3">
+                  <div class="col-lg-6"><h6>Metadata</h6><pre class="crm-json-preview" x-text="pretty(record.metadata || {})"></pre></div>
+                  <div class="col-lg-6"><h6>External response</h6><pre class="crm-json-preview" x-text="pretty(record.externalResponse || {})"></pre></div>
+                </div>
+              </section>
+            </div>
+          </template>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <script>
+      function communicationDetails() {
+        return {
+          record: null,
+          loading: false,
+          error: '',
+          get timeline() {
+            return [...(this.record?.statusHistory || [])].sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0));
+          },
+          pretty(value) {
+            try { return JSON.stringify(value || {}, null, 2); } catch (_error) { return String(value || ''); }
+          },
+          actionStatus(record) {
+            const unlock = record?.metadata?.whatsappUnlock;
+            if (unlock?.status) return humanize(unlock.status);
+            if (record?.metadata?.actionStatus) return humanize(record.metadata.actionStatus);
+            if (record?.metadata?.actionReason) return humanize(record.metadata.actionReason);
+            return '—';
+          },
+          async load() {
+            this.loading = true;
+            this.error = '';
+            try {
+              const body = await apiFetch('/api/communication/' + pathRecordId());
+              this.record = body.data;
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>
