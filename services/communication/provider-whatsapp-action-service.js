@@ -4,7 +4,7 @@ const Communication = require("../../models/Communication");
 const communicationService = require("./communication-service");
 const providerActionService = require("../integration/provider-action-service");
 const {
-  TOKEN_PREFIX,
+  isUnlockActionToken,
   verifyUnlockAction,
   tokenHash,
 } = require("./whatsapp-action-token");
@@ -199,6 +199,22 @@ async function findRelatedOutbound(details) {
   return normalizeMobile(details.source) === normalizeMobile(record.recipientContact) ? record : null;
 }
 
+async function findOriginalForAction(details, action, expectedHash) {
+  if (!action?.opaque) {
+    return Communication.findOne({ communicationId: action.communicationId }).lean();
+  }
+
+  const related = await findRelatedOutbound(details);
+  if (related?.metadata?.whatsappUnlock?.tokenHash === expectedHash) return related;
+  if (typeof Communication.findOne !== "function") return null;
+  return Communication.findOne({
+    direction: "outbound",
+    channel: "whatsapp",
+    purpose: "nearby_lead_available",
+    "metadata.whatsappUnlock.tokenHash": expectedHash,
+  }).lean();
+}
+
 async function createRejectedInbound(details, event, reason, metadata = {}) {
   const related = await findRelatedOutbound(details);
   const inbound = await communicationService.createInbound({
@@ -272,7 +288,7 @@ async function processInbound(event, options = {}) {
   const details = quickReplyDetails(event);
   if (!details.isQuickReply) return { handled: false };
 
-  if (!details.postbackText || !details.postbackText.startsWith(`${TOKEN_PREFIX}.`)) {
+  if (!details.postbackText || !isUnlockActionToken(details.postbackText)) {
     const reason = details.postbackText ? "unsigned_action" : "missing_postback_action";
     await createRejectedInbound(details, event, reason);
     return { handled: true, status: "logged", reason };
@@ -287,16 +303,23 @@ async function processInbound(event, options = {}) {
     return { handled: true, status: "rejected", reason };
   }
 
-  const original = await Communication.findOne({ communicationId: action.communicationId }).lean();
+  const expectedHash = tokenHash(details.postbackText);
+  const original = await findOriginalForAction(details, action, expectedHash);
   if (!original) {
     await createRejectedInbound(details, event, "communication_not_found", {
-      communicationId: action.communicationId,
+      communicationId: action.communicationId || "",
     });
     return { handled: true, status: "ignored", reason: "communication_not_found" };
   }
 
   const unlockMetadata = original.metadata?.whatsappUnlock || {};
-  const expectedHash = tokenHash(details.postbackText);
+  const expiresAt = unlockMetadata.expiresAt ? new Date(unlockMetadata.expiresAt) : null;
+  if (action.opaque && (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt < new Date())) {
+    await createRejectedInbound(details, event, "expired_action", {
+      communicationId: original.communicationId,
+    });
+    return { handled: true, status: "rejected", reason: "expired_action" };
+  }
   const expectedApp = String(process.env.CRM_GUPSHUP_APP_NAME || "").trim();
   const phoneMatches = normalizeMobile(details.source) === normalizeMobile(original.recipientContact);
   const originalMessageIds = [

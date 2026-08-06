@@ -350,7 +350,7 @@ test("late delivery callbacks do not downgrade an already-read communication", a
   assert.equal(updatePayload.$push.statusHistory.$each[0].status, "delivered");
 });
 
-test("valid signed quick reply logs the click, calls Provider Portal once and records result timeline", async () => {
+test("valid opaque quick reply logs the click, calls Provider Portal once and records result timeline", async () => {
   const previousSecret = process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET;
   const previousApp = process.env.CRM_GUPSHUP_APP_NAME;
   process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET = "s".repeat(64);
@@ -378,6 +378,7 @@ test("valid signed quick reply logs the click, calls Provider Portal once and re
         type: "unlock_lead",
         status: "pending",
         tokenHash: tokens.tokenHash(signed),
+        expiresAt: new Date(Date.now() + 60_000),
       },
     },
   };

@@ -4,6 +4,9 @@ const crypto = require("crypto");
 const { validationError } = require("../../utils/validation");
 
 const TOKEN_PREFIX = "findoly_unlock_v1";
+const OPAQUE_TOKEN_PREFIX = "fu2_";
+const OPAQUE_RANDOM_BYTES = 32;
+const MAX_GENERATED_TOKEN_LENGTH = 64;
 
 function signingSecret() {
   const secret = String(process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET || "").trim();
@@ -28,7 +31,18 @@ function actionExpiryMinutes() {
   return Number.isFinite(value) ? Math.min(10080, Math.max(5, Math.trunc(value))) : 1440;
 }
 
-function createUnlockAction({ communicationId, now = new Date() }) {
+function createUnlockAction({ communicationId } = {}) {
+  if (!String(communicationId || "").trim()) {
+    throw validationError("WhatsApp unlock action is missing its communication reference");
+  }
+  const token = `${OPAQUE_TOKEN_PREFIX}${crypto.randomBytes(OPAQUE_RANDOM_BYTES).toString("base64url")}`;
+  if (token.length > MAX_GENERATED_TOKEN_LENGTH) {
+    throw validationError("Generated WhatsApp unlock action exceeds 64 characters", 500);
+  }
+  return token;
+}
+
+function createLegacyUnlockAction({ communicationId, now = new Date() }) {
   const issuedAt = Math.floor(now.getTime() / 1000);
   const payload = {
     c: String(communicationId || ""),
@@ -41,10 +55,35 @@ function createUnlockAction({ communicationId, now = new Date() }) {
   return `${TOKEN_PREFIX}.${payloadPart}.${signatureFor(payloadPart)}`;
 }
 
+function isOpaqueUnlockAction(token) {
+  return new RegExp(`^${OPAQUE_TOKEN_PREFIX}[A-Za-z0-9_-]{43}$`).test(String(token || "").trim());
+}
+
+function isLegacyUnlockAction(token) {
+  return String(token || "").trim().startsWith(`${TOKEN_PREFIX}.`);
+}
+
+function isUnlockActionToken(token) {
+  return isOpaqueUnlockAction(token) || isLegacyUnlockAction(token);
+}
+
 function verifyUnlockAction(token, { now = new Date() } = {}) {
-  const parts = String(token || "").trim().split(".");
-  if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) throw validationError("WhatsApp unlock action is invalid", 401);
-  if (!safeEqual(parts[2], signatureFor(parts[1]))) throw validationError("WhatsApp unlock action signature is invalid", 401);
+  const normalized = String(token || "").trim();
+  if (isOpaqueUnlockAction(normalized)) {
+    return {
+      version: 2,
+      opaque: true,
+      tokenHash: tokenHash(normalized),
+    };
+  }
+
+  const parts = normalized.split(".");
+  if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) {
+    throw validationError("WhatsApp unlock action is invalid", 401);
+  }
+  if (!safeEqual(parts[2], signatureFor(parts[1]))) {
+    throw validationError("WhatsApp unlock action signature is invalid", 401);
+  }
   let payload;
   try {
     payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
@@ -59,6 +98,8 @@ function verifyUnlockAction(token, { now = new Date() } = {}) {
     throw validationError("WhatsApp unlock action has expired", 410);
   }
   return {
+    version: 1,
+    opaque: false,
     communicationId: String(payload.c),
     issuedAt: new Date(payload.i * 1000),
     expiresAt: new Date(payload.x * 1000),
@@ -72,8 +113,14 @@ function tokenHash(token) {
 
 module.exports = {
   TOKEN_PREFIX,
+  OPAQUE_TOKEN_PREFIX,
+  MAX_GENERATED_TOKEN_LENGTH,
   actionExpiryMinutes,
+  createLegacyUnlockAction,
   createUnlockAction,
+  isLegacyUnlockAction,
+  isOpaqueUnlockAction,
+  isUnlockActionToken,
   verifyUnlockAction,
   tokenHash,
 };

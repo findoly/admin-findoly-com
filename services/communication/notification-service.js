@@ -268,6 +268,26 @@ const sendRule = async function (rule, context, actor) {
   const suffix = String(context.idempotencySuffix || lead.statusUpdatedAt || provider.createdAt || agent.createdAt || employee.createdAt || Date.now());
   const results = [];
   const whatsappOnly = rule.event === "nearby_lead_available";
+  if (whatsappOnly) {
+    console.info({
+      event: "communication_rule_evaluated",
+      eventName: rule.event,
+      ruleId: rule.ruleId,
+      enquiryId: lead.enquiryId || lead.id || "",
+      providerId: provider.providerId || "",
+      enabled: rule.enabled === true,
+      whatsappEnabled: rule.whatsappEnabled === true,
+      templateSelected: Boolean(rule.whatsappTemplateId),
+      recipientMobileAvailable: Boolean(recipient.mobile),
+      actionType: rule.whatsappActionType || "",
+      actionButtonIndex: Number.isInteger(Number(rule.whatsappActionButtonIndex))
+        ? Number(rule.whatsappActionButtonIndex)
+        : null,
+      parameterMappingCount: Array.isArray(rule.whatsappParameterMappings)
+        ? rule.whatsappParameterMappings.length
+        : 0,
+    });
+  }
   if (rule.whatsappEnabled && rule.whatsappTemplateId && recipient.mobile) {
     const nearbyLead = rule.event === "nearby_lead_available";
     results.push(
@@ -303,6 +323,20 @@ const sendRule = async function (rule, context, actor) {
         actor,
       ),
     );
+  } else if (whatsappOnly) {
+    const reason = !rule.whatsappEnabled
+      ? "whatsapp_disabled"
+      : !rule.whatsappTemplateId
+        ? "template_missing"
+        : "provider_mobile_missing";
+    console.warn({
+      event: "communication_rule_skipped",
+      eventName: rule.event,
+      ruleId: rule.ruleId,
+      enquiryId: lead.enquiryId || lead.id || "",
+      providerId: provider.providerId || "",
+      reason,
+    });
   }
   if (!whatsappOnly && rule.emailEnabled && rule.emailTemplateId && recipient.email) {
     results.push(
@@ -349,6 +383,22 @@ const trigger = async function (event, context, actor) {
   if (event !== "lead_status_changed" && event.startsWith("lead_")) events.push("lead_status_changed");
   const rules = await CommunicationRule.find({ event: { $in: events }, enabled: true }).lean();
   const output = [];
+  console.info({
+    event: "communication_rules_loaded",
+    eventName: event,
+    enquiryId: source.lead?.enquiryId || source.lead?.id || "",
+    providerId: source.provider?.providerId || "",
+    enabledRuleCount: rules.length,
+  });
+  if (event === "nearby_lead_available" && rules.length === 0) {
+    console.warn({
+      event: "communication_rule_skipped",
+      eventName: event,
+      enquiryId: source.lead?.enquiryId || source.lead?.id || "",
+      providerId: source.provider?.providerId || "",
+      reason: "no_enabled_rule",
+    });
+  }
 
   if (source.skipSystemDispatch !== true) {
     output.push(...(await systemEventService.dispatch(event, source, actor || "system")));
@@ -358,9 +408,24 @@ const trigger = async function (event, context, actor) {
     try {
       output.push(...(await sendRule(rule, source, actor || "system")));
     } catch (error) {
-      console.error(`Communication rule ${rule.ruleId} failed:`, error.message);
+      console.error({
+        event: "communication_rule_failed",
+        eventName: event,
+        ruleId: rule.ruleId,
+        enquiryId: source.lead?.enquiryId || source.lead?.id || "",
+        providerId: source.provider?.providerId || "",
+        code: String(error.code || "COMMUNICATION_RULE_FAILED"),
+        message: String(error.message || error).slice(0, 2000),
+      });
     }
   }
+  console.info({
+    event: "communication_dispatch_completed",
+    eventName: event,
+    enquiryId: source.lead?.enquiryId || source.lead?.id || "",
+    providerId: source.provider?.providerId || "",
+    resultCount: output.length,
+  });
   return output;
 };
 
@@ -368,7 +433,14 @@ const triggerSafe = async function (event, context, actor) {
   try {
     return await trigger(event, context, actor);
   } catch (error) {
-    console.error(`Communication event ${event} failed after the business action completed:`, error.message);
+    console.error({
+      event: "communication_event_failed",
+      eventName: event,
+      enquiryId: context?.lead?.enquiryId || context?.lead?.id || "",
+      providerId: context?.provider?.providerId || "",
+      code: String(error.code || "COMMUNICATION_EVENT_FAILED"),
+      message: String(error.message || error).slice(0, 2000),
+    });
     return [];
   }
 };

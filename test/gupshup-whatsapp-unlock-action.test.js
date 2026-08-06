@@ -30,18 +30,28 @@ function loadWithStubs(relativePath, stubs) {
   }
 }
 
-test("signed WhatsApp unlock tokens round-trip and reject tampering", () => {
+test("new WhatsApp unlock tokens are opaque, unique and stay under 64 characters", () => {
+  const first = tokenService.createUnlockAction({ communicationId: "communication-1" });
+  const second = tokenService.createUnlockAction({ communicationId: "communication-1" });
+  assert.match(first, /^fu2_[A-Za-z0-9_-]{43}$/);
+  assert.ok(first.length <= 64, "postback token must stay under the approved 64-character target");
+  assert.notEqual(first, second);
+  const decoded = tokenService.verifyUnlockAction(first);
+  assert.equal(decoded.version, 2);
+  assert.equal(decoded.opaque, true);
+  assert.equal(decoded.tokenHash, tokenService.tokenHash(first));
+  assert.notEqual(tokenService.tokenHash(first), tokenService.tokenHash(`${first.slice(0, -1)}x`));
+});
+
+test("legacy signed WhatsApp unlock tokens remain verifiable and reject tampering", () => {
   const previous = process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET;
   process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET = "a".repeat(64);
   try {
     const now = new Date("2026-08-04T00:00:00.000Z");
-    const token = tokenService.createUnlockAction({
-      communicationId: "communication-1",
-      now,
-    });
+    const token = tokenService.createLegacyUnlockAction({ communicationId: "communication-1", now });
     const decoded = tokenService.verifyUnlockAction(token, { now: new Date(now.getTime() + 1000) });
     assert.equal(decoded.communicationId, "communication-1");
-    assert.ok(token.length < 256, "postback token should fit common button payload limits");
+    assert.equal(decoded.version, 1);
     assert.throws(() => tokenService.verifyUnlockAction(`${token.slice(0, -1)}x`, { now }), /signature/i);
   } finally {
     if (previous === undefined) delete process.env.CRM_WHATSAPP_ACTION_SIGNING_SECRET;
@@ -358,3 +368,105 @@ test("Gupshup HTTP requests use the approved template contract and session endpo
   }
 });
 
+
+test("Gupshup quick-reply payloads above 128 characters are rejected before HTTP delivery", () => {
+  const whatsapp = require("../services/communication/whatsapp-service");
+  assert.throws(
+    () => whatsapp.normalizedPostbackTexts([{ index: 0, text: "x".repeat(129) }]),
+    (error) => error.code === "WHATSAPP_POSTBACK_TOO_LONG" && error.postbackLength === 129,
+  );
+  assert.deepEqual(
+    whatsapp.normalizedPostbackTexts([{ index: 0, text: "x".repeat(128) }]),
+    [{ index: 0, text: "x".repeat(128) }],
+  );
+});
+
+test("opaque WhatsApp unlock actions resolve by stored hash and reject a changed token", async () => {
+  const token = tokenService.createUnlockAction({ communicationId: "communication-opaque" });
+  const expectedHash = tokenService.tokenHash(token);
+  const original = {
+    communicationId: "communication-opaque",
+    enquiryId: "lead-opaque",
+    providerId: "provider-opaque",
+    recipientName: "Provider",
+    recipientContact: "919867079691",
+    providerMessageId: "outbound-opaque",
+    direction: "outbound",
+    channel: "whatsapp",
+    purpose: "nearby_lead_available",
+    metadata: {
+      whatsappUnlock: {
+        type: "unlock_lead",
+        status: "pending",
+        tokenHash: expectedHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        processing: false,
+        attempts: 0,
+      },
+      whatsappMessageIds: ["outbound-opaque"],
+    },
+    externalResponse: {},
+  };
+  let unlockCalls = 0;
+  const inbound = [];
+  const Communication = {
+    findOne(query) {
+      const value = query.$or ? original : null;
+      return { async lean() { return value; } };
+    },
+    findOneAndUpdate() {
+      return { async lean() { return original; } };
+    },
+    async updateOne() { return { matchedCount: 1 }; },
+  };
+  const actionService = loadWithStubs("services/communication/provider-whatsapp-action-service.js", {
+    "../../models/Communication": Communication,
+    "./communication-service": {
+      async createInbound(input) {
+        inbound.push(input);
+        return { communicationId: `inbound-${inbound.length}` };
+      },
+      async sendWhatsappSession() {
+        return { communicationId: "result-1" };
+      },
+    },
+    "../integration/provider-action-service": {
+      async unlockLead() {
+        unlockCalls += 1;
+        return {
+          status: "unlocked",
+          lead: { enquiryId: "lead-opaque", serviceType: "Painting", customerMobile: "9999999999" },
+          provider: { availableCredits: 9 },
+        };
+      },
+    },
+  });
+  const makeEvent = (postbackText, inboundId) => ({
+    app: "FindolyWhatsapp",
+    type: "message",
+    payload: {
+      id: inboundId,
+      source: "919867079691",
+      type: "quick_reply",
+      payload: { text: "Unlock Lead", postbackText },
+      context: { gsId: "outbound-opaque" },
+    },
+  });
+
+  const accepted = await actionService.processInbound(makeEvent(token, "inbound-valid"));
+  assert.equal(accepted.status, "unlocked");
+  assert.equal(unlockCalls, 1);
+
+  const changedLast = token.endsWith("A") ? "B" : "A";
+  const changedToken = `${token.slice(0, -1)}${changedLast}`;
+  const rejected = await actionService.processInbound(makeEvent(changedToken, "inbound-tampered"));
+  assert.equal(rejected.reason, "communication_not_found");
+  assert.equal(unlockCalls, 1);
+  assert.ok(inbound.some((entry) => entry.metadata?.actionReason === "communication_not_found"));
+});
+
+test("failed outbound unlock messages are marked send_failed instead of remaining pending", () => {
+  const communication = source("services/communication/communication-service.js");
+  assert.match(communication, /metadata\.whatsappUnlock\.status"\]\s*=\s*"send_failed"/);
+  assert.match(communication, /WHATSAPP_POSTBACK_TOO_LONG|postbackLength/);
+});

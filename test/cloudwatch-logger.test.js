@@ -12,10 +12,12 @@ const {
 } = require("../services/logging/cloudwatch-logger");
 
 function fakeConsole() {
-  const calls = { log: [], warn: [], error: [] };
+  const calls = { log: [], info: [], debug: [], warn: [], error: [] };
   return {
     calls,
     log(...args) { calls.log.push(args); },
+    info(...args) { calls.info.push(args); },
+    debug(...args) { calls.debug.push(args); },
     warn(...args) { calls.warn.push(args); },
     error(...args) { calls.error.push(args); },
   };
@@ -137,6 +139,32 @@ test("console output is preserved and exact plain text is forwarded to CloudWatc
     }),
   );
   assert.doesNotMatch(requests[1].logEvents[0].message, /^\{\"timestamp\"/);
+  logger.uninstall();
+});
+
+test("console.info and console.debug are preserved and mirrored to CloudWatch", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "test-service",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env(),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+  logger.install();
+  consoleObject.info("request completed", 200);
+  consoleObject.debug("provider skipped", "outside_radius");
+  await logger.flush();
+  assert.equal(consoleObject.calls.info.length, 1);
+  assert.equal(consoleObject.calls.debug.length, 1);
+  const messages = requests.flatMap((request) => request.logEvents || []).map((event) => event.message);
+  assert.ok(messages.includes("request completed 200"));
+  assert.ok(messages.includes("provider skipped outside_radius"));
   logger.uninstall();
 });
 

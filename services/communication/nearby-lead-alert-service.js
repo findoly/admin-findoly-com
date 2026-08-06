@@ -48,10 +48,31 @@ function whatsappContact(provider = {}) {
 }
 
 async function dispatchNearbyLeadAlerts(lead, actor = "system") {
+  const startedAt = process.hrtime.bigint();
+  const leadId = String(lead?.enquiryId || "");
+  console.info({
+    event: "nearby_alert_dispatch_started",
+    enquiryId: leadId,
+    categorySlug: String(lead?.categorySlug || ""),
+    remainingUnlocks: Number(lead?.remainingUnlocks || 0),
+    radiusKm: MAX_ALERT_DISTANCE_KM,
+    coordinatesAvailable: hasCoordinates(lead || {}, "locationLatitude", "locationLongitude"),
+  });
   if (!lead || !lead.enquiryId || !lead.categorySlug || Number(lead.remainingUnlocks || 0) <= 0) {
-    return { eligible: 0, alerted: 0, skipped: 0 };
+    const reason = !lead?.enquiryId
+      ? "lead_id_missing"
+      : !lead?.categorySlug
+        ? "lead_category_missing"
+        : "remaining_unlocks_zero";
+    console.warn({ event: "nearby_alert_dispatch_skipped", enquiryId: leadId, reason });
+    return { eligible: 0, alerted: 0, skipped: 0, reason };
   }
   if (!hasCoordinates(lead, "locationLatitude", "locationLongitude")) {
+    console.warn({
+      event: "nearby_alert_dispatch_skipped",
+      enquiryId: leadId,
+      reason: "lead_coordinates_missing",
+    });
     return { eligible: 0, alerted: 0, skipped: 0, reason: "lead_coordinates_missing" };
   }
 
@@ -80,6 +101,10 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   let eligible = 0;
   let alerted = 0;
   let skipped = 0;
+  let databaseCandidates = 0;
+  let outsideRadius = 0;
+  let invalidDistance = 0;
+  let missingContactOrCoordinates = 0;
   const pending = [];
   const flush = async () => {
     const rows = pending.splice(0, pending.length);
@@ -103,20 +128,59 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   };
 
   for await (const provider of cursor) {
-    if (!whatsappContact(provider) || !hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) continue;
+    databaseCandidates += 1;
+    if (!whatsappContact(provider) || !hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) {
+      missingContactOrCoordinates += 1;
+      console.debug({
+        event: "nearby_alert_provider_skipped",
+        enquiryId: lead.enquiryId,
+        providerId: provider.providerId || "",
+        reason: !whatsappContact(provider) ? "provider_mobile_missing" : "provider_coordinates_missing",
+      });
+      continue;
+    }
     const distanceKm = distanceKmExact(
       provider.serviceLatitude,
       provider.serviceLongitude,
       lead.locationLatitude,
       lead.locationLongitude,
     );
-    if (distanceKm === null || distanceKm > MAX_ALERT_DISTANCE_KM) continue;
+    if (distanceKm === null) {
+      invalidDistance += 1;
+      continue;
+    }
+    if (distanceKm > MAX_ALERT_DISTANCE_KM) {
+      outsideRadius += 1;
+      continue;
+    }
     eligible += 1;
     pending.push({ provider, distanceKm });
     if (pending.length >= BATCH_SIZE) await flush();
   }
   if (pending.length) await flush();
-  return { eligible, alerted, skipped };
+  const durationMs = Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2));
+  const result = {
+    eligible,
+    alerted,
+    skipped,
+    databaseCandidates,
+    outsideRadius,
+    invalidDistance,
+    missingContactOrCoordinates,
+  };
+  console.info({
+    event: "nearby_alert_provider_scan_completed",
+    enquiryId: lead.enquiryId,
+    radiusKm: MAX_ALERT_DISTANCE_KM,
+    ...result,
+  });
+  console.info({
+    event: "nearby_alert_dispatch_completed",
+    enquiryId: lead.enquiryId,
+    ...result,
+    durationMs,
+  });
+  return result;
 }
 
 module.exports = {
