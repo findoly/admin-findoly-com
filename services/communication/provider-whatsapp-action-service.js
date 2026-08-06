@@ -141,11 +141,14 @@ function failureMessage(result = {}) {
   if (status === "direct_payment_pending") {
     return "A direct-payment checkout is already reserving this enquiry. Complete or cancel that checkout in the Provider Portal first.";
   }
-  if (status === "provider_ineligible") {
+  if (["provider_not_found", "provider_ineligible"].includes(status)) {
     return "Your provider account is not currently eligible to view this enquiry. Please contact Findoly support.";
   }
-  if (status === "lead_unavailable") {
+  if (["enquiry_not_found", "lead_unavailable"].includes(status)) {
     return "This enquiry is no longer available. It may have expired or reached its provider limit.";
+  }
+  if (status === "transaction_failed") {
+    return "We could not process the credits for this enquiry. Please try again in the Provider Portal or contact Findoly support.";
   }
   return "We could not open this enquiry from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
 }
@@ -421,6 +424,14 @@ async function processInbound(event, options = {}) {
   );
 
   let result;
+  console.info({
+    event: "whatsapp_provider_action_processing_started",
+    requestId: String(options.requestId || "").slice(0, 80),
+    communicationId: String(original.communicationId || "").slice(0, 128),
+    enquiryId: String(original.enquiryId || "").slice(0, 128),
+    providerId: String(original.providerId || "").slice(0, 128),
+    inboundMessageId: String(inboundReference || "").slice(0, 128),
+  });
   try {
     result = await providerActionService.unlockLead({
       providerId: original.providerId,
@@ -432,8 +443,38 @@ async function processInbound(event, options = {}) {
       idempotencyKey: `whatsapp-unlock:${original.communicationId}:${idempotencyReference}`,
       requestId: options.requestId,
     });
+    console.info({
+      event: "whatsapp_provider_action_processing_completed",
+      requestId: String(options.requestId || "").slice(0, 80),
+      communicationId: String(original.communicationId || "").slice(0, 128),
+      enquiryId: String(original.enquiryId || "").slice(0, 128),
+      providerId: String(original.providerId || "").slice(0, 128),
+      resultStatus: String(result?.status || "").slice(0, 80),
+      resultCode: String(result?.code || "").slice(0, 120),
+    });
   } catch (error) {
-    const fallbackResult = { status: "failed", code: error.code || "WHATSAPP_UNLOCK_FAILED" };
+    const integration = {
+      httpStatus: Number(error.providerHttpStatus || 0),
+      providerStatus: String(error.providerStatus || "").slice(0, 80),
+      providerCode: String(error.providerCode || "").slice(0, 120),
+      requestId: String(error.requestId || options.requestId || "").slice(0, 80),
+      endpointHost: String(error.endpoint?.host || "").slice(0, 253),
+      endpointPath: String(error.endpoint?.path || "").slice(0, 512),
+    };
+    const fallbackResult = {
+      status: "failed",
+      code: error.code || "WHATSAPP_ACTION_FAILED",
+      integration,
+    };
+    console.error({
+      event: "whatsapp_provider_action_processing_failed",
+      communicationId: String(original.communicationId || "").slice(0, 128),
+      enquiryId: String(original.enquiryId || "").slice(0, 128),
+      providerId: String(original.providerId || "").slice(0, 128),
+      errorCode: String(error.code || "WHATSAPP_ACTION_FAILED").slice(0, 120),
+      errorName: String(error.name || "Error").slice(0, 80),
+      ...integration,
+    });
     let responseDeliveryFailed = false;
     try {
       await sendResultMessage({
