@@ -6064,6 +6064,87 @@ th .d-flex {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.crm-wa-media {
+  display: grid;
+  gap: .45rem;
+  min-width: min(17rem, 62vw);
+  margin-bottom: .45rem;
+}
+.crm-wa-media-preview img,
+.crm-wa-media-video video {
+  display: block;
+  width: 100%;
+  max-width: 26rem;
+  max-height: 22rem;
+  border-radius: .65rem;
+  background: var(--gray-200, #e5e7eb);
+  object-fit: contain;
+}
+.crm-wa-media-audio audio {
+  width: min(22rem, 100%);
+  max-width: 100%;
+}
+.crm-wa-media-document {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+  min-width: min(25rem, 70vw);
+  padding: .6rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: .65rem;
+  background: rgba(255, 255, 255, .72);
+}
+.crm-wa-media-file-icon {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: .55rem;
+  background: rgba(var(--primary-rgb), .12);
+  color: var(--primary);
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.crm-wa-media-file-details {
+  display: grid;
+  min-width: 0;
+  gap: .15rem;
+}
+.crm-wa-media-file-details strong {
+  overflow: hidden;
+  color: var(--body-color, #1f2937);
+  font-size: .78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-wa-media-file-details small {
+  color: var(--gray-600, #667085);
+  font-size: .66rem;
+}
+.crm-wa-media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .35rem;
+}
+.crm-wa-media-state {
+  display: grid;
+  gap: .15rem;
+  margin-bottom: .4rem;
+  padding: .55rem .65rem;
+  border-radius: .55rem;
+  font-size: .72rem;
+}
+.crm-wa-media-state.is-pending {
+  background: rgba(var(--primary-rgb), .08);
+  color: var(--gray-700, #475467);
+}
+.crm-wa-media-state.is-failed {
+  background: rgba(var(--danger-rgb), .08);
+  color: var(--danger, #dc2626);
+}
 .crm-wa-message-footer {
   display: flex;
   flex-wrap: wrap;
@@ -6140,6 +6221,12 @@ th .d-flex {
   .crm-wa-thread-actions { width: 100%; justify-content: flex-end; }
   .crm-wa-related { max-height: 4.2rem; overflow-y: auto; }
   .crm-wa-messages { padding: .75rem; }
+  .crm-wa-media { min-width: 0; }
+  .crm-wa-media-document {
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .crm-wa-media-document .crm-wa-media-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .crm-wa-composer { padding: .6rem; }
   .crm-wa-composer-note { display: none; }
 }

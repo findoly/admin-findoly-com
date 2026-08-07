@@ -91,7 +91,7 @@ CLOUDWATCH_LOG_BATCH_EVENTS=20
 CLOUDWATCH_LOG_MAX_QUEUE=1000
 ```
 
-Logs are queued in memory and sent when either 60 seconds elapse or 20 events are waiting, whichever happens first. Pending events are also flushed during graceful shutdown.
+Logs are queued in memory and sent when either 60 seconds elapse or 20 events are waiting, whichever happens first. Each normal flush is written as one structured CloudWatch row with `event: "crm_log_batch"` and the original records under `entries`. Pending events are also flushed during graceful shutdown. Oversized batches are split only when required by CloudWatch event-size limits.
 
 Required Gupshup and Provider Marketplace values:
 
@@ -262,7 +262,7 @@ npm run verify:query-plans
 - [ ] Capture p50, p95 and p99 latency for major list, search and write operations.
 - [ ] Monitor MongoDB documents examined/returned, blocking sorts, working set and connection pool saturation.
 - [ ] Test concurrent account creation, provider conversion, withdrawal and payout operations.
-- [ ] Confirm CloudWatch rotates streams every UTC 15 minutes and does not intentionally resend confirmed batches.
+- [ ] Confirm CloudWatch rotates streams every UTC 15 minutes, shows one `crm_log_batch` row per normal flush, and does not intentionally resend confirmed batches.
 
 Broad free-text search should move to Atlas Search or dedicated normalized search fields before sustained million-record use. Per-process caches/rate limits should move to a shared store before horizontal scaling.
 

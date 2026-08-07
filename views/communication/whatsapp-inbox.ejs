@@ -141,7 +141,59 @@
                       <article class="crm-wa-message-row" :class="message.direction === 'outbound' ? 'is-outbound' : 'is-inbound'">
                         <div class="crm-wa-bubble">
                           <div class="crm-wa-message-type" x-show="message.messageType !== 'text'" x-text="humanize(message.messageType)"></div>
-                          <div class="crm-wa-message-text" x-text="message.text || '[' + humanize(message.messageType) + ']'"></div>
+
+                          <template x-if="message.media && ['image','sticker'].includes(message.messageType) && message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-preview">
+                              <a :href="mediaUrl(message, 'inline')" target="_blank" rel="noopener" :aria-label="'Open ' + humanize(message.messageType)">
+                                <img :src="mediaUrl(message, 'inline')" :alt="message.media.caption || message.media.fileName || humanize(message.messageType)" loading="lazy">
+                              </a>
+                              <div class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'attachment')">Download</a>
+                              </div>
+                            </div>
+                          </template>
+
+                          <template x-if="message.media && message.messageType === 'audio' && message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-audio">
+                              <audio controls preload="metadata" :src="mediaUrl(message, 'inline')"></audio>
+                              <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'attachment')">Download audio</a>
+                            </div>
+                          </template>
+
+                          <template x-if="message.media && message.messageType === 'video' && message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-video">
+                              <video controls preload="metadata" :src="mediaUrl(message, 'inline')"></video>
+                              <div class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'attachment')">Download</a>
+                              </div>
+                            </div>
+                          </template>
+
+                          <template x-if="message.media && message.messageType === 'document' && message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-document">
+                              <span class="crm-wa-media-file-icon" aria-hidden="true">FILE</span>
+                              <span class="crm-wa-media-file-details">
+                                <strong x-text="message.media.fileName || 'WhatsApp document'"></strong>
+                                <small x-text="[message.media.contentType, formatBytes(message.media.sizeBytes)].filter(Boolean).join(' · ')"></small>
+                              </span>
+                              <span class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(message, 'attachment')">Download</a>
+                              </span>
+                            </div>
+                          </template>
+
+                          <div class="crm-wa-media-state is-pending" x-show="message.media && ['pending','processing'].includes(message.media.storageStatus)">
+                            Media is being saved securely. It will appear here automatically.
+                          </div>
+                          <div class="crm-wa-media-state is-failed" x-show="message.media && message.media.storageStatus === 'failed'">
+                            <strong>Media could not be saved.</strong>
+                            <span x-show="message.media.failureReason" x-text="message.media.failureReason"></span>
+                          </div>
+
+                          <div class="crm-wa-message-text" x-show="messageDisplayText(message)" x-text="messageDisplayText(message)"></div>
                           <div class="crm-wa-message-footer">
                             <span x-show="message.direction === 'outbound' && message.employeeName" x-text="message.employeeName"></span>
                             <time x-text="formatMessageTime(message.occurredAt)"></time>
@@ -455,6 +507,24 @@
             const name = String(conversation?.displayName || conversation?.latestEnquiryName || '').trim();
             if (name) return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
             return String(conversation?.contactNumber || '').slice(-2) || 'WA';
+          },
+          mediaUrl(message, disposition = 'inline') {
+            if (!message?.messageId) return '';
+            const query = new URLSearchParams({ disposition: disposition === 'attachment' ? 'attachment' : 'inline' });
+            return '/api/communication/whatsapp-inbox/messages/' + encodeURIComponent(message.messageId) + '/media?' + query.toString();
+          },
+          messageDisplayText(message) {
+            const text = String(message?.text || '').trim();
+            if (!text) return '';
+            if (message?.messageType !== 'text' && /^\[[^\]]+\]$/.test(text)) return '';
+            return text;
+          },
+          formatBytes(value) {
+            const bytes = Number(value || 0);
+            if (!Number.isFinite(bytes) || bytes <= 0) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
           },
           formatMobile(value) { const digits = String(value || '').replace(/\D/g, ''); return digits.length === 10 ? '+91 ' + digits.slice(0, 5) + ' ' + digits.slice(5) : (value || 'Unknown number'); },
           shortTime(value) {

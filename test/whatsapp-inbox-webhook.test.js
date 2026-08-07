@@ -36,6 +36,7 @@ function baseStubs(overrides = {}) {
     "./template-service": { async processProviderEvent() { return {}; } },
     "./whatsapp-inbox-service": {
       normalizeMessageType(value) { return String(value || "text").toLowerCase(); },
+      validateInboundMedia(value) { return value; },
       async recordInbound() {},
       async syncDeliveryStatus() { return { matched: 0 }; },
     },
@@ -48,6 +49,7 @@ test("normal inbound Gupshup messages are stored in the shared inbox", async () 
   const stubs = baseStubs();
   stubs["./whatsapp-inbox-service"] = {
     normalizeMessageType(value) { return String(value || "text").toLowerCase(); },
+    validateInboundMedia(value) { return value; },
     async recordInbound(input) { recorded = input; },
     async syncDeliveryStatus() {},
   };
@@ -78,6 +80,7 @@ test("provider View Enquiry actions never enter the customer inbox", async () =>
   });
   stubs["./whatsapp-inbox-service"] = {
     normalizeMessageType() { return "interactive"; },
+    validateInboundMedia(value) { return value; },
     async recordInbound() { recorded = true; },
     async syncDeliveryStatus() {},
   };
@@ -100,6 +103,7 @@ test("matched Gupshup delivery callbacks synchronize inbox message status", asyn
   });
   stubs["./whatsapp-inbox-service"] = {
     normalizeMessageType() { return "text"; },
+    validateInboundMedia(value) { return value; },
     async recordInbound() {},
     async syncDeliveryStatus(input) { synced = input; return { matched: 1 }; },
   };
@@ -112,4 +116,47 @@ test("matched Gupshup delivery callbacks synchronize inbox message status", asyn
   assert.equal(synced.communicationId, "communication-1");
   assert.deepEqual(synced.messageIds, ["gs-1", "meta-1"]);
   assert.equal(synced.status, "delivered");
+});
+
+
+test("inbound Gupshup media is passed to private inbox storage without exposing the URL in safe metadata", async () => {
+  let inboundInput = null;
+  let communicationInput = null;
+  const stubs = baseStubs({
+    "./communication-service": {
+      async createInbound(input) {
+        communicationInput = input;
+        return { communicationId: "media-inbound-1", ...input, channel: "whatsapp", direction: "inbound", status: "received" };
+      },
+      async updateDeliveryStatus() { return { matched: 0 }; },
+      async recordUnmatchedWhatsAppEvent() { return { communicationId: "audit-1" }; },
+    },
+  });
+  stubs["./whatsapp-inbox-service"] = {
+    normalizeMessageType(value) { return String(value || "text").toLowerCase(); },
+    validateInboundMedia(value) { return { ...value, sourceUrl: value.sourceUrl }; },
+    async recordInbound(input) { inboundInput = input; },
+    async syncDeliveryStatus() {},
+  };
+  const webhook = loadWithStubs("services/communication/webhook-service.js", stubs);
+  await webhook.processWhatsApp(Buffer.from(JSON.stringify({
+    type: "message",
+    payload: {
+      id: "wamid-media-1",
+      source: "919876543210",
+      type: "document",
+      payload: {
+        url: "https://filemanager.gupshup.io/fm/wamedia/app/file-1",
+        name: "quotation.pdf",
+        "content-type": "application/pdf",
+        caption: "Quotation",
+      },
+      sender: { name: "Customer", phone: "919876543210" },
+    },
+  })), {});
+  assert.equal(inboundInput.messageType, "document");
+  assert.equal(inboundInput.media.sourceUrl, "https://filemanager.gupshup.io/fm/wamedia/app/file-1");
+  assert.equal(inboundInput.media.fileName, "quotation.pdf");
+  assert.equal(communicationInput.metadata.whatsappMedia.fileName, "quotation.pdf");
+  assert.equal(Object.hasOwn(communicationInput.metadata.whatsappMedia, "sourceUrl"), false);
 });

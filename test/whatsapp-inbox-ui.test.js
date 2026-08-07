@@ -19,6 +19,7 @@ test("WhatsApp Inbox is a permission-protected CRM page and API", () => {
   assert.match(inboxRoutes, /\/reply/);
   assert.match(inboxRoutes, /\/read/);
   assert.match(inboxRoutes, /\/unread/);
+  assert.match(inboxRoutes, /messages\/:messageId\/media/);
 });
 
 test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply composer", () => {
@@ -33,8 +34,14 @@ test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply comp
   assert.match(view, /upsertThreadMessage\(body\.data\.message\)/);
   assert.match(view, /Message sent\. Chat history is syncing/);
   assert.match(view, /threadError/);
+  assert.match(view, /mediaUrl\(message, 'inline'\)/);
+  assert.match(view, /Download audio/);
+  assert.match(view, /Media is being saved securely/);
+  assert.match(view, /<video controls/);
+  assert.match(view, /<audio controls/);
   assert.match(view, /setInterval\(\(\) => this\.poll\(\), 7000\)/);
   assert.match(css, /\.crm-whatsapp-inbox/);
+  assert.match(css, /\.crm-wa-media-document/);
   assert.match(css, /@media \(max-width: 991\.98px\)/);
   assert.match(sidebar, /WhatsApp Inbox/);
 });

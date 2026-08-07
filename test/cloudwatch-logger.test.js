@@ -2,7 +2,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const util = require("node:util");
 
 const {
   buildSignedRequest,
@@ -43,6 +42,14 @@ async function waitFor(predicate, { timeoutMs = 1000, intervalMs = 10 } = {}) {
     }
     await wait(intervalMs);
   }
+}
+
+function putRequests(requests) {
+  return requests.filter((request) => Array.isArray(request.logEvents));
+}
+
+function parseBatchEvents(request) {
+  return request.logEvents.map((event) => JSON.parse(event.message));
 }
 
 function env(overrides = {}) {
@@ -126,7 +133,7 @@ test("CloudWatch batching defaults to 60 seconds or 20 events", () => {
   assert.equal(state.batchEvents, 20);
 });
 
-test("a partial batch stays queued instead of sending one AWS request per log", async () => {
+test("a partial batch stays queued and shutdown sends it as one CloudWatch row", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -148,12 +155,17 @@ test("a partial batch stays queued instead of sending one AWS request per log", 
   assert.equal(logger.diagnostics().queueLength, 1);
 
   await logger.shutdown();
-  const putRequests = requests.filter((request) => Array.isArray(request.logEvents));
-  assert.equal(putRequests.length, 1);
-  assert.equal(putRequests[0].logEvents.length, 1);
+  const uploaded = putRequests(requests);
+  assert.equal(uploaded.length, 1);
+  assert.equal(uploaded[0].logEvents.length, 1);
+  const [batch] = parseBatchEvents(uploaded[0]);
+  assert.equal(batch.event, "test-service_log_batch");
+  assert.equal(batch.batchSize, 1);
+  assert.equal(batch.entryCount, 1);
+  assert.equal(batch.entries[0].message, "queued event");
 });
 
-test("20 queued events flush immediately in one batch and later partial events wait", async () => {
+test("20 queued events become one CloudWatch row and later partial events wait", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -173,21 +185,27 @@ test("20 queued events flush immediately in one batch and later partial events w
     consoleObject.log("message", index);
   }
 
-  await waitFor(
-    () => requests.filter((request) => Array.isArray(request.logEvents)).length === 2,
-  );
+  await waitFor(() => putRequests(requests).length === 2);
   await wait(25);
 
-  const immediateBatches = requests.filter((request) => Array.isArray(request.logEvents));
-  assert.deepEqual(immediateBatches.map((request) => request.logEvents.length), [20, 20]);
+  const immediateBatches = putRequests(requests);
+  assert.deepEqual(immediateBatches.map((request) => request.logEvents.length), [1, 1]);
+  assert.deepEqual(
+    immediateBatches.flatMap(parseBatchEvents).map((batch) => batch.entryCount),
+    [20, 20],
+  );
   assert.equal(logger.diagnostics().queueLength, 5);
 
   await logger.shutdown();
-  const allBatches = requests.filter((request) => Array.isArray(request.logEvents));
-  assert.deepEqual(allBatches.map((request) => request.logEvents.length), [20, 20, 5]);
+  const allBatches = putRequests(requests);
+  assert.deepEqual(allBatches.map((request) => request.logEvents.length), [1, 1, 1]);
+  assert.deepEqual(
+    allBatches.flatMap(parseBatchEvents).map((batch) => batch.entryCount),
+    [20, 20, 5],
+  );
 });
 
-test("the time threshold flushes a partial batch", async () => {
+test("the time threshold sends a partial batch as one CloudWatch row", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -204,18 +222,17 @@ test("the time threshold flushes a partial batch", async () => {
 
   logger.install();
   consoleObject.info("time-based batch");
-  await waitFor(
-    () => requests.some((request) => Array.isArray(request.logEvents)),
-    { timeoutMs: 1000 },
-  );
+  await waitFor(() => putRequests(requests).length === 1, { timeoutMs: 1000 });
 
-  const putRequests = requests.filter((request) => Array.isArray(request.logEvents));
-  assert.equal(putRequests.length, 1);
-  assert.equal(putRequests[0].logEvents.length, 1);
+  const uploaded = putRequests(requests);
+  assert.equal(uploaded[0].logEvents.length, 1);
+  const [batch] = parseBatchEvents(uploaded[0]);
+  assert.equal(batch.entryCount, 1);
+  assert.equal(batch.entries[0].message, "time-based batch");
   logger.uninstall();
 });
 
-test("console output is preserved and exact plain text is forwarded to CloudWatch", async () => {
+test("console output is preserved while CloudWatch receives one redacted batch row", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -226,7 +243,6 @@ test("console output is preserved and exact plain text is forwarded to CloudWatc
     consoleObject,
     hostname: "test-host",
     pid: 123,
-    randomId: "abcd1234",
     now: () => new Date("2026-08-01T05:00:00.000Z"),
     fetchImpl: async (_url, options) => {
       requests.push(JSON.parse(options.body));
@@ -235,14 +251,14 @@ test("console output is preserved and exact plain text is forwarded to CloudWatc
   });
 
   logger.install();
-  consoleObject.error("Unlock failed", {
+  consoleObject.error("Open enquiry failed", {
     token: "same-console-value",
     uri: "mongodb://user:pass@localhost/db",
   });
 
   assert.equal(consoleObject.calls.error.length, 1);
   assert.deepEqual(consoleObject.calls.error[0], [
-    "Unlock failed",
+    "Open enquiry failed",
     {
       token: "same-console-value",
       uri: "mongodb://user:pass@localhost/db",
@@ -251,21 +267,20 @@ test("console output is preserved and exact plain text is forwarded to CloudWatc
 
   const result = await logger.flush();
   assert.equal(result.sent, 1);
-  assert.equal(requests.length, 2);
-  assert.equal(requests[0].logGroupName, "/findoly/test/production");
-  assert.equal(requests[1].logEvents.length, 1);
-  assert.equal(
-    requests[1].logEvents[0].message,
-    util.format("Unlock failed", {
-      token: "same-console-value",
-      uri: "mongodb://user:pass@localhost/db",
-    }),
-  );
-  assert.doesNotMatch(requests[1].logEvents[0].message, /^\{\"timestamp\"/);
+  const uploaded = putRequests(requests);
+  assert.equal(uploaded.length, 1);
+  assert.equal(uploaded[0].logEvents.length, 1);
+  const [batch] = parseBatchEvents(uploaded[0]);
+  assert.equal(batch.hostname, "test-host");
+  assert.equal(batch.pid, 123);
+  assert.equal(batch.entryCount, 1);
+  assert.match(batch.entries[0].message, /Open enquiry failed/);
+  assert.doesNotMatch(batch.entries[0].message, /same-console-value|user:pass/);
+  assert.match(batch.entries[0].message, /REDACTED/);
   logger.uninstall();
 });
 
-test("console.info and console.debug are preserved and mirrored to CloudWatch", async () => {
+test("console.info and console.debug remain separate entries inside one row", async () => {
   const requests = [];
   const consoleObject = fakeConsole();
   const logger = createCloudWatchLogger({
@@ -285,9 +300,120 @@ test("console.info and console.debug are preserved and mirrored to CloudWatch", 
   await logger.flush();
   assert.equal(consoleObject.calls.info.length, 1);
   assert.equal(consoleObject.calls.debug.length, 1);
-  const messages = requests.flatMap((request) => request.logEvents || []).map((event) => event.message);
-  assert.ok(messages.includes("request completed 200"));
-  assert.ok(messages.includes("provider skipped outside_radius"));
+  const entries = putRequests(requests)
+    .flatMap(parseBatchEvents)
+    .flatMap((batch) => batch.entries);
+  assert.deepEqual(entries.map((entry) => entry.message), [
+    "request completed 200",
+    "provider skipped outside_radius",
+  ]);
+  logger.uninstall();
+});
+
+test("structured events keep their fields inside the merged entries array", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "crm",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env(),
+    consoleObject,
+    now: () => new Date("2026-08-01T05:00:00.000Z"),
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  consoleObject.info({
+    event: "http_response_completed",
+    requestId: "request-123",
+    status: 200,
+    authorization: "Bearer hidden",
+  });
+  await logger.flush();
+
+  const [batch] = parseBatchEvents(putRequests(requests)[0]);
+  assert.equal(batch.event, "crm_log_batch");
+  assert.equal(batch.entries[0].event, "http_response_completed");
+  assert.equal(batch.entries[0].requestId, "request-123");
+  assert.equal(batch.entries[0].status, 200);
+  assert.equal(batch.entries[0].authorization, "[REDACTED]");
+  assert.equal(batch.entries[0].level, "info");
+  assert.equal(batch.entries[0].timestamp, "2026-08-01T05:00:00.000Z");
+  logger.uninstall();
+});
+
+test("oversized batches split into the minimum safe number of CloudWatch rows", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  const logger = createCloudWatchLogger({
+    service: "crm",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env({ CLOUDWATCH_LOG_BATCH_EVENTS: "3" }),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  const largeMessage = "x".repeat(150 * 1024);
+  consoleObject.log(largeMessage);
+  consoleObject.log(largeMessage);
+  consoleObject.log(largeMessage);
+  await waitFor(() => putRequests(requests).length === 1);
+
+  const [request] = putRequests(requests);
+  assert.equal(request.logEvents.length, 3);
+  const batches = parseBatchEvents(request);
+  assert.deepEqual(batches.map((batch) => batch.entryCount), [1, 1, 1]);
+  assert.ok(batches.every((batch) => batch.batchSize === 3));
+  assert.ok(batches.every((batch) => batch.partCount === 3));
+  assert.ok(request.logEvents.every(
+    (event) => Buffer.byteLength(event.message, "utf8") <= 240 * 1024,
+  ));
+  logger.uninstall();
+});
+
+test("a failed merged upload stays queued and retries without losing entries", async () => {
+  const requests = [];
+  const consoleObject = fakeConsole();
+  let failPut = true;
+  const logger = createCloudWatchLogger({
+    service: "crm",
+    credentialPrefix: "TEST_SECRETS_",
+    defaultLogGroup: "/findoly/test/production",
+    env: env(),
+    consoleObject,
+    fetchImpl: async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      if (request.logEvents && failPut) throw new Error("temporary network failure");
+      return response(200, {});
+    },
+  });
+
+  logger.install();
+  consoleObject.warn("retry me");
+  const failed = await logger.flush();
+  assert.equal(failed.failed, true);
+  assert.equal(logger.diagnostics().queueLength, 1);
+
+  failPut = false;
+  const retried = await logger.flush();
+  assert.equal(retried.sent, 1);
+  assert.equal(logger.diagnostics().queueLength, 0);
+  const attempts = putRequests(requests);
+  assert.equal(attempts.length, 2);
+  const firstBatch = parseBatchEvents(attempts[0])[0];
+  const secondBatch = parseBatchEvents(attempts[1])[0];
+  assert.equal(firstBatch.batchId, secondBatch.batchId);
+  assert.equal(secondBatch.entries[0].message, "retry me");
   logger.uninstall();
 });
 

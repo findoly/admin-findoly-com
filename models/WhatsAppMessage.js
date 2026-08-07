@@ -1,6 +1,28 @@
 const mongoose = require("mongoose");
 const uuid = require("../utils/uuid");
 
+const whatsappMediaSchema = new mongoose.Schema(
+  {
+    storageStatus: {
+      type: String,
+      enum: ["none", "pending", "processing", "stored", "failed"],
+      default: "none",
+      index: true,
+    },
+    source: { type: String, default: "", maxlength: 40 },
+    fileName: { type: String, default: "", maxlength: 255 },
+    contentType: { type: String, default: "", maxlength: 200 },
+    sizeBytes: { type: Number, default: 0, min: 0 },
+    caption: { type: String, default: "", maxlength: 4096 },
+    s3Key: { type: String, default: "", maxlength: 1500 },
+    errorCode: { type: String, default: "", maxlength: 120 },
+    failureReason: { type: String, default: "", maxlength: 1000 },
+    attemptedAt: { type: Date, default: null },
+    storedAt: { type: Date, default: null },
+  },
+  { _id: false, strict: true },
+);
+
 const whatsappMessageSchema = new mongoose.Schema(
   {
     messageId: {
@@ -33,6 +55,7 @@ const whatsappMessageSchema = new mongoose.Schema(
     readAt: { type: Date, default: null },
     failedAt: { type: Date, default: null },
     crmReadAt: { type: Date, default: null, index: true },
+    media: { type: whatsappMediaSchema, default: () => ({}) },
     metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
   },
   {
@@ -45,6 +68,7 @@ const whatsappMessageSchema = new mongoose.Schema(
 whatsappMessageSchema.index({ conversationId: 1, occurredAt: -1, _id: -1 });
 whatsappMessageSchema.index({ conversationId: 1, direction: 1, crmReadAt: 1, occurredAt: -1 });
 whatsappMessageSchema.index({ providerMessageIds: 1 });
+whatsappMessageSchema.index({ "media.storageStatus": 1, occurredAt: -1 });
 whatsappMessageSchema.index(
   { communicationId: 1 },
   { unique: true, partialFilterExpression: { communicationId: { $type: "string", $gt: "" } } },

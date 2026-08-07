@@ -541,16 +541,64 @@ async function createFolder(input = {}) {
   return { key, prefix: key };
 }
 
+function encryptionHeaders() {
+  const headers = {};
+  const encryption = String(process.env.AWS_S3_SERVER_SIDE_ENCRYPTION || "").trim();
+  if (encryption) headers["x-amz-server-side-encryption"] = encryption;
+  const kmsKeyId = String(process.env.AWS_S3_KMS_KEY_ID || "").trim();
+  if (kmsKeyId) headers["x-amz-server-side-encryption-aws-kms-key-id"] = kmsKeyId;
+  return headers;
+}
+
+function normalizeObjectKey(value, settings = config()) {
+  const key = String(value || "").trim().replace(/\\/g, "/");
+  if (!key || key.endsWith("/") || key.startsWith("/") || key.includes("\0") || key.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw validationError("File key is invalid");
+  }
+  if (!hasAllowedRoot(key, settings.roots)) throw validationError("File is outside the approved S3 locations");
+  return key;
+}
+
+async function putObject(input = {}) {
+  const settings = assertConfigured();
+  const key = normalizeObjectKey(input.key, settings);
+  const body = Buffer.isBuffer(input.body) ? input.body : Buffer.from(input.body || "");
+  if (!body.length) throw validationError("File content is required");
+  if (body.length > settings.maxUploadBytes) {
+    throw Object.assign(new Error(`File exceeds the ${settings.maxUploadMb} MB upload limit`), {
+      status: 413,
+      code: "S3_FILE_TOO_LARGE",
+      expose: true,
+    });
+  }
+  const contentType = textValue(input.contentType || "application/octet-stream", {
+    label: "File content type",
+    required: true,
+    maxLength: 200,
+  }).toLowerCase();
+  const headers = {
+    "Content-Type": contentType,
+    ...encryptionHeaders(),
+  };
+  const result = await fetchS3(settings, "PUT", key, {
+    operation: "put_object",
+    headers,
+    body,
+  });
+  return {
+    key,
+    contentType,
+    sizeBytes: body.length,
+    etag: String(result.response.headers.get("etag") || "").replace(/^"|"$/g, ""),
+  };
+}
+
 async function createUploadUrl(input = {}) {
   const upload = validateUpload(input);
   if (!upload.replace && (await exists(upload.key))) {
     throw Object.assign(new Error("A file with this name already exists. Enable Replace existing file to overwrite it."), { status: 409 });
   }
-  const headers = { "Content-Type": upload.contentType };
-  const encryption = String(process.env.AWS_S3_SERVER_SIDE_ENCRYPTION || "").trim();
-  if (encryption) headers["x-amz-server-side-encryption"] = encryption;
-  const kmsKeyId = String(process.env.AWS_S3_KMS_KEY_ID || "").trim();
-  if (kmsKeyId) headers["x-amz-server-side-encryption-aws-kms-key-id"] = kmsKeyId;
+  const headers = { "Content-Type": upload.contentType, ...encryptionHeaders() };
   return {
     key: upload.key,
     fileName: upload.fileName,
@@ -568,11 +616,7 @@ async function createUploadUrl(input = {}) {
 
 async function createDownloadUrl(input = {}) {
   const settings = assertConfigured();
-  const key = String(input.key || "").trim().replace(/\\/g, "/");
-  if (!key || key.endsWith("/") || key.startsWith("/") || key.split("/").some((part) => part === "..")) {
-    throw validationError("File key is invalid");
-  }
-  if (!hasAllowedRoot(key, settings.roots)) throw validationError("File is outside the approved S3 locations");
+  const key = normalizeObjectKey(input.key, settings);
   let metadata;
   try {
     metadata = await fetchS3(settings, "HEAD", key, { operation: "head_object", suppressNotFoundLog: true });
@@ -610,6 +654,8 @@ module.exports = {
   createFolder,
   createUploadUrl,
   createDownloadUrl,
+  putObject,
+  normalizeObjectKey,
   presignedUrl,
   signedRequest,
   sessionTokenConfigurationError,
