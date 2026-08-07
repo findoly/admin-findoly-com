@@ -328,3 +328,168 @@ test("WhatsApp inbox log errors redact phone numbers and credentials", () => {
   assert.equal(safe.includes("top-secret"), false);
   assert.match(safe, /\[redacted-number\]/);
 });
+
+test("WhatsApp media uses a dedicated private S3 prefix without contact data", () => {
+  const previousPrefix = process.env.AWS_S3_PRIVATE_PREFIX;
+  process.env.AWS_S3_PRIVATE_PREFIX = "private/";
+  try {
+    const inbox = service();
+    const fileName = inbox.safeMediaFileName("Customer quotation (final).pdf", "document", "application/pdf", "message-1");
+    const key = inbox.privateMediaKey("conversation-1", "message-1", fileName);
+    assert.equal(key, "private/whatsapp-inbox/conversation-1/message-1/Customer-quotation--final.pdf");
+    assert.equal(key.includes("9876543210"), false);
+  } finally {
+    if (previousPrefix === undefined) delete process.env.AWS_S3_PRIVATE_PREFIX;
+    else process.env.AWS_S3_PRIVATE_PREFIX = previousPrefix;
+  }
+});
+
+test("WhatsApp media validation rejects unsafe browser content and accepts supported files", () => {
+  const inbox = service();
+  assert.equal(inbox.contentTypeAllowed("image", "image/jpeg", "photo.jpg"), true);
+  assert.equal(inbox.contentTypeAllowed("document", "application/pdf", "quote.pdf"), true);
+  assert.equal(inbox.contentTypeAllowed("document", "text/html", "page.html"), false);
+  assert.equal(inbox.contentTypeAllowed("image", "image/svg+xml", "image.svg"), false);
+});
+
+test("WhatsApp media downloads enforce approved Gupshup hosts and size limits", async () => {
+  const inbox = service();
+  await assert.rejects(
+    () => inbox.downloadMediaBuffer("https://example.com/file.pdf", 1024, async () => new Response("x")),
+    (error) => error.code === "WHATSAPP_MEDIA_URL_NOT_ALLOWED",
+  );
+  const downloaded = await inbox.downloadMediaBuffer(
+    "https://filemanager.gupshup.io/fm/wamedia/app/file-1",
+    1024,
+    async () => new Response(Buffer.from("pdf-data"), {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": "8",
+        "content-disposition": "attachment; filename=quotation.pdf",
+      },
+    }),
+  );
+  assert.equal(downloaded.contentType, "application/pdf");
+  assert.equal(downloaded.fileName, "quotation.pdf");
+  assert.equal(downloaded.buffer.toString(), "pdf-data");
+});
+
+test("WhatsApp message API presentation never exposes the private S3 key", () => {
+  const inbox = service();
+  const presented = inbox.presentMessage({
+    messageId: "message-1",
+    media: {
+      storageStatus: "stored",
+      s3Key: "private/whatsapp-inbox/conversation-1/message-1/file.pdf",
+      fileName: "file.pdf",
+    },
+  });
+  assert.equal(presented.media.available, true);
+  assert.equal(Object.hasOwn(presented.media, "s3Key"), false);
+});
+
+test("S3 service uploads inbound WhatsApp media server-to-server under the private prefix", async () => {
+  const names = ["AWS_REGION", "AWS_S3_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_S3_PRIVATE_PREFIX"];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const previousFetch = global.fetch;
+  let request = null;
+  try {
+    process.env.AWS_REGION = "ap-south-1";
+    process.env.AWS_S3_BUCKET = "findoly-private-test";
+    process.env.AWS_ACCESS_KEY_ID = "AKIATESTKEY";
+    process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
+    delete process.env.AWS_SESSION_TOKEN;
+    process.env.AWS_S3_PRIVATE_PREFIX = "private/";
+    global.fetch = async (url, options) => {
+      request = { url: String(url), options };
+      return new Response("", { status: 200, headers: { etag: '"etag-1"' } });
+    };
+    const modulePath = require.resolve(path.join(root, "services/storage/s3-service.js"));
+    delete require.cache[modulePath];
+    const storage = require(modulePath);
+    const result = await storage.putObject({
+      key: "private/whatsapp-inbox/conversation-1/message-1/quotation.pdf",
+      body: Buffer.from("pdf-data"),
+      contentType: "application/pdf",
+    });
+    assert.equal(result.sizeBytes, 8);
+    assert.equal(result.etag, "etag-1");
+    assert.equal(request.options.method, "PUT");
+    assert.equal(request.options.headers["Content-Type"], "application/pdf");
+    assert.match(request.options.headers.Authorization, /^AWS4-HMAC-SHA256 /);
+    assert.equal(Buffer.from(request.options.body).toString(), "pdf-data");
+  } finally {
+    global.fetch = previousFetch;
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test("inbound media storage downloads from Gupshup, uploads privately and marks the message stored", async () => {
+  const previousFetch = global.fetch;
+  const state = {
+    messageId: "message-1",
+    conversationId: "conversation-1",
+    messageType: "document",
+    media: { storageStatus: "pending", s3Key: "" },
+  };
+  let uploaded = null;
+  try {
+    global.fetch = async () => new Response(Buffer.from("pdf-data"), {
+      status: 200,
+      headers: { "content-type": "application/pdf", "content-length": "8" },
+    });
+    const inbox = loadWithStubs("services/communication/whatsapp-inbox-service.js", {
+      "../../models/WhatsAppConversation": {},
+      "../../models/WhatsAppMessage": {
+        findOne() { return { lean: async () => ({ ...state, media: { ...state.media } }) }; },
+        findOneAndUpdate(_query, update) {
+          Object.entries(update.$set || {}).forEach(([key, value]) => {
+            if (key.startsWith("media.")) state.media[key.slice(6)] = value;
+            else state[key] = value;
+          });
+          return { lean: async () => ({ ...state, media: { ...state.media } }) };
+        },
+        async updateOne(_query, update) {
+          Object.entries(update.$set || {}).forEach(([key, value]) => {
+            if (key.startsWith("media.")) state.media[key.slice(6)] = value;
+            else state[key] = value;
+          });
+          return { modifiedCount: 1 };
+        },
+      },
+      "../../models/Communication": {},
+      "../../models/Enquiry": {},
+      "./communication-service": {},
+      "../storage/s3-service": {
+        config() { return { configured: true, privatePrefix: "private/", maxUploadBytes: 20 * 1024 * 1024 }; },
+        async putObject(input) {
+          uploaded = input;
+          return { key: input.key, contentType: input.contentType, sizeBytes: input.body.length };
+        },
+      },
+      "../../utils/uuid": () => "generated-id",
+      "../../utils/pagination": { cursorPaginate() {}, getPagination() { return { limit: 20, cursor: "" }; } },
+    });
+    const result = await inbox.storeInboundMedia({
+      messageId: "message-1",
+      media: {
+        messageType: "document",
+        sourceUrl: "https://filemanager.gupshup.io/fm/wamedia/app/file-1",
+        fileName: "quotation.pdf",
+        contentType: "application/pdf",
+        caption: "Quotation",
+      },
+    });
+    assert.equal(result.stored, true);
+    assert.equal(uploaded.key, "private/whatsapp-inbox/conversation-1/message-1/quotation.pdf");
+    assert.equal(uploaded.body.toString(), "pdf-data");
+    assert.equal(state.media.storageStatus, "stored");
+    assert.equal(state.media.s3Key, uploaded.key);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});

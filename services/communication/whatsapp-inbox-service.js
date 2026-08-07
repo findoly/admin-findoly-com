@@ -1,11 +1,13 @@
 "use strict";
 
 const crypto = require("crypto");
+const path = require("path");
 const WhatsAppConversation = require("../../models/WhatsAppConversation");
 const WhatsAppMessage = require("../../models/WhatsAppMessage");
 const Communication = require("../../models/Communication");
 const Enquiry = require("../../models/Enquiry");
 const communicationService = require("./communication-service");
+const s3Service = require("../storage/s3-service");
 const uuid = require("../../utils/uuid");
 const { normalizeMobile } = require("../../utils/mobile");
 const { cursorPaginate, getPagination } = require("../../utils/pagination");
@@ -45,6 +47,266 @@ const PROVIDER_PURPOSES = new Set([
   "whatsapp_unlock_result",
   "whatsapp_delivery_event_unmatched",
 ]);
+
+const MEDIA_MESSAGE_TYPES = new Set(["image", "document", "audio", "video", "sticker"]);
+const MEDIA_PROCESSING_STALE_MS = 5 * 60 * 1000;
+const MEDIA_DOWNLOAD_TIMEOUT_MS = Math.min(
+  60_000,
+  Math.max(3_000, Number(process.env.GUPSHUP_MEDIA_DOWNLOAD_TIMEOUT_MS || 20_000) || 20_000),
+);
+const MEDIA_REDIRECT_LIMIT = 3;
+const DEFAULT_MEDIA_HOST_SUFFIXES = [".gupshup.io"];
+const CONTENT_TYPE_EXTENSIONS = Object.freeze({
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "application/pdf": ".pdf",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "text/csv": ".csv",
+  "text/plain": ".txt",
+  "application/zip": ".zip",
+  "application/x-zip-compressed": ".zip",
+  "audio/mpeg": ".mp3",
+  "audio/mp4": ".m4a",
+  "audio/ogg": ".ogg",
+  "audio/opus": ".opus",
+  "audio/wav": ".wav",
+  "audio/x-wav": ".wav",
+  "video/mp4": ".mp4",
+  "video/3gpp": ".3gp",
+  "video/quicktime": ".mov",
+});
+
+function mediaError(message, code, status = 400) {
+  return Object.assign(new Error(message), { code, status, expose: true });
+}
+
+function configuredMediaHosts() {
+  return String(process.env.GUPSHUP_MEDIA_ALLOWED_HOSTS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAllowedMediaHost(hostname) {
+  const host = String(hostname || "").trim().toLowerCase().replace(/\.$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost")) return false;
+  const configured = configuredMediaHosts();
+  if (configured.some((allowed) => host === allowed || (allowed.startsWith(".") && host.endsWith(allowed)))) return true;
+  return DEFAULT_MEDIA_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+function validatedMediaUrl(value) {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch (error) {
+    throw mediaError("WhatsApp media URL is invalid", "WHATSAPP_MEDIA_URL_INVALID");
+  }
+  if (url.protocol !== "https:" || url.username || url.password || !isAllowedMediaHost(url.hostname)) {
+    throw mediaError("WhatsApp media URL is not from an approved Gupshup host", "WHATSAPP_MEDIA_URL_NOT_ALLOWED");
+  }
+  url.hash = "";
+  return url;
+}
+
+function normalizeContentType(value) {
+  return String(value || "").split(";", 1)[0].trim().toLowerCase();
+}
+
+function contentTypeAllowed(messageType, contentType, fileName = "") {
+  const mime = normalizeContentType(contentType);
+  const extension = path.extname(String(fileName || "")).toLowerCase();
+  if (messageType === "image") return ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime);
+  if (messageType === "sticker") return ["image/webp", "image/png"].includes(mime);
+  if (messageType === "audio") return mime.startsWith("audio/");
+  if (messageType === "video") return mime.startsWith("video/");
+  if (messageType !== "document") return false;
+  if ([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/csv",
+    "text/plain",
+    "application/zip",
+    "application/x-zip-compressed",
+  ].includes(mime)) return true;
+  return mime === "application/octet-stream" && [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".zip"].includes(extension);
+}
+
+function fallbackExtension(messageType, contentType) {
+  const mime = normalizeContentType(contentType);
+  if (CONTENT_TYPE_EXTENSIONS[mime]) return CONTENT_TYPE_EXTENSIONS[mime];
+  return { image: ".jpg", sticker: ".webp", audio: ".audio", video: ".mp4", document: ".bin" }[messageType] || ".bin";
+}
+
+function safeMediaFileName(value, messageType, contentType, messageId = "media") {
+  const raw = path.basename(String(value || "").replace(/\0/g, "").replace(/[\r\n]/g, " ")).trim();
+  const rawExtension = path.extname(raw).toLowerCase();
+  const mime = normalizeContentType(contentType);
+  const octetStreamExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".zip"];
+  const extension = CONTENT_TYPE_EXTENSIONS[mime]
+    || (mime === "application/octet-stream" && octetStreamExtensions.includes(rawExtension) ? rawExtension : "")
+    || fallbackExtension(messageType, contentType);
+  const stem = path.basename(raw || `${messageType}-${messageId}`, path.extname(raw))
+    .normalize("NFKC")
+    .replace(/[^A-Za-z0-9._ -]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 180) || `${messageType}-${String(messageId || "media").slice(0, 40)}`;
+  return `${stem}${extension}`.slice(0, 240);
+}
+
+function validateInboundMedia(media = {}) {
+  const messageType = normalizeMessageType(media.messageType || media.type);
+  if (!MEDIA_MESSAGE_TYPES.has(messageType)) return null;
+  const sourceUrl = String(media.sourceUrl || media.url || "").trim();
+  const contentType = normalizeContentType(media.contentType);
+  const fileName = String(media.fileName || media.name || "").trim().slice(0, 255);
+  const caption = String(media.caption || "").trim().slice(0, 4096);
+  if (!sourceUrl) {
+    return { messageType, sourceUrl: "", contentType, fileName, caption, missingUrl: true, invalidUrl: false };
+  }
+  try {
+    validatedMediaUrl(sourceUrl);
+    return { messageType, sourceUrl, contentType, fileName, caption, missingUrl: false, invalidUrl: false };
+  } catch (error) {
+    return {
+      messageType,
+      sourceUrl: "",
+      contentType,
+      fileName,
+      caption,
+      missingUrl: false,
+      invalidUrl: true,
+      urlErrorCode: String(error.code || "WHATSAPP_MEDIA_URL_INVALID"),
+    };
+  }
+}
+
+function initialMediaDocument(media) {
+  if (!media) return undefined;
+  return {
+    storageStatus: media.missingUrl || media.invalidUrl ? "failed" : "pending",
+    source: "gupshup",
+    fileName: safeMediaFileName(media.fileName, media.messageType, media.contentType),
+    contentType: media.contentType,
+    sizeBytes: 0,
+    caption: media.caption,
+    s3Key: "",
+    errorCode: media.missingUrl
+      ? "WHATSAPP_MEDIA_URL_MISSING"
+      : media.invalidUrl
+        ? media.urlErrorCode || "WHATSAPP_MEDIA_URL_INVALID"
+        : "",
+    failureReason: media.missingUrl
+      ? "Media URL was not included in the Gupshup webhook"
+      : media.invalidUrl
+        ? "Media URL was not from an approved Gupshup host"
+        : "",
+    attemptedAt: null,
+    storedAt: null,
+  };
+}
+
+function privateMediaKey(conversationId, messageId, fileName) {
+  const settings = s3Service.config();
+  const safeConversation = String(conversationId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 120);
+  const safeMessage = String(messageId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 120);
+  if (!safeConversation || !safeMessage) throw mediaError("WhatsApp media storage identity is invalid", "WHATSAPP_MEDIA_ID_INVALID");
+  return `${settings.privatePrefix}whatsapp-inbox/${safeConversation}/${safeMessage}/${fileName}`;
+}
+
+function contentDispositionFileName(value) {
+  const header = String(value || "");
+  const utf8 = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) {
+    try { return decodeURIComponent(utf8[1]); } catch (error) { return utf8[1]; }
+  }
+  const basic = header.match(/filename="?([^";]+)"?/i);
+  return basic ? basic[1].trim() : "";
+}
+
+async function downloadMediaBuffer(sourceUrl, maxBytes, fetchImpl = global.fetch) {
+  if (typeof fetchImpl !== "function") throw mediaError("Media download is unavailable", "WHATSAPP_MEDIA_DOWNLOAD_UNAVAILABLE", 503);
+  let url = validatedMediaUrl(sourceUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MEDIA_DOWNLOAD_TIMEOUT_MS);
+  try {
+    for (let redirect = 0; redirect <= MEDIA_REDIRECT_LIMIT; redirect += 1) {
+      const response = await fetchImpl(url.toString(), {
+        method: "GET",
+        redirect: "manual",
+        headers: { Accept: "*/*", "User-Agent": "Findoly-CRM-WhatsApp-Media/1.0" },
+        signal: controller.signal,
+      });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get("location");
+        if (!location || redirect === MEDIA_REDIRECT_LIMIT) {
+          throw mediaError("WhatsApp media download redirected too many times", "WHATSAPP_MEDIA_REDIRECT_FAILED", 502);
+        }
+        url = validatedMediaUrl(new URL(location, url).toString());
+        continue;
+      }
+      if (!response.ok) {
+        throw mediaError(`WhatsApp media download failed with status ${response.status}`, "WHATSAPP_MEDIA_DOWNLOAD_FAILED", 502);
+      }
+      const declaredSize = Number(response.headers.get("content-length") || 0);
+      if (declaredSize > maxBytes) throw mediaError("WhatsApp media exceeds the configured upload limit", "WHATSAPP_MEDIA_TOO_LARGE", 413);
+      const chunks = [];
+      let total = 0;
+      if (response.body?.getReader) {
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = Buffer.from(value);
+          total += chunk.length;
+          if (total > maxBytes) {
+            await reader.cancel().catch(() => {});
+            throw mediaError("WhatsApp media exceeds the configured upload limit", "WHATSAPP_MEDIA_TOO_LARGE", 413);
+          }
+          chunks.push(chunk);
+        }
+      } else {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        total = buffer.length;
+        if (total > maxBytes) throw mediaError("WhatsApp media exceeds the configured upload limit", "WHATSAPP_MEDIA_TOO_LARGE", 413);
+        chunks.push(buffer);
+      }
+      if (!total) throw mediaError("WhatsApp media file is empty", "WHATSAPP_MEDIA_EMPTY", 422);
+      return {
+        buffer: Buffer.concat(chunks, total),
+        contentType: normalizeContentType(response.headers.get("content-type")),
+        fileName: contentDispositionFileName(response.headers.get("content-disposition")),
+        sizeBytes: total,
+      };
+    }
+    throw mediaError("WhatsApp media download failed", "WHATSAPP_MEDIA_DOWNLOAD_FAILED", 502);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw mediaError("WhatsApp media download timed out", "WHATSAPP_MEDIA_DOWNLOAD_TIMEOUT", 504);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function presentMessage(message = {}) {
+  const source = message?.toObject ? message.toObject() : { ...message };
+  if (!source.media) return source;
+  const media = { ...source.media };
+  delete media.s3Key;
+  media.available = media.storageStatus === "stored";
+  return { ...source, media };
+}
 
 function safeContact(value) {
   const normalized = normalizeMobile(value);
@@ -318,6 +580,7 @@ async function recordCommunication(communication, options = {}) {
     idempotencyKey: options.idempotencyKey,
   });
   const historicalRead = options.markUnread === false && source.direction === "inbound";
+  const media = options.media ? validateInboundMedia(options.media) : null;
   const messageDocument = {
     messageId: uuid(),
     conversationId: conversation.conversationId,
@@ -339,6 +602,7 @@ async function recordCommunication(communication, options = {}) {
     readAt: source.readAt || null,
     failedAt: source.failedAt || null,
     crmReadAt: historicalRead ? new Date() : null,
+    ...(media ? { media: initialMediaDocument(media) } : {}),
     metadata: {
       purpose: String(source.purpose || ""),
       trigger: String(source.trigger || ""),
@@ -349,6 +613,14 @@ async function recordCommunication(communication, options = {}) {
     updatedAt: new Date(),
   };
   const result = await insertMessageOnce(messageDocument);
+  if (!result.inserted && result.message && media && (!result.message.media || result.message.media.storageStatus === "none")) {
+    const mediaFields = initialMediaDocument(media);
+    await WhatsAppMessage.updateOne(
+      { messageId: result.message.messageId },
+      { $set: { media: mediaFields, updatedAt: new Date() } },
+    );
+    result.message = { ...result.message, media: mediaFields };
+  }
   if (!result.inserted && result.message && (messageDocument.employeeId || messageDocument.employeeName)) {
     const employeeFields = {};
     if (messageDocument.employeeId && !result.message.employeeId) employeeFields.employeeId = messageDocument.employeeId;
@@ -374,14 +646,190 @@ async function recordCommunication(communication, options = {}) {
       });
     }
   }
-  return { ...result, conversationId: conversation.conversationId, skipped: false };
+  return {
+    ...result,
+    message: result.message ? presentMessage(result.message) : result.message,
+    conversationId: conversation.conversationId,
+    skipped: false,
+  };
 }
 
-async function recordInbound({ communication, messageType = "text", occurredAt = new Date() }) {
+async function claimMediaProcessing(messageId) {
+  const staleBefore = new Date(Date.now() - MEDIA_PROCESSING_STALE_MS);
+  return WhatsAppMessage.findOneAndUpdate(
+    {
+      messageId,
+      $or: [
+        { "media.storageStatus": { $in: ["pending", "failed", "none"] } },
+        { "media.storageStatus": { $exists: false } },
+        { "media.storageStatus": "processing", "media.attemptedAt": { $lt: staleBefore } },
+      ],
+    },
+    {
+      $set: {
+        "media.storageStatus": "processing",
+        "media.attemptedAt": new Date(),
+        "media.errorCode": "",
+        "media.failureReason": "",
+        updatedAt: new Date(),
+      },
+    },
+    { new: true },
+  ).lean();
+}
+
+async function storeInboundMedia({ messageId, media }) {
+  const normalized = validateInboundMedia(media);
+  if (!normalized || normalized.missingUrl || normalized.invalidUrl) {
+    return {
+      stored: false,
+      skipped: true,
+      reason: normalized?.invalidUrl ? "media_url_invalid" : "media_url_missing",
+      errorCode: normalized?.urlErrorCode || (normalized?.missingUrl ? "WHATSAPP_MEDIA_URL_MISSING" : ""),
+    };
+  }
+  const existing = await WhatsAppMessage.findOne({ messageId }).lean();
+  if (!existing) throw Object.assign(new Error("WhatsApp message not found"), { status: 404, code: "WHATSAPP_MESSAGE_NOT_FOUND" });
+  if (existing.media?.storageStatus === "stored" && existing.media?.s3Key) {
+    return { stored: true, skipped: true, message: presentMessage(existing) };
+  }
+  const claimed = await claimMediaProcessing(messageId);
+  if (!claimed) return { stored: false, skipped: true, reason: "media_processing_in_progress" };
+
+  try {
+    const settings = s3Service.config();
+    if (!settings.configured) throw mediaError("Private S3 storage is not configured", "S3_NOT_CONFIGURED", 503);
+    const downloaded = await downloadMediaBuffer(normalized.sourceUrl, settings.maxUploadBytes);
+    const resolvedContentType = downloaded.contentType && downloaded.contentType !== "application/octet-stream"
+      ? downloaded.contentType
+      : normalized.contentType || downloaded.contentType || "application/octet-stream";
+    const candidateName = normalized.fileName || downloaded.fileName || "";
+    if (!contentTypeAllowed(normalized.messageType, resolvedContentType, candidateName)) {
+      throw mediaError("WhatsApp media file type is not supported", "WHATSAPP_MEDIA_TYPE_UNSUPPORTED", 415);
+    }
+    const fileName = safeMediaFileName(candidateName, normalized.messageType, resolvedContentType, messageId);
+    const key = privateMediaKey(claimed.conversationId, messageId, fileName);
+    const uploaded = await s3Service.putObject({
+      key,
+      body: downloaded.buffer,
+      contentType: resolvedContentType,
+    });
+    const storedAt = new Date();
+    const fields = {
+      "media.storageStatus": "stored",
+      "media.source": "gupshup",
+      "media.fileName": fileName,
+      "media.contentType": uploaded.contentType,
+      "media.sizeBytes": uploaded.sizeBytes,
+      "media.caption": normalized.caption,
+      "media.s3Key": uploaded.key,
+      "media.errorCode": "",
+      "media.failureReason": "",
+      "media.storedAt": storedAt,
+      updatedAt: storedAt,
+    };
+    await WhatsAppMessage.updateOne({ messageId }, { $set: fields });
+    const updated = await WhatsAppMessage.findOne({ messageId }).lean();
+    console.info({
+      event: "whatsapp_inbox_media_stored",
+      messageId,
+      conversationId: claimed.conversationId || "",
+      messageType: normalized.messageType,
+      contentType: uploaded.contentType,
+      sizeBytes: uploaded.sizeBytes,
+    });
+    return {
+      stored: true,
+      message: presentMessage(updated || {
+        ...claimed,
+        media: {
+          ...claimed.media,
+          storageStatus: "stored",
+          source: "gupshup",
+          fileName,
+          contentType: uploaded.contentType,
+          sizeBytes: uploaded.sizeBytes,
+          caption: normalized.caption,
+          s3Key: uploaded.key,
+          errorCode: "",
+          failureReason: "",
+          storedAt,
+        },
+      }),
+    };
+  } catch (error) {
+    const code = String(error.code || "WHATSAPP_MEDIA_STORAGE_FAILED").slice(0, 120);
+    const failureReason = safeLogMessage(error.message, "WhatsApp media could not be saved").slice(0, 1000);
+    await WhatsAppMessage.updateOne(
+      { messageId },
+      {
+        $set: {
+          "media.storageStatus": "failed",
+          "media.errorCode": code,
+          "media.failureReason": failureReason,
+          updatedAt: new Date(),
+        },
+      },
+    ).catch(() => {});
+    console.error({
+      event: "whatsapp_inbox_media_storage_failed",
+      messageId,
+      conversationId: claimed.conversationId || "",
+      messageType: normalized.messageType,
+      code,
+      message: failureReason,
+    });
+    return { stored: false, errorCode: code, failureReason };
+  }
+}
+
+
+const RETRYABLE_MEDIA_CODES = new Set([
+  "WHATSAPP_MEDIA_DOWNLOAD_FAILED",
+  "WHATSAPP_MEDIA_DOWNLOAD_TIMEOUT",
+  "WHATSAPP_MEDIA_STORAGE_FAILED",
+  "S3_NOT_CONFIGURED",
+  "S3_REQUEST_FAILED",
+  "S3_TOKEN_EXPIRED",
+]);
+
+function queueInboundMediaStorage({ messageId, media }) {
+  const run = async (attempt = 1) => {
+    const result = await storeInboundMedia({ messageId, media });
+    if (result.stored || attempt >= 2 || !RETRYABLE_MEDIA_CODES.has(result.errorCode)) return;
+    const timer = setTimeout(() => { void run(attempt + 1); }, 30_000);
+    if (typeof timer.unref === "function") timer.unref();
+  };
+  const timer = setTimeout(() => { void run(1); }, 0);
+  if (typeof timer.unref === "function") timer.unref();
+}
+
+async function getMessageMedia(messageId, disposition = "attachment") {
+  const normalizedId = textValue(messageId, {
+    label: "WhatsApp message ID",
+    required: true,
+    maxLength: 120,
+  });
+  const message = await WhatsAppMessage.findOne({ messageId: normalizedId })
+    .select("messageId conversationId messageType media")
+    .maxTimeMS(QUERY_MAX_TIME_MS)
+    .lean();
+  if (!message) throw Object.assign(new Error("WhatsApp message not found"), { status: 404 });
+  if (message.media?.storageStatus !== "stored" || !message.media?.s3Key) {
+    throw Object.assign(new Error("WhatsApp media is not available"), { status: 404, code: "WHATSAPP_MEDIA_NOT_AVAILABLE", expose: true });
+  }
+  return s3Service.createDownloadUrl({
+    key: message.media.s3Key,
+    disposition: String(disposition || "").toLowerCase() === "inline" ? "inline" : "attachment",
+  });
+}
+
+async function recordInbound({ communication, messageType = "text", occurredAt = new Date(), media = null }) {
   const result = await recordCommunication(communication, {
     messageType,
     occurredAt,
     markUnread: true,
+    media,
   });
   if (!result.skipped) {
     console.info({
@@ -390,7 +838,14 @@ async function recordInbound({ communication, messageType = "text", occurredAt =
       conversationId: result.conversationId || "",
       contact: maskedContact(communication?.recipientContact),
       inserted: result.inserted === true,
+      messageType: normalizeMessageType(messageType),
+      mediaExpected: Boolean(media),
     });
+    if (media && result.message?.messageId) {
+      queueInboundMediaStorage({ messageId: result.message.messageId, media });
+      result.mediaStored = result.message.media?.storageStatus === "stored";
+      result.mediaQueued = !result.mediaStored;
+    }
   }
   return result;
 }
@@ -476,7 +931,7 @@ async function listMessages(conversationId, filters = {}) {
     cursor,
     maxTimeMS: QUERY_MAX_TIME_MS,
   });
-  result.data = result.data.reverse();
+  result.data = result.data.reverse().map(presentMessage);
   return result;
 }
 
@@ -697,6 +1152,12 @@ module.exports = {
   safeContact,
   normalizeMessageType,
   previewFor,
+  validateInboundMedia,
+  safeMediaFileName,
+  privateMediaKey,
+  contentTypeAllowed,
+  downloadMediaBuffer,
+  presentMessage,
   resolvedStatus,
   isCustomerCommunication,
   matchingEnquiries,
@@ -711,6 +1172,8 @@ module.exports = {
   markUnread,
   updateConversationStatus,
   reply,
+  storeInboundMedia,
+  getMessageMedia,
   syncDeliveryStatus,
   safeLogMessage,
 };

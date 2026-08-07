@@ -48,6 +48,17 @@ async function reply(req, res, next) {
   }
 }
 
+
+async function getMedia(req, res, next) {
+  try {
+    const media = await service.getMessageMedia(req.params.messageId, req.query?.disposition);
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    res.redirect(302, media.url);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function markRead(req, res, next) {
   try {
     res.json({ success: true, data: await service.markRead(req.params.conversationId, actor(req)) });
@@ -84,6 +95,7 @@ module.exports = {
   getConversation,
   listMessages,
   reply,
+  getMedia,
   markRead,
   markUnread,
   updateStatus,

@@ -39,6 +39,19 @@ const extractWhatsAppMessageType = function (message) {
   return whatsappInboxService.normalizeMessageType(message?.type || content?.type || "text");
 };
 
+const extractWhatsAppMedia = function (message) {
+  const messageType = extractWhatsAppMessageType(message);
+  if (!["image", "document", "audio", "video", "sticker"].includes(messageType)) return null;
+  const content = message?.payload || {};
+  return whatsappInboxService.validateInboundMedia({
+    messageType,
+    sourceUrl: content.url || content.link || content.mediaUrl || "",
+    fileName: content.name || content.fileName || content.filename || "",
+    contentType: content["content-type"] || content.contentType || content.mimeType || content.mime_type || "",
+    caption: content.caption || "",
+  });
+};
+
 const syncInboxDeliverySafely = async function (input) {
   try {
     return await whatsappInboxService.syncDeliveryStatus(input);
@@ -162,6 +175,8 @@ const processWhatsApp = async function (rawBody, auth = {}) {
     }
     const payload = event.payload || {};
     const occurredAt = whatsappEventAt(event, payload);
+    const messageType = extractWhatsAppMessageType(payload);
+    const media = extractWhatsAppMedia(payload);
     const inbound = await communicationService.createInbound({
       recipientName: payload.sender?.name || "",
       recipientContact: payload.source || payload.sender?.phone || "",
@@ -169,15 +184,24 @@ const processWhatsApp = async function (rawBody, auth = {}) {
       message: extractWhatsAppMessageText(payload),
       metadata: {
         accountType: "customer",
-        whatsappMessageType: extractWhatsAppMessageType(payload),
+        whatsappMessageType: messageType,
+        ...(media ? {
+          whatsappMedia: {
+            fileName: media.fileName || "",
+            contentType: media.contentType || "",
+            caption: media.caption || "",
+            available: Boolean(media.sourceUrl),
+          },
+        } : {}),
       },
       externalResponse: event,
     });
     try {
       await whatsappInboxService.recordInbound({
         communication: inbound,
-        messageType: extractWhatsAppMessageType(payload),
+        messageType,
         occurredAt,
+        media,
       });
     } catch (error) {
       console.error({

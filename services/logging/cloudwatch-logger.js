@@ -9,6 +9,7 @@ const ALGORITHM = "AWS4-HMAC-SHA256";
 const CONTENT_TYPE = "application/x-amz-json-1.1";
 const MAX_EVENT_BYTES = 240 * 1024;
 const MAX_BATCH_BYTES = 1024 * 1024;
+const MAX_MERGED_BATCH_ENTRY_BYTES = 800 * 1024;
 const MAX_BATCH_EVENTS = 10000;
 const EVENT_OVERHEAD_BYTES = 26;
 const SENSITIVE_KEY_PATTERN = /(authorization|cookie|password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|jwt|otp|razorpay|whatsapp|mongodb[_-]?uri|session|credential|body)/i;
@@ -199,9 +200,64 @@ function truncateUtf8(value, maxBytes = MAX_EVENT_BYTES) {
   return `${text.slice(0, low)}${suffix}`;
 }
 
+function safeJsonStringify(value) {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === "bigint" ? entry.toString() : entry,
+  );
+}
+
+function isStructuredLogValue(value) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !Buffer.isBuffer(value) &&
+    !(value instanceof Date) &&
+    !(value instanceof Error),
+  );
+}
+
 function serializeLogMessage({ args }) {
   const values = Array.isArray(args) ? args : [args];
-  return truncateUtf8(util.format(...values));
+  const redactedValues = values.map((entry) => redactForLog(entry));
+  return truncateUtf8(redactString(util.format(...redactedValues)));
+}
+
+function serializeLogEntry({ level, args, timestamp, metadata = {} }) {
+  const values = Array.isArray(args) ? args : [args];
+  const isoTimestamp = new Date(timestamp).toISOString();
+  let entry;
+
+  if (values.length === 1 && isStructuredLogValue(values[0])) {
+    entry = {
+      ...redactForLog(values[0]),
+      timestamp: isoTimestamp,
+      level: normalizeLogLevel(level),
+    };
+  } else {
+    entry = {
+      timestamp: isoTimestamp,
+      level: normalizeLogLevel(level),
+      message: serializeLogMessage({ args: values }),
+    };
+  }
+
+  if (present(metadata.source) && !present(entry.source)) {
+    entry.source = String(metadata.source);
+  }
+  return entry;
+}
+
+function truncateStrings(value, maxBytes) {
+  if (typeof value === "string") return truncateUtf8(value, maxBytes);
+  if (Array.isArray(value)) return value.map((entry) => truncateStrings(entry, maxBytes));
+  if (!value || typeof value !== "object") return value;
+
+  const output = {};
+  for (const [key, entry] of Object.entries(value)) {
+    output[key] = truncateStrings(entry, maxBytes);
+  }
+  return output;
 }
 
 function normalizeLogLevel(value) {
@@ -351,15 +407,23 @@ function createCloudWatchLogger({
     const normalizedLevel = normalizeLogLevel(level);
     if (!shouldCapture(normalizedLevel)) return false;
     const timestamp = now().getTime();
-    const message = serializeLogMessage({
+    const entry = serializeLogEntry({
+      level: normalizedLevel,
       args: Array.isArray(args) ? args : [args],
+      timestamp,
+      metadata,
     });
 
     while (queue.length >= config.maxQueue) {
       queue.shift();
       droppedCount += 1;
     }
-    queue.push({ timestamp, message, streamName: streamNameFor(timestamp) });
+    queue.push({
+      timestamp,
+      entry,
+      estimatedBytes: Buffer.byteLength(safeJsonStringify(entry), "utf8") + EVENT_OVERHEAD_BYTES,
+      streamName: streamNameFor(timestamp),
+    });
     if (queue.length >= config.batchEvents) {
       clearTimer();
       void flush({ drainAll: false });
@@ -477,6 +541,106 @@ function createCloudWatchLogger({
     readyStreams.add(streamName);
   }
 
+  function createBatchEnvelope({
+    entries,
+    batchId,
+    batchSize,
+    part = 1,
+    partCount = 1,
+  }) {
+    return {
+      event: `${safeService}_log_batch`,
+      service: safeService,
+      hostname: safeHost,
+      pid,
+      batchId,
+      batchSize,
+      entryCount: entries.length,
+      part,
+      partCount,
+      startedAt: entries[0]?.timestamp || null,
+      completedAt: entries[entries.length - 1]?.timestamp || null,
+      entries,
+    };
+  }
+
+  function envelopeBytes(entries, batchId, batchSize) {
+    return Buffer.byteLength(
+      safeJsonStringify(createBatchEnvelope({
+        entries,
+        batchId,
+        batchSize,
+        part: MAX_BATCH_EVENTS,
+        partCount: MAX_BATCH_EVENTS,
+      })),
+      "utf8",
+    );
+  }
+
+  function compactEntryToFit(entry, batchId, batchSize) {
+    if (envelopeBytes([entry], batchId, batchSize) <= MAX_EVENT_BYTES) return entry;
+
+    const originalBytes = Buffer.byteLength(safeJsonStringify(entry), "utf8");
+    for (const maxStringBytes of [65536, 16384, 4096, 1024, 256]) {
+      const compacted = {
+        ...truncateStrings(entry, maxStringBytes),
+        entryTruncated: true,
+        originalEntryBytes: originalBytes,
+      };
+      if (envelopeBytes([compacted], batchId, batchSize) <= MAX_EVENT_BYTES) {
+        return compacted;
+      }
+    }
+
+    const fallbackText = entry.message || entry.error?.message || "[oversized log entry]";
+    return {
+      timestamp: entry.timestamp || null,
+      level: entry.level || "info",
+      ...(present(entry.event) ? { event: truncateUtf8(entry.event, 512) } : {}),
+      message: truncateUtf8(fallbackText, 4096),
+      entryTruncated: true,
+      originalEntryBytes: originalBytes,
+    };
+  }
+
+  function mergeBatch(batch) {
+    if (!batch.length) return [];
+    const batchSize = batch.length;
+    const batchId = hash(safeJsonStringify(
+      batch.map(({ timestamp, entry }) => ({
+        timestamp,
+        event: entry.event || "",
+        requestId: entry.requestId || "",
+        message: entry.message || "",
+      })),
+    )).slice(0, 24);
+    const groups = [];
+    let current = [];
+
+    for (const item of batch) {
+      const entry = compactEntryToFit(item.entry, batchId, batchSize);
+      const candidate = [...current, entry];
+      if (current.length && envelopeBytes(candidate, batchId, batchSize) > MAX_EVENT_BYTES) {
+        groups.push(current);
+        current = [entry];
+      } else {
+        current = candidate;
+      }
+    }
+    if (current.length) groups.push(current);
+
+    return groups.map((entries, index) => ({
+      timestamp: Date.parse(entries[0]?.timestamp) || batch[0].timestamp,
+      message: safeJsonStringify(createBatchEnvelope({
+        entries,
+        batchId,
+        batchSize,
+        part: index + 1,
+        partCount: groups.length,
+      })),
+    }));
+  }
+
   function takeBatch(maxEvents = config.batchEvents || 20) {
     const batch = [];
     let bytes = 0;
@@ -488,8 +652,11 @@ function createCloudWatchLogger({
     while (queue.length && batch.length < eventLimit) {
       const candidate = queue[0];
       if (candidate.streamName !== streamName) break;
-      const candidateBytes = Buffer.byteLength(candidate.message, "utf8") + EVENT_OVERHEAD_BYTES;
-      if (batch.length && bytes + candidateBytes > MAX_BATCH_BYTES) break;
+      const candidateBytes = Math.min(
+        Number(candidate.estimatedBytes || 0),
+        MAX_EVENT_BYTES,
+      ) + EVENT_OVERHEAD_BYTES;
+      if (batch.length && bytes + candidateBytes > MAX_MERGED_BATCH_ENTRY_BYTES) break;
       queue.shift();
       batch.push(candidate);
       bytes += candidateBytes;
@@ -510,10 +677,18 @@ function createCloudWatchLogger({
       if (!batch.length) break;
       try {
         await ensureStream(streamName);
+        const logEvents = mergeBatch(batch);
+        const payloadBytes = logEvents.reduce(
+          (total, event) => total + Buffer.byteLength(event.message, "utf8") + EVENT_OVERHEAD_BYTES,
+          0,
+        );
+        if (payloadBytes > MAX_BATCH_BYTES) {
+          throw new Error("Merged CloudWatch batch exceeds the AWS request size limit");
+        }
         await sendAwsRequest("Logs_20140328.PutLogEvents", {
           logGroupName: config.logGroup,
           logStreamName: streamName,
-          logEvents: batch,
+          logEvents,
         });
         sent += batch.length;
         batchesSent += 1;
