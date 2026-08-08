@@ -12,5 +12,6 @@ router.get("/messages/:messageId/media", requirePermission("communications.view"
 router.post("/conversations/:conversationId/read", requirePermission("communications.view"), controller.markRead);
 router.post("/conversations/:conversationId/unread", requirePermission("communications.view"), controller.markUnread);
 router.patch("/conversations/:conversationId/status", requirePermission("communications.view"), controller.updateStatus);
+router.post("/events", requirePermission("communications.view"), controller.recordUiEvent);
 
 module.exports = router;

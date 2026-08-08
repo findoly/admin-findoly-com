@@ -23,6 +23,17 @@ const whatsappMediaSchema = new mongoose.Schema(
   { _id: false, strict: true },
 );
 
+
+const whatsappLocationSchema = new mongoose.Schema(
+  {
+    latitude: { type: Number, default: null, min: -90, max: 90 },
+    longitude: { type: Number, default: null, min: -180, max: 180 },
+    name: { type: String, default: "", maxlength: 200 },
+    address: { type: String, default: "", maxlength: 500 },
+  },
+  { _id: false, strict: true },
+);
+
 const whatsappMessageSchema = new mongoose.Schema(
   {
     messageId: {
@@ -56,6 +67,7 @@ const whatsappMessageSchema = new mongoose.Schema(
     failedAt: { type: Date, default: null },
     crmReadAt: { type: Date, default: null, index: true },
     media: { type: whatsappMediaSchema, default: () => ({}) },
+    location: { type: whatsappLocationSchema, default: null },
     metadata: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
   },
   {

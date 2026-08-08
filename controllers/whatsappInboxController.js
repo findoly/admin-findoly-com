@@ -2,6 +2,16 @@
 
 const service = require("../services/communication/whatsapp-inbox-service");
 
+const UI_EVENTS = new Map([
+  ["message_copied", "whatsapp_inbox_message_copied"],
+  ["location_opened", "whatsapp_inbox_location_opened"],
+  ["location_link_copied", "whatsapp_inbox_location_link_copied"],
+]);
+
+function textId(value, maxLength = 120) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
 function actor(req) {
   return req.admin?.email || req.admin?.mobile || "api";
 }
@@ -90,6 +100,26 @@ async function updateStatus(req, res, next) {
   }
 }
 
+function recordUiEvent(req, res, next) {
+  try {
+    const eventName = UI_EVENTS.get(String(req.body?.event || "").trim());
+    if (!eventName) {
+      const error = Object.assign(new Error("Unsupported WhatsApp Inbox event"), { status: 400, expose: true });
+      throw error;
+    }
+    console.info({
+      event: eventName,
+      requestId: req.requestId || req.id || "",
+      conversationId: textId(req.body?.conversationId),
+      messageId: textId(req.body?.messageId),
+      employeeId: textId(req.admin?.employeeId),
+    });
+    res.status(202).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listConversations,
   getConversation,
@@ -99,4 +129,5 @@ module.exports = {
   markRead,
   markUnread,
   updateStatus,
+  recordUiEvent,
 };

@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const page = require("../controllers/frontendController");
+const employeeGuide = require("../controllers/employeeGuideController");
 const { pageAuth, requirePermission } = require("../middleware/auth");
 
 const protectedPage = (permission) => [pageAuth, requirePermission(permission)];
@@ -7,6 +8,9 @@ const protectedPage = (permission) => [pageAuth, requirePermission(permission)];
 router.get("/login", page.login);
 router.get("/", (req, res) => res.redirect(req.admin ? "/dashboard" : "/login"));
 router.get("/dashboard", ...protectedPage("dashboard.view"), page.dashboard);
+router.get("/employee-guide", pageAuth, employeeGuide.page);
+router.get("/employee-guide/content", pageAuth, employeeGuide.content);
+router.get("/employee-guide/pdf", pageAuth, employeeGuide.pdf);
 router.get("/enquiries", ...protectedPage("requirements.view"), page.enquiries);
 router.get("/requirements", ...protectedPage("requirements.view"), page.enquiries);
 router.get("/enquiries/new", ...protectedPage("requirements.create"), page.enquiryCreate);
@@ -38,7 +42,12 @@ router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followU
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);
 router.get("/communications", ...protectedPage("communications.view"), page.communications);
 router.get("/communications/logs", ...protectedPage("communications.view"), page.communicationLogs);
-router.get("/communications/whatsapp-inbox", ...protectedPage("communications.view"), page.whatsappInbox);
+router.get("/whatsapp-inbox", ...protectedPage("communications.view"), page.whatsappInbox);
+router.get("/communications/whatsapp-inbox", ...protectedPage("communications.view"), (req, res) => {
+  const queryIndex = req.originalUrl.indexOf("?");
+  const query = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : "";
+  res.redirect(302, `/whatsapp-inbox${query}`);
+});
 router.get("/communications/send", ...protectedPage("communications.send"), page.communicationSend);
 router.get("/communications/templates", ...protectedPage("communications.view"), page.communicationTemplates);
 router.get("/communications/templates/new", ...protectedPage("communications.manage"), page.communicationTemplateCreate);
