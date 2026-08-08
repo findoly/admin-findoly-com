@@ -26,6 +26,10 @@ const parseJsonBuffer = function (rawBody, label) {
 
 const extractWhatsAppMessageText = function (message) {
   const content = message?.payload || message || {};
+  const messageType = String(message?.type || content?.type || "").trim().toLowerCase();
+  if (messageType === "location") {
+    return String(content.name || content.location?.name || content.address || content.location?.address || "[location]").slice(0, 10000);
+  }
   if (content.text) return typeof content.text === "string" ? content.text : (content.text.body || "");
   if (content.body) return content.body;
   if (content.title) return content.title;
@@ -49,6 +53,18 @@ const extractWhatsAppMedia = function (message) {
     fileName: content.name || content.fileName || content.filename || "",
     contentType: content["content-type"] || content.contentType || content.mimeType || content.mime_type || "",
     caption: content.caption || "",
+  });
+};
+
+const extractWhatsAppLocation = function (message) {
+  if (extractWhatsAppMessageType(message) !== "location") return null;
+  const content = message?.payload || {};
+  const location = content.location && typeof content.location === "object" ? content.location : content;
+  return whatsappInboxService.normalizeInboundLocation({
+    latitude: location.latitude ?? location.lat,
+    longitude: location.longitude ?? location.lng ?? location.lon,
+    name: location.name || "",
+    address: location.address || "",
   });
 };
 
@@ -177,6 +193,7 @@ const processWhatsApp = async function (rawBody, auth = {}) {
     const occurredAt = whatsappEventAt(event, payload);
     const messageType = extractWhatsAppMessageType(payload);
     const media = extractWhatsAppMedia(payload);
+    const location = extractWhatsAppLocation(payload);
     const inbound = await communicationService.createInbound({
       recipientName: payload.sender?.name || "",
       recipientContact: payload.source || payload.sender?.phone || "",
@@ -193,6 +210,7 @@ const processWhatsApp = async function (rawBody, auth = {}) {
             available: Boolean(media.sourceUrl),
           },
         } : {}),
+        ...(location ? { whatsappLocation: location } : {}),
       },
       externalResponse: event,
     });
@@ -202,6 +220,7 @@ const processWhatsApp = async function (rawBody, auth = {}) {
         messageType,
         occurredAt,
         media,
+        location,
       });
     } catch (error) {
       console.error({
@@ -364,4 +383,5 @@ module.exports = {
   snsCanonicalString,
   extractWhatsAppMessageText,
   extractWhatsAppMessageType,
+  extractWhatsAppLocation,
 };

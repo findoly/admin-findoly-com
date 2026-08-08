@@ -50,7 +50,6 @@
             </button>
             <ul id="communicationCenterSubmenu" class="nav nav-group-sub crm-sidebar-submenu" x-show="communicationMenuOpen || pathIs('/communications')" x-cloak>
               <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications" class="nav-link" :class="{active:location.pathname === '/communications'}" @click="sidebarOpen=false"><span>Overview</span></a></li><% } %>
-              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/whatsapp-inbox" class="nav-link" :class="{active:pathIs('/communications/whatsapp-inbox')}" @click="sidebarOpen=false"><span>WhatsApp Inbox</span></a></li><% } %>
               <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/logs" class="nav-link" :class="{active:pathIs('/communications/logs') || location.pathname === '/communications/new' || /^\/communications\/[^/]+\/edit$/.test(location.pathname)}" @click="sidebarOpen=false"><span>Message logs</span></a></li><% } %>
               <% if (canAccess('communications.send')) { %><li class="nav-item"><a href="/communications/send" class="nav-link" :class="{active:pathIs('/communications/send')}" @click="sidebarOpen=false"><span>Send message</span></a></li><% } %>
               <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/templates" class="nav-link" :class="{active:pathIs('/communications/templates')}" @click="sidebarOpen=false"><span>Manage templates</span></a></li><% } %>
@@ -60,6 +59,8 @@
             </ul>
           </li>
         <% } %>
+        <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/whatsapp-inbox" target="_blank" rel="noopener" title="Open WhatsApp Inbox in a new tab" class="nav-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg><span>WhatsApp Inbox</span><span class="crm-sidebar-external" aria-hidden="true">↗</span></a></li><% } %>
+
         <% if (canAccess('billing.view')) { %><li class="nav-item"><a href="/billing" title="Billing" class="nav-link" :class="{active:location.pathname==='/billing' || pathIs('/billing/new')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Billing</span></a></li><li class="nav-item"><a href="/billing/provider-subscriptions" title="Provider subscriptions" class="nav-link" :class="{active:pathIs('/billing/provider-subscriptions')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16M8 14h4"/></svg><span>Provider subscriptions</span></a></li><% } %>
         <% if (canAccess('reports.view')) { %><li class="nav-item"><a href="/reports" title="Reports" class="nav-link" :class="{active:pathIs('/reports')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg><span>Reports</span></a></li><% } %>
 
@@ -67,10 +68,13 @@
         <% if (canAccess('storage.view')) { %><li class="nav-item"><a href="/storage" title="File Manager" class="nav-link" :class="{active:pathIs('/storage')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"/><path d="M8 11h8M8 15h5"/></svg><span>File Manager</span></a></li><% } %>
         <% if (canAccess('employees.view')) { %><li class="nav-item"><a href="/employees" title="Employees" class="nav-link" :class="{active:pathIs('/employees')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M14 20a4 4 0 0 1 7 0"/></svg><span>Employees</span></a></li><% } %>
         <% if (canAccess('roles.view')) { %><li class="nav-item"><a href="/roles" title="Roles and permissions" class="nav-link" :class="{active:pathIs('/roles')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>Roles &amp; permissions</span></a></li><% } %>
+
+        <li class="nav-item-header"><span>Help &amp; Training</span></li>
+        <li class="nav-item"><a href="/employee-guide" title="Employee Guide" class="nav-link" :class="{active:pathIs('/employee-guide')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5Z"/><path d="M5 4.5v17M9 7h7M9 11h7M9 15h4"/></svg><span>Employee Guide</span></a></li>
       </ul>
     </div>
 
-    <div class="crm-sidebar-foot"><div class="crm-sidebar-support"><span class="crm-sidebar-support-icon">?</span><div><strong>Need help?</strong><small>Check platform setup</small></div></div></div>
+    <div class="crm-sidebar-foot"><a href="/employee-guide" class="crm-sidebar-support text-decoration-none" @click="sidebarOpen=false"><span class="crm-sidebar-support-icon">?</span><div><strong>Need help?</strong><small>Open employee guide</small></div></a></div>
   </div>
 </div>
 <div class="crm-sidebar-overlay" x-show="sidebarOpen" x-cloak x-transition.opacity @click="sidebarOpen=false" aria-hidden="true"></div>

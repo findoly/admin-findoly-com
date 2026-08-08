@@ -12,7 +12,7 @@ test("WhatsApp Inbox is a permission-protected CRM page and API", () => {
   const frontendRoutes = source("routes/frontend.js");
   const mainRoutes = source("routes/main.js");
   const inboxRoutes = source("routes/whatsapp-inbox.js");
-  assert.match(frontendRoutes, /communications\/whatsapp-inbox.*communications\.view/);
+  assert.match(frontendRoutes, /whatsapp-inbox.*communications\.view/);
   assert.match(mainRoutes, /communication\/whatsapp-inbox/);
   assert.match(inboxRoutes, /communications\.view/);
   assert.match(inboxRoutes, /communications\.send/);
@@ -23,7 +23,7 @@ test("WhatsApp Inbox is a permission-protected CRM page and API", () => {
 });
 
 test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply composer", () => {
-  const view = source("views/communication/whatsapp-inbox.ejs");
+  const view = source("views/whatsapp-inbox/index.ejs");
   const css = source("public/css/app.css");
   const sidebar = source("views/partials/sidebar.ejs");
   assert.match(view, /Conversations/);
@@ -34,7 +34,7 @@ test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply comp
   assert.match(view, /upsertThreadMessage\(body\.data\.message\)/);
   assert.match(view, /Message sent\. Chat history is syncing/);
   assert.match(view, /threadError/);
-  assert.match(view, /mediaUrl\(message, 'inline'\)/);
+  assert.match(view, /mediaUrl\(item\.message, 'inline'\)/);
   assert.match(view, /Download audio/);
   assert.match(view, /Media is being saved securely/);
   assert.match(view, /<video controls/);
@@ -43,7 +43,7 @@ test("WhatsApp Inbox UI includes shared list, thread, mobile flow and reply comp
   assert.match(css, /\.crm-whatsapp-inbox/);
   assert.match(css, /\.crm-wa-media-document/);
   assert.match(css, /@media \(max-width: 991\.98px\)/);
-  assert.match(sidebar, /WhatsApp Inbox/);
+  assert.match(sidebar, /href="\/whatsapp-inbox" target="_blank"/);
 });
 
 test("persistent inbox collections have idempotency and scalable list indexes", () => {
@@ -70,4 +70,15 @@ test("existing Communication log TTL remains unchanged and migration is idempote
   assert.match(migration, /alreadyImported/);
   assert.match(migration, /markUnread: false/);
   assert.match(packageJson, /migrate:whatsapp-inbox/);
+});
+
+
+test("WhatsApp media and location cards are contained inside message bubbles", () => {
+  const view = fs.readFileSync(path.join(root, "views/whatsapp-inbox/index.ejs"), "utf8");
+  const css = fs.readFileSync(path.join(root, "public/css/app.css"), "utf8");
+  assert.match(view, /Open in Maps/);
+  assert.match(view, /locationMapsUrl\(message\)/);
+  assert.match(css, /\.crm-wa-media \{[\s\S]*max-width: 100%;[\s\S]*min-width: 0;/);
+  assert.match(css, /\.crm-wa-location-card \{[\s\S]*max-width: 100%;/);
+  assert.match(css, /max-height: min\(22rem, 55vh\)/);
 });

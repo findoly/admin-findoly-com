@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper"><div class="content-inner">
+        <div class="page-header page-header-light crm-page-header">
+          <div class="page-header-content crm-page-heading">
+            <div>
+              <div class="crm-page-eyebrow">Help &amp; Training</div>
+              <h1 class="page-title mb-1"><%= title %></h1>
+              <p class="crm-page-subtitle mb-0">Use the internal guide for onboarding, daily workflows, security rules, and operational support.</p>
+            </div>
+          </div>
+        </div>
+        <div class="content">
+          <div class="crm-guide-toolbar">
+            <p>Internal use only. Customer and provider information in the guide is masked.</p>
+            <div class="crm-guide-actions">
+              <a class="btn btn-light" href="/employee-guide/content" target="_blank" rel="noopener">Open full screen</a>
+              <a class="btn btn-primary" href="/employee-guide/pdf">Download PDF</a>
+            </div>
+          </div>
+          <div class="crm-guide-frame-wrap">
+            <iframe class="crm-guide-frame" src="/employee-guide/content" title="Findoly CRM Employee Guide" loading="eager"></iframe>
+          </div>
+        </div>
+        <%- include('../partials/footer') %>
+      </div></div>
+    </div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

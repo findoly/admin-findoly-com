@@ -160,3 +160,39 @@ test("inbound Gupshup media is passed to private inbox storage without exposing 
   assert.equal(communicationInput.metadata.whatsappMedia.fileName, "quotation.pdf");
   assert.equal(Object.hasOwn(communicationInput.metadata.whatsappMedia, "sourceUrl"), false);
 });
+
+
+test("inbound Gupshup locations are normalized and passed to the inbox", async () => {
+  let inboundInput = null;
+  let communicationInput = null;
+  const stubs = baseStubs({
+    "./communication-service": {
+      async createInbound(input) { communicationInput = input; return { communicationId: "location-1", ...input, channel: "whatsapp", direction: "inbound", status: "received" }; },
+      async updateDeliveryStatus() { return { matched: 0 }; },
+      async recordUnmatchedWhatsAppEvent() { return { communicationId: "audit-1" }; },
+    },
+  });
+  stubs["./whatsapp-inbox-service"] = {
+    normalizeMessageType(value) { return String(value || "text").toLowerCase(); },
+    validateInboundMedia(value) { return value; },
+    normalizeInboundLocation(value) { return { latitude: Number(value.latitude), longitude: Number(value.longitude), name: value.name || "", address: value.address || "" }; },
+    async recordInbound(input) { inboundInput = input; },
+    async syncDeliveryStatus() {},
+  };
+  const webhook = loadWithStubs("services/communication/webhook-service.js", stubs);
+  await webhook.processWhatsApp(Buffer.from(JSON.stringify({
+    type: "message",
+    payload: {
+      id: "wamid-location-1",
+      source: "919876543210",
+      type: "location",
+      payload: { latitude: "19.2795702", longitude: "73.0805964", text: "https://example.invalid/untrusted" },
+      sender: { name: "Customer", phone: "919876543210" },
+    },
+  })), {});
+  assert.equal(inboundInput.messageType, "location");
+  assert.deepEqual(inboundInput.location, { latitude: 19.2795702, longitude: 73.0805964, name: "", address: "" });
+  assert.deepEqual(communicationInput.metadata.whatsappLocation, inboundInput.location);
+  assert.equal(communicationInput.message, "[location]");
+  assert.equal(communicationInput.message.includes("example.invalid"), false);
+});

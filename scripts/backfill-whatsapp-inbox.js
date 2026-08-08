@@ -43,6 +43,7 @@ async function processDirection(direction, { dryRun, summary }) {
         imported: true,
         markUnread: false,
         allowCreateConversation: direction === "inbound",
+        location: inboxService.locationFromCommunication(communication),
       });
       if (result.inserted) summary.imported += 1;
       else if (result.reason === "conversation_not_started") summary.skipped += 1;

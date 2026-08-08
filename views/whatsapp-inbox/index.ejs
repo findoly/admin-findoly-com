@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body class="crm-wa-standalone-body" x-data="crmShell()" x-init="initShell()">
+    <div class="crm-wa-app" x-data="whatsappInbox()" x-init="init()" @keydown.escape.window="closeMenus()">
+      <div class="crm-wa-app-alerts">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+      </div>
+
+      <section class="crm-whatsapp-inbox crm-whatsapp-inbox-standalone" :class="{'is-chat-open': mobileChatOpen}">
+        <aside class="crm-wa-conversations" aria-label="WhatsApp conversations">
+          <div class="crm-wa-list-head crm-wa-standalone-list-head">
+            <a href="/dashboard" class="crm-wa-list-brand" aria-label="Open Findoly CRM">
+              <img src="/images/findoly-logo.png" alt="Findoly">
+              <span><strong>Findoly</strong><small>WhatsApp Inbox</small></span>
+            </a>
+            <div class="crm-wa-list-toolbar">
+              <span class="crm-wa-status-dot" :class="{'is-syncing': listLoading || threadLoading}" :title="refreshStatus()"></span>
+              <button type="button" class="crm-wa-icon-button" @click="refreshAll()" :disabled="listLoading" aria-label="Refresh conversations" title="Refresh">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
+              </button>
+              <div class="crm-wa-app-user">
+                <button type="button" class="crm-wa-user-button" @click="headerMenuOpen = !headerMenuOpen" :aria-expanded="headerMenuOpen.toString()" aria-label="Open account menu">
+                  <span class="crm-admin-avatar" x-text="(admin.name || admin.mobile || 'E').charAt(0).toUpperCase()">E</span>
+                </button>
+                <div class="crm-wa-user-menu" x-show="headerMenuOpen" x-cloak @click.outside="headerMenuOpen=false">
+                  <div class="crm-wa-menu-identity"><strong x-text="admin.name || 'Employee'"></strong><small x-text="admin.roleName || admin.mobile || 'CRM user'"></small></div>
+                  <a href="/communications/logs?channel=whatsapp" target="_blank" rel="noopener">Message logs</a>
+                  <a href="/employee-guide" target="_blank" rel="noopener">Employee guide</a>
+                  <a href="/dashboard">Open CRM</a>
+                  <button type="button" @click="logout()">Sign out</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <form class="crm-wa-filters crm-wa-standalone-filters" @submit.prevent="searchConversations()">
+            <div class="crm-wa-search-row">
+              <label class="crm-search-control crm-wa-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                <input type="search" x-model="filters.q" @input.debounce.350ms="searchConversations()" placeholder="Search chats" maxlength="120" aria-label="Search WhatsApp conversations">
+              </label>
+              <div class="crm-wa-filter-menu-wrap">
+                <button type="button" class="crm-wa-icon-button" @click="filterMenuOpen=!filterMenuOpen" :aria-expanded="filterMenuOpen.toString()" aria-label="Filter conversations" title="Filter chats">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+                </button>
+                <div class="crm-wa-filter-menu" x-show="filterMenuOpen" x-cloak @click.outside="filterMenuOpen=false">
+                  <strong>Show chats</strong>
+                  <button type="button" :class="{'is-active': filters.status === 'open'}" @click="setStatusFilter('open'); filterMenuOpen=false">Open</button>
+                  <button type="button" :class="{'is-active': filters.status === 'closed'}" @click="setStatusFilter('closed'); filterMenuOpen=false">Closed</button>
+                  <button type="button" :class="{'is-active': filters.status === ''}" @click="setStatusFilter(''); filterMenuOpen=false">All</button>
+                  <label class="crm-wa-unread-filter"><input type="checkbox" x-model="filters.unread" @change="searchConversations()"><span>Unread only</span></label>
+                </div>
+              </div>
+            </div>
+            <div class="crm-wa-active-filter" x-show="filters.status || filters.unread">
+              <span x-text="filters.status ? humanize(filters.status) + ' chats' : 'All chats'"></span>
+              <span x-show="filters.unread">· Unread only</span>
+            </div>
+          </form>
+
+          <div class="crm-wa-list" :class="{'crm-loading': listLoading}">
+            <template x-if="listLoading && !conversations.length">
+              <div class="crm-wa-empty"><div class="crm-table-loading"><span></span><span></span><span></span></div></div>
+            </template>
+            <template x-for="conversation in conversations" :key="conversation.conversationId">
+              <button type="button" class="crm-wa-conversation" :class="{'is-active': selectedId === conversation.conversationId, 'has-unread': conversation.unreadCount > 0}" @click="openConversation(conversation)">
+                <span class="crm-wa-avatar" x-text="avatarText(conversation)"></span>
+                <span class="crm-wa-conversation-body">
+                  <span class="crm-wa-conversation-top">
+                    <strong x-text="conversation.displayName || conversation.latestEnquiryName || formatMobile(conversation.contactNumber)"></strong>
+                    <time x-text="shortTime(conversation.lastMessageAt)"></time>
+                  </span>
+                  <span class="crm-wa-conversation-bottom">
+                    <span class="crm-wa-preview" x-text="conversation.lastMessagePreview || 'No messages yet'"></span>
+                    <span class="crm-wa-unread-badge" x-show="conversation.unreadCount > 0" x-text="conversation.unreadCount > 99 ? '99+' : conversation.unreadCount"></span>
+                  </span>
+                  <span class="crm-wa-conversation-meta" x-show="conversation.status === 'closed' || !(conversation.displayName || conversation.latestEnquiryName)">
+                    <span x-show="!(conversation.displayName || conversation.latestEnquiryName)" x-text="formatMobile(conversation.contactNumber)"></span>
+                    <span class="crm-wa-closed-label" x-show="conversation.status === 'closed'">Closed</span>
+                  </span>
+                </span>
+              </button>
+            </template>
+            <div class="crm-wa-empty" x-show="!listLoading && !conversations.length">
+              <strong>No conversations found</strong>
+              <span>New customer WhatsApp messages will appear here.</span>
+            </div>
+          </div>
+
+          <div class="crm-wa-list-pagination" x-show="conversationPagination.hasNext || conversationPagination.page > 1">
+            <button type="button" class="crm-wa-load-more-chats" x-show="conversationPagination.hasNext" :disabled="listLoading" @click="loadMoreConversations()" x-text="listLoading ? 'Loading chats…' : 'Load more chats'"></button>
+            <button type="button" class="crm-wa-back-to-first" x-show="conversationPagination.page > 1" :disabled="listLoading" @click="resetConversationPages()">Back to newest chats</button>
+          </div>
+        </aside>
+
+        <main class="crm-wa-thread" aria-label="Selected WhatsApp conversation">
+          <template x-if="!selectedId">
+            <div class="crm-wa-thread-empty crm-wa-welcome">
+              <div class="crm-wa-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg></div>
+              <h2>Findoly WhatsApp Inbox</h2>
+              <p>Select a customer conversation to read messages, view shared media and reply.</p>
+            </div>
+          </template>
+
+          <template x-if="selectedId">
+            <div class="crm-wa-thread-shell">
+              <header class="crm-wa-thread-head crm-wa-standalone-thread-head">
+                <button type="button" class="crm-wa-back d-lg-none" @click="mobileChatOpen=false" aria-label="Back to conversations">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+                </button>
+                <span class="crm-wa-avatar" x-text="avatarText(selected || {})"></span>
+                <div class="crm-wa-thread-identity">
+                  <h2 x-text="selected?.displayName || selected?.latestEnquiryName || formatMobile(selected?.contactNumber)"></h2>
+                  <div>
+                    <span x-text="formatMobile(selected?.contactNumber)"></span>
+                    <span x-show="selected?.matchedEnquiryCount">· <span x-text="selected?.matchedEnquiryCount"></span> requirement<span x-show="selected?.matchedEnquiryCount !== 1">s</span></span>
+                    <span x-show="selected?.status === 'closed'">· Closed</span>
+                  </div>
+                </div>
+                <div class="crm-wa-thread-actions">
+                  <button type="button" class="crm-wa-icon-button" @click="chatSearchOpen = !chatSearchOpen; if (!chatSearchOpen) chatSearch = ''" aria-label="Search this conversation" title="Search chat">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  </button>
+                  <button type="button" class="crm-wa-icon-button" @click="infoDrawerOpen=true" aria-label="Open customer information" title="Customer info">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+                  </button>
+                  <div class="crm-wa-thread-menu-wrap">
+                    <button type="button" class="crm-wa-icon-button" @click="threadMenuOpen = !threadMenuOpen" aria-label="More conversation actions" title="More actions">⋮</button>
+                    <div class="crm-wa-action-menu" x-show="threadMenuOpen" x-cloak @click.outside="threadMenuOpen=false">
+                      <button type="button" @click="markSelectedUnread(); threadMenuOpen=false">Mark unread</button>
+                      <button type="button" @click="toggleConversationStatus(); threadMenuOpen=false" x-text="selected?.status === 'closed' ? 'Reopen conversation' : 'Close conversation'"></button>
+                      <a :href="'/communications/logs?channel=whatsapp&q=' + encodeURIComponent(selected?.contactNumber || '')" target="_blank" rel="noopener">View message logs</a>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              <div class="crm-wa-chat-search" x-show="chatSearchOpen" x-cloak>
+                <label class="crm-search-control">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  <input type="search" x-model="chatSearch" placeholder="Search inside this conversation" maxlength="120" aria-label="Search messages in this conversation" x-ref="chatSearchInput">
+                </label>
+                <span x-text="chatSearch ? filteredMessageCount() + ' found' : ''"></span>
+                <button type="button" class="crm-wa-icon-button" @click="chatSearch=''; chatSearchOpen=false" aria-label="Close chat search">×</button>
+              </div>
+
+              <div class="crm-wa-messages" x-ref="messages" :class="{'crm-loading': threadLoading}" @scroll.passive="handleMessageScroll()" @click="openMessageMenu=''">
+                <div x-show="threadError" x-cloak class="alert alert-danger m-3">
+                  <span x-text="threadError"></span>
+                  <button type="button" class="btn btn-sm btn-light ms-2" @click="loadMessages(true)">Retry</button>
+                </div>
+                <div class="crm-wa-load-older" x-show="messagePagination.hasNext">
+                  <button type="button" class="btn btn-light btn-sm" @click="loadOlderMessages()" :disabled="olderLoading" x-text="olderLoading ? 'Loading…' : 'Load older messages'"></button>
+                </div>
+                <template x-if="threadLoading && !messages.length">
+                  <div class="crm-wa-empty"><div class="crm-table-loading"><span></span><span></span><span></span></div></div>
+                </template>
+
+                <template x-for="item in messageItems()" :key="item.key">
+                  <div class="crm-wa-message-item">
+                    <template x-if="item.kind === 'date'">
+                      <div class="crm-wa-date-separator"><span x-text="item.label"></span></div>
+                    </template>
+                    <template x-if="item.kind === 'message'">
+                      <article class="crm-wa-message-row" :class="[(item.message.direction === 'outbound' ? 'is-outbound' : 'is-inbound'), {'is-grouped': item.grouped}]">
+                        <div class="crm-wa-bubble">
+                          <div class="crm-wa-message-menu-wrap">
+                            <button type="button" class="crm-wa-message-menu-button" @click.stop="toggleMessageMenu(item.message.messageId)" :aria-expanded="(openMessageMenu === item.message.messageId).toString()" aria-label="Message actions">⋮</button>
+                            <div class="crm-wa-action-menu crm-wa-message-actions-menu" x-show="openMessageMenu === item.message.messageId" x-cloak @click.stop @click.outside="openMessageMenu=''">
+                              <button type="button" x-show="copyableMessageText(item.message)" @click="copyMessage(item.message)">Copy message</button>
+                              <button type="button" x-show="item.message.messageType === 'location' && hasValidLocation(item.message)" @click="copyLocation(item.message)">Copy location link</button>
+                              <a x-show="item.message.media?.storageStatus === 'stored'" :href="mediaUrl(item.message, 'inline')" target="_blank" rel="noopener">Open media</a>
+                              <a x-show="item.message.media?.storageStatus === 'stored'" :href="mediaUrl(item.message, 'attachment')">Download media</a>
+                            </div>
+                          </div>
+
+                          <div class="crm-wa-message-type" x-show="item.message.messageType !== 'text'" x-text="humanize(item.message.messageType)"></div>
+
+                          <template x-if="item.message.media && ['image','sticker'].includes(item.message.messageType) && item.message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-preview">
+                              <a :href="mediaUrl(item.message, 'inline')" target="_blank" rel="noopener" :aria-label="'Open ' + humanize(item.message.messageType)">
+                                <img :src="mediaUrl(item.message, 'inline')" :alt="item.message.media.caption || item.message.media.fileName || humanize(item.message.messageType)" loading="lazy">
+                              </a>
+                              <div class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'attachment')">Download</a>
+                              </div>
+                            </div>
+                          </template>
+
+                          <template x-if="item.message.media && item.message.messageType === 'audio' && item.message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-audio">
+                              <audio controls preload="metadata" :src="mediaUrl(item.message, 'inline')"></audio>
+                              <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'attachment')">Download audio</a>
+                            </div>
+                          </template>
+
+                          <template x-if="item.message.media && item.message.messageType === 'video' && item.message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-video">
+                              <video controls preload="metadata" :src="mediaUrl(item.message, 'inline')"></video>
+                              <div class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'attachment')">Download</a>
+                              </div>
+                            </div>
+                          </template>
+
+                          <template x-if="item.message.media && item.message.messageType === 'document' && item.message.media.storageStatus === 'stored'">
+                            <div class="crm-wa-media crm-wa-media-document">
+                              <span class="crm-wa-media-file-icon" aria-hidden="true">FILE</span>
+                              <span class="crm-wa-media-file-details">
+                                <strong x-text="item.message.media.fileName || 'WhatsApp document'"></strong>
+                                <small x-text="[item.message.media.contentType, formatBytes(item.message.media.sizeBytes)].filter(Boolean).join(' · ')"></small>
+                              </span>
+                              <span class="crm-wa-media-actions">
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'inline')" target="_blank" rel="noopener">Open</a>
+                                <a class="btn btn-light btn-sm" :href="mediaUrl(item.message, 'attachment')">Download</a>
+                              </span>
+                            </div>
+                          </template>
+
+                          <template x-if="item.message.messageType === 'location'">
+                            <div class="crm-wa-location-card">
+                              <span class="crm-wa-location-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>
+                              </span>
+                              <span class="crm-wa-location-details">
+                                <strong x-text="item.message.location?.name || 'Shared location'"></strong>
+                                <span x-show="item.message.location?.address" x-text="item.message.location?.address"></span>
+                                <small x-show="!item.message.location?.address">Customer shared a location</small>
+                              </span>
+                              <span class="crm-wa-location-actions" x-show="hasValidLocation(item.message)">
+                                <a class="btn btn-light btn-sm" :href="locationMapsUrl(item.message)" target="_blank" rel="noopener noreferrer" @click="trackUiEvent('location_opened', item.message)">Open in Maps</a>
+                                <button type="button" class="btn btn-light btn-sm" @click="copyLocation(item.message)">Copy location</button>
+                              </span>
+                            </div>
+                          </template>
+
+                          <div class="crm-wa-media-state is-pending" x-show="item.message.media && ['pending','processing'].includes(item.message.media.storageStatus)">
+                            Media is being saved securely. It will appear here automatically.
+                          </div>
+                          <div class="crm-wa-media-state is-failed" x-show="item.message.media && item.message.media.storageStatus === 'failed'">
+                            <strong>Media could not be saved.</strong>
+                            <span x-show="item.message.media.failureReason" x-text="item.message.media.failureReason"></span>
+                          </div>
+
+                          <div class="crm-wa-message-text" x-show="messageDisplayText(item.message)" x-text="messageDisplayText(item.message)"></div>
+                          <div class="crm-wa-message-footer">
+                            <span x-show="item.message.direction === 'outbound' && item.message.employeeName" x-text="item.message.employeeName"></span>
+                            <time x-text="formatMessageTime(item.message.occurredAt)"></time>
+                            <span class="crm-wa-delivery-icon" x-show="item.message.direction === 'outbound'" :class="deliveryClass(item.message.status)" :title="humanize(item.message.status)" x-text="deliveryGlyph(item.message.status)"></span>
+                          </div>
+                          <div class="crm-wa-message-failure" x-show="item.message.failureReason" x-text="item.message.failureReason"></div>
+                        </div>
+                      </article>
+                    </template>
+                  </div>
+                </template>
+
+                <div class="crm-wa-empty" x-show="!threadLoading && !messageItems().some((item) => item.kind === 'message')">
+                  <strong x-text="chatSearch ? 'No matching messages' : 'No messages in this conversation'"></strong>
+                </div>
+
+                <button type="button" class="crm-wa-new-message-indicator" x-show="newMessageCount > 0" x-cloak @click="scrollToBottom(true)">
+                  <span x-text="newMessageCount === 1 ? '1 new message' : newMessageCount + ' new messages'"></span>
+                  <span aria-hidden="true">↓</span>
+                </button>
+              </div>
+
+              <form class="crm-wa-composer" @submit.prevent="sendReply()">
+                <div x-show="sendError" x-cloak class="alert alert-danger mb-2" x-text="sendError"></div>
+                <div x-show="sendNotice" x-cloak class="alert alert-info mb-2" x-text="sendNotice"></div>
+                <div class="crm-wa-composer-row">
+                  <textarea class="form-control" x-ref="composer" x-model="draft" maxlength="4096" rows="1" placeholder="Type a WhatsApp message" aria-label="WhatsApp reply" @input="autoResizeComposer()" @keydown.enter="handleComposerEnter($event)"></textarea>
+                  <button type="submit" class="crm-wa-send-button" :disabled="sending || !draft.trim()" :aria-label="sending ? 'Sending message' : 'Send message'" title="Send message">
+                    <svg x-show="!sending" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8-3-8Z"/><path d="M7 12h13"/></svg>
+                    <span class="crm-wa-send-spinner" x-show="sending" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div class="crm-wa-composer-note" x-show="draft.length > 3600"><span x-text="draft.length"></span>/4096</div>
+              </form>
+            </div>
+          </template>
+        </main>
+
+        <aside class="crm-wa-info-drawer" :class="{'is-open': infoDrawerOpen}" x-show="infoDrawerOpen" x-cloak aria-label="Customer information" :aria-hidden="(!infoDrawerOpen).toString()">
+          <div class="crm-wa-info-drawer-head">
+            <button type="button" class="crm-wa-icon-button" @click="infoDrawerOpen=false" aria-label="Close customer information">×</button>
+            <strong>Contact info</strong>
+          </div>
+          <div class="crm-wa-info-profile">
+            <span class="crm-wa-avatar" x-text="avatarText(selected || {})"></span>
+            <h3 x-text="selected?.displayName || selected?.latestEnquiryName || formatMobile(selected?.contactNumber)"></h3>
+            <p x-text="formatMobile(selected?.contactNumber)"></p>
+          </div>
+          <div class="crm-wa-info-section">
+            <span>Conversation</span>
+            <button type="button" @click="markSelectedUnread(); infoDrawerOpen=false">Mark as unread</button>
+            <button type="button" @click="toggleConversationStatus(); infoDrawerOpen=false" x-text="selected?.status === 'closed' ? 'Reopen conversation' : 'Close conversation'"></button>
+            <a :href="'/communications/logs?channel=whatsapp&q=' + encodeURIComponent(selected?.contactNumber || '')" target="_blank" rel="noopener">View message logs</a>
+          </div>
+          <div class="crm-wa-info-section">
+            <span>Related requirements</span>
+            <template x-for="enquiry in enquiries" :key="enquiry.enquiryId">
+              <a :href="'/enquiries/' + enquiry.enquiryId" target="_blank" rel="noopener" x-text="enquiry.requirementTitle || enquiry.enquiryId"></a>
+            </template>
+            <p x-show="!enquiries.length">No related requirements found.</p>
+          </div>
+        </aside>
+        <button type="button" class="crm-wa-drawer-backdrop" x-show="infoDrawerOpen" x-cloak @click="infoDrawerOpen=false" aria-label="Close customer information"></button>
+      </section>
+
+      <div class="crm-wa-copy-toast" x-show="copyNotice" x-cloak x-transition.opacity x-text="copyNotice" role="status" aria-live="polite"></div>
+    </div>
+
+    <script>
+      function whatsappInbox() {
+        return {
+          conversations: [],
+          selectedId: '',
+          selected: null,
+          enquiries: [],
+          messages: [],
+          filters: { q: queryValue('q'), status: queryValue('status', 'open'), unread: queryValue('unread') === '1' },
+          conversationPagination: createCursorPagination(30),
+          messagePagination: { nextCursor: '', hasNext: false },
+          listLoading: false,
+          threadLoading: false,
+          olderLoading: false,
+          actionLoading: false,
+          sending: false,
+          draft: '',
+          error: '',
+          sendError: '',
+          sendNotice: '',
+          threadError: '',
+          mobileChatOpen: false,
+          headerMenuOpen: false,
+          filterMenuOpen: false,
+          infoDrawerOpen: false,
+          threadMenuOpen: false,
+          openMessageMenu: '',
+          chatSearchOpen: false,
+          chatSearch: '',
+          copyNotice: '',
+          copyTimer: null,
+          pollTimer: null,
+          lastRefreshAt: null,
+          isNearBottom: true,
+          newMessageCount: 0,
+          async init() {
+            const requestedConversation = queryValue('conversation');
+            await this.loadConversations();
+            const initial = requestedConversation
+              ? this.conversations.find((item) => item.conversationId === requestedConversation)
+              : null;
+            if (initial) await this.openConversation(initial, false);
+            this.pollTimer = window.setInterval(() => this.poll(), 7000);
+            window.addEventListener('pagehide', () => window.clearInterval(this.pollTimer), { once: true });
+            this.updateDocumentTitle();
+          },
+          closeMenus() {
+            this.headerMenuOpen = false;
+            this.filterMenuOpen = false;
+            this.infoDrawerOpen = false;
+            this.threadMenuOpen = false;
+            this.openMessageMenu = '';
+          },
+          conversationQuery(includeCursor = true) {
+            const values = {
+              q: this.filters.q,
+              status: this.filters.status,
+              unread: this.filters.unread ? '1' : '',
+              limit: this.conversationPagination.limit,
+              cursor: includeCursor ? this.conversationPagination.cursor : '',
+            };
+            const query = new URLSearchParams(values);
+            [...query].forEach(([key, value]) => { if (!value) query.delete(key); });
+            return query.toString();
+          },
+          syncUrl() {
+            const query = new URLSearchParams();
+            if (this.filters.q) query.set('q', this.filters.q);
+            if (this.filters.status !== 'open') query.set('status', this.filters.status);
+            if (this.filters.unread) query.set('unread', '1');
+            if (this.selectedId) query.set('conversation', this.selectedId);
+            history.replaceState({}, '', '/whatsapp-inbox' + (query.toString() ? '?' + query.toString() : ''));
+          },
+          async loadConversations(options = {}) {
+            if (this.listLoading && !options.silent) return;
+            this.listLoading = !options.silent;
+            if (!options.silent) this.error = '';
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations?' + this.conversationQuery());
+              const incomingConversations = body.data || [];
+              if (options.append || options.preserve) {
+                const ordered = options.append ? [...this.conversations, ...incomingConversations] : [...incomingConversations, ...this.conversations];
+                const seen = new Set();
+                this.conversations = ordered.filter((item) => {
+                  if (!item?.conversationId || seen.has(item.conversationId)) return false;
+                  seen.add(item.conversationId);
+                  return true;
+                });
+              } else {
+                this.conversations = incomingConversations;
+              }
+              applyCursorPagination(this.conversationPagination, body.pagination || {});
+              if (this.selectedId) {
+                const updated = this.conversations.find((item) => item.conversationId === this.selectedId);
+                if (updated) this.selected = { ...(this.selected || {}), ...updated };
+              }
+              this.lastRefreshAt = new Date();
+              this.updateDocumentTitle();
+            } catch (error) {
+              if (!options.silent) this.error = error.message;
+            } finally {
+              this.listLoading = false;
+            }
+          },
+          async setStatusFilter(status) {
+            if (this.filters.status === status) return;
+            this.filters.status = status;
+            await this.searchConversations();
+          },
+          async searchConversations() {
+            resetCursorPagination(this.conversationPagination);
+            this.selectedId = '';
+            this.selected = null;
+            this.messages = [];
+            this.enquiries = [];
+            this.mobileChatOpen = false;
+            this.chatSearch = '';
+            this.chatSearchOpen = false;
+            this.syncUrl();
+            await this.loadConversations();
+          },
+          async openConversation(conversation, mobile = true) {
+            if (!conversation?.conversationId) return;
+            this.selectedId = conversation.conversationId;
+            this.selected = conversation;
+            this.mobileChatOpen = mobile;
+            this.messages = [];
+            this.enquiries = [];
+            this.threadError = '';
+            this.newMessageCount = 0;
+            this.isNearBottom = true;
+            this.chatSearch = '';
+            this.chatSearchOpen = false;
+            this.infoDrawerOpen = false;
+            this.messagePagination = { nextCursor: '', hasNext: false };
+            this.syncUrl();
+            await Promise.all([this.loadConversationDetails(), this.loadMessages(true), this.markSelectedRead()]);
+          },
+          async loadConversationDetails() {
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId));
+              this.selected = body.data?.conversation || this.selected;
+              this.enquiries = body.data?.enquiries || [];
+            } catch (error) {
+              this.error = error.message;
+            }
+          },
+          async loadMessages(scrollToBottom = false, silent = false) {
+            if (!this.selectedId) return;
+            this.threadLoading = !silent;
+            if (!silent) this.threadError = '';
+            try {
+              const beforeIds = new Set(this.messages.map((message) => message.messageId));
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/messages?limit=50');
+              const incoming = body.data || [];
+              const newlyReceived = silent ? incoming.filter((message) => !beforeIds.has(message.messageId)).length : 0;
+              if (silent && this.messages.length) {
+                const merged = [...this.messages];
+                incoming.forEach((message) => {
+                  const identities = new Set([message.messageId, message.communicationId, message.providerMessageId].filter(Boolean));
+                  const index = merged.findIndex((item) => [item.messageId, item.communicationId, item.providerMessageId].some((value) => value && identities.has(value)));
+                  if (index >= 0) merged[index] = { ...merged[index], ...message, pendingPersistence: false };
+                  else merged.push(message);
+                });
+                this.messages = merged.sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+              } else {
+                this.messages = incoming;
+              }
+              this.messagePagination = {
+                nextCursor: body.pagination?.nextCursor || '',
+                hasNext: Boolean(body.pagination?.hasNext),
+              };
+              this.threadError = '';
+              if (scrollToBottom || (silent && this.isNearBottom)) {
+                this.$nextTick(() => this.scrollToBottom(false));
+              } else if (newlyReceived > 0) {
+                this.newMessageCount += newlyReceived;
+              }
+            } catch (error) {
+              if (!silent) this.threadError = error.message;
+            } finally {
+              this.threadLoading = false;
+            }
+          },
+          async loadOlderMessages() {
+            if (!this.selectedId || !this.messagePagination.hasNext || this.olderLoading) return;
+            this.olderLoading = true;
+            const container = this.$refs.messages;
+            const oldHeight = container?.scrollHeight || 0;
+            try {
+              const query = new URLSearchParams({ limit: '50', cursor: this.messagePagination.nextCursor });
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/messages?' + query.toString());
+              const existing = new Set(this.messages.map((message) => message.messageId));
+              const older = (body.data || []).filter((message) => !existing.has(message.messageId));
+              this.messages = [...older, ...this.messages];
+              this.messagePagination = {
+                nextCursor: body.pagination?.nextCursor || '',
+                hasNext: Boolean(body.pagination?.hasNext),
+              };
+              this.$nextTick(() => { if (container) container.scrollTop = container.scrollHeight - oldHeight; });
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.olderLoading = false;
+            }
+          },
+          async markSelectedRead() {
+            if (!this.selectedId) return;
+            try {
+              await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/read', { method: 'POST', body: '{}' });
+              const readAt = new Date().toISOString();
+              this.messages = this.messages.map((message) => message.direction === 'inbound' ? { ...message, crmReadAt: message.crmReadAt || readAt } : message);
+              if (this.selected) this.selected.unreadCount = 0;
+              const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+              if (item) item.unreadCount = 0;
+              this.updateDocumentTitle();
+            } catch (error) {
+              this.error = error.message;
+            }
+          },
+          async markSelectedUnread() {
+            if (!this.selectedId || this.actionLoading) return;
+            this.actionLoading = true;
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/unread', { method: 'POST', body: '{}' });
+              const count = body.data?.unreadCount || 1;
+              for (let index = this.messages.length - 1; index >= 0; index -= 1) {
+                if (this.messages[index].direction === 'inbound') {
+                  this.messages[index] = { ...this.messages[index], crmReadAt: null };
+                  break;
+                }
+              }
+              if (this.selected) this.selected.unreadCount = count;
+              const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+              if (item) item.unreadCount = count;
+              this.updateDocumentTitle();
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.actionLoading = false;
+            }
+          },
+          async toggleConversationStatus() {
+            if (!this.selectedId || this.actionLoading) return;
+            this.actionLoading = true;
+            const nextStatus = this.selected?.status === 'closed' ? 'open' : 'closed';
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/status', {
+                method: 'PATCH',
+                body: JSON.stringify({ status: nextStatus }),
+              });
+              this.selected = body.data || { ...this.selected, status: nextStatus };
+              if (this.filters.status && this.filters.status !== nextStatus) {
+                await this.searchConversations();
+              } else {
+                const item = this.conversations.find((row) => row.conversationId === this.selectedId);
+                if (item) item.status = nextStatus;
+              }
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.actionLoading = false;
+            }
+          },
+          handleComposerEnter(event) {
+            if (event.shiftKey) return;
+            event.preventDefault();
+            this.sendReply();
+          },
+          autoResizeComposer() {
+            const field = this.$refs.composer;
+            if (!field) return;
+            field.style.height = 'auto';
+            field.style.height = Math.min(field.scrollHeight, 160) + 'px';
+          },
+          upsertThreadMessage(message) {
+            if (!message?.messageId) return;
+            const identities = new Set([message.messageId, message.communicationId, message.providerMessageId].filter(Boolean));
+            const existingIndex = this.messages.findIndex((item) => [item.messageId, item.communicationId, item.providerMessageId].some((value) => value && identities.has(value)));
+            if (existingIndex >= 0) this.messages[existingIndex] = { ...this.messages[existingIndex], ...message };
+            else this.messages.push(message);
+            this.messages = [...this.messages].sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+          },
+          async sendReply() {
+            const message = this.draft.trim();
+            if (!message || !this.selectedId || this.sending) return;
+            this.sending = true;
+            this.sendError = '';
+            this.sendNotice = '';
+            const key = window.crypto?.randomUUID?.() || (Date.now() + '-' + Math.random().toString(16).slice(2));
+            try {
+              const body = await apiFetch('/api/communication/whatsapp-inbox/conversations/' + encodeURIComponent(this.selectedId) + '/reply', {
+                method: 'POST',
+                body: JSON.stringify({ message, idempotencyKey: key }),
+              });
+              if (body.data?.message) this.upsertThreadMessage(body.data.message);
+              this.draft = '';
+              this.$nextTick(() => { this.autoResizeComposer(); this.scrollToBottom(true); });
+              if (body.data?.inboxSyncStatus === 'pending') this.sendNotice = 'Message sent. Chat history is syncing and will refresh automatically.';
+              await Promise.all([this.loadMessages(false, true), this.loadConversationDetails(), this.loadConversations({ silent: true, preserve: true })]);
+            } catch (error) {
+              this.sendError = error.message;
+              await this.loadMessages(false, true);
+            } finally {
+              this.sending = false;
+            }
+          },
+          async refreshAll() {
+            await this.loadConversations();
+            if (this.selectedId) await Promise.all([this.loadConversationDetails(), this.loadMessages(false, true)]);
+          },
+          async poll() {
+            if (document.hidden || this.sending || this.listLoading || this.conversationPagination.page !== 1) return;
+            await this.loadConversations({ silent: true });
+            if (this.selectedId) {
+              const previousStatus = this.selected?.status || '';
+              await Promise.all([this.loadMessages(false, true), this.loadConversationDetails()]);
+              if (previousStatus === 'closed' && this.selected?.status === 'open' && this.filters.status === 'closed') {
+                this.filters.status = 'open';
+                resetCursorPagination(this.conversationPagination);
+                this.syncUrl();
+                await this.loadConversations({ silent: true });
+              }
+              const hasUnread = this.messages.some((message) => message.direction === 'inbound' && !message.crmReadAt);
+              if (hasUnread) await this.markSelectedRead();
+            }
+          },
+          async loadMoreConversations() {
+            if (!this.conversationPagination.hasNext || this.listLoading) return;
+            if (!cursorNext(this.conversationPagination)) return;
+            await this.loadConversations({ append: true });
+          },
+          async resetConversationPages() {
+            resetCursorPagination(this.conversationPagination);
+            await this.loadConversations();
+          },
+          handleMessageScroll() {
+            const element = this.$refs.messages;
+            if (!element) return;
+            this.isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 90;
+            if (this.isNearBottom) this.newMessageCount = 0;
+          },
+          scrollToBottom(smooth = false) {
+            const element = this.$refs.messages;
+            if (!element) return;
+            element.scrollTo({ top: element.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+            this.isNearBottom = true;
+            this.newMessageCount = 0;
+          },
+          toggleMessageMenu(messageId) {
+            this.openMessageMenu = this.openMessageMenu === messageId ? '' : messageId;
+          },
+          copyableMessageText(message) {
+            return this.messageDisplayText(message) || String(message?.media?.caption || '').trim();
+          },
+          async copyText(text) {
+            const value = String(text || '').trim();
+            if (!value) return false;
+            try {
+              if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+              else {
+                const area = document.createElement('textarea');
+                area.value = value;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                document.execCommand('copy');
+                area.remove();
+              }
+              return true;
+            } catch (error) {
+              this.error = 'Unable to copy. Please select the text manually.';
+              return false;
+            }
+          },
+          showCopyNotice(message) {
+            this.copyNotice = message;
+            window.clearTimeout(this.copyTimer);
+            this.copyTimer = window.setTimeout(() => { this.copyNotice = ''; }, 1800);
+          },
+          async copyMessage(message) {
+            if (await this.copyText(this.copyableMessageText(message))) {
+              this.showCopyNotice('Message copied');
+              this.openMessageMenu = '';
+              this.trackUiEvent('message_copied', message);
+            }
+          },
+          async copyLocation(message) {
+            if (!this.hasValidLocation(message)) return;
+            if (await this.copyText(this.locationMapsUrl(message))) {
+              this.showCopyNotice('Location link copied');
+              this.openMessageMenu = '';
+              this.trackUiEvent('location_link_copied', message);
+            }
+          },
+          async trackUiEvent(event, message) {
+            try {
+              await apiFetch('/api/communication/whatsapp-inbox/events', {
+                method: 'POST',
+                body: JSON.stringify({ event, conversationId: this.selectedId, messageId: message?.messageId || '' }),
+              });
+            } catch (error) {
+              // UI telemetry must never block the employee action.
+            }
+          },
+          messageItems() {
+            const query = this.chatSearch.trim().toLowerCase();
+            const filtered = this.messages.filter((message) => {
+              if (!query) return true;
+              return [this.messageDisplayText(message), message.media?.caption, message.media?.fileName, message.location?.name, message.location?.address, message.employeeName]
+                .filter(Boolean).join(' ').toLowerCase().includes(query);
+            });
+            const items = [];
+            let lastKey = '';
+            let previousMessage = null;
+            filtered.forEach((message) => {
+              const date = safeDate(message.occurredAt);
+              const key = date ? date.toISOString().slice(0, 10) : 'unknown';
+              if (key !== lastKey) {
+                items.push({ kind: 'date', key: 'date:' + key, label: this.dateSeparatorLabel(date) });
+                lastKey = key;
+                previousMessage = null;
+              }
+              const previousDate = safeDate(previousMessage?.occurredAt);
+              const grouped = Boolean(previousMessage && previousMessage.direction === message.direction && date && previousDate && Math.abs(date - previousDate) <= 300000);
+              items.push({ kind: 'message', key: 'message:' + message.messageId, message, grouped });
+              previousMessage = message;
+            });
+            return items;
+          },
+          filteredMessageCount() { return this.messageItems().filter((item) => item.kind === 'message').length; },
+          dateSeparatorLabel(date) {
+            if (!date) return 'Unknown date';
+            const today = new Date();
+            const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const days = Math.round((startToday - startDate) / 86400000);
+            if (days === 0) return 'Today';
+            if (days === 1) return 'Yesterday';
+            return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
+          },
+          totalUnread() { return this.conversations.reduce((sum, item) => sum + Math.max(0, Number(item.unreadCount) || 0), 0); },
+          updateDocumentTitle() {
+            const count = this.totalUnread();
+            document.title = (count ? '(' + (count > 99 ? '99+' : count) + ') ' : '') + 'WhatsApp Inbox · Findoly';
+          },
+          refreshStatus() {
+            if (this.listLoading || this.threadLoading) return 'Syncing…';
+            if (!this.lastRefreshAt) return 'Connecting…';
+            return 'Live · updated ' + new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(this.lastRefreshAt);
+          },
+          avatarText(conversation) {
+            const name = String(conversation?.displayName || conversation?.latestEnquiryName || '').trim();
+            if (name) return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+            return String(conversation?.contactNumber || '').slice(-2) || 'WA';
+          },
+          hasValidLocation(message) {
+            const latitude = Number(message?.location?.latitude);
+            const longitude = Number(message?.location?.longitude);
+            return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+          },
+          locationMapsUrl(message) {
+            if (!this.hasValidLocation(message)) return '';
+            const latitude = Number(message.location.latitude);
+            const longitude = Number(message.location.longitude);
+            return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(latitude + ',' + longitude);
+          },
+          mediaUrl(message, disposition = 'inline') {
+            if (!message?.messageId) return '';
+            const query = new URLSearchParams({ disposition: disposition === 'attachment' ? 'attachment' : 'inline' });
+            return '/api/communication/whatsapp-inbox/messages/' + encodeURIComponent(message.messageId) + '/media?' + query.toString();
+          },
+          messageDisplayText(message) {
+            const text = String(message?.text || '').trim();
+            if (!text) return '';
+            if (message?.messageType !== 'text' && /^\[[^\]]+\]$/.test(text)) return '';
+            return text;
+          },
+          deliveryGlyph(status) {
+            const value = String(status || '').toLowerCase();
+            if (['read'].includes(value)) return '✓✓';
+            if (['delivered'].includes(value)) return '✓✓';
+            if (['sent', 'accepted', 'submitted'].includes(value)) return '✓';
+            if (['failed', 'rejected', 'bounced', 'complained'].includes(value)) return '!';
+            return '◷';
+          },
+          deliveryClass(status) {
+            const value = String(status || '').toLowerCase();
+            if (value === 'read') return 'is-read';
+            if (['failed', 'rejected', 'bounced', 'complained'].includes(value)) return 'is-failed';
+            return '';
+          },
+          formatBytes(value) {
+            const bytes = Number(value || 0);
+            if (!Number.isFinite(bytes) || bytes <= 0) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+          },
+          formatMobile(value) { const digits = String(value || '').replace(/\D/g, ''); return digits.length === 10 ? '+91 ' + digits.slice(0, 5) + ' ' + digits.slice(5) : (value || 'Unknown number'); },
+          shortTime(value) {
+            const date = safeDate(value); if (!date) return '';
+            const today = new Date();
+            if (date.toDateString() === today.toDateString()) return new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(date);
+            return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(date);
+          },
+          formatMessageTime(value) { const date = safeDate(value); return date ? new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(date) : ''; },
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

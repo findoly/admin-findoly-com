@@ -493,3 +493,153 @@ test("inbound media storage downloads from Gupshup, uploads privately and marks 
     global.fetch = previousFetch;
   }
 });
+
+
+test("WhatsApp locations validate coordinate ranges and sanitize labels", () => {
+  const inbox = service();
+  assert.deepEqual(inbox.normalizeInboundLocation({ latitude: "19.075983", longitude: "72.877655", name: " Mumbai\nCentral ", address: " Mumbai, Maharashtra " }), {
+    latitude: 19.075983,
+    longitude: 72.877655,
+    name: "Mumbai Central",
+    address: "Mumbai, Maharashtra",
+  });
+  assert.equal(inbox.normalizeInboundLocation({ latitude: 91, longitude: 72 }), null);
+  assert.equal(inbox.normalizeInboundLocation({ latitude: 19, longitude: 181 }), null);
+  assert.equal(inbox.normalizeInboundLocation({ latitude: "not-a-number", longitude: 72 }), null);
+});
+
+test("new inbound customer message reopens a closed conversation exactly once", async () => {
+  const conversationUpdates = [];
+  let messageExists = false;
+  const inbox = loadWithStubs("services/communication/whatsapp-inbox-service.js", {
+    "../../models/WhatsAppConversation": {
+      findOne() { return chainResult({ conversationId: "conversation-1" }); },
+      findOneAndUpdate() {
+        return { lean: async () => ({ conversationId: "conversation-1", contactNumber: "9876543210", status: "closed" }) };
+      },
+      async updateOne(filter, update) {
+        conversationUpdates.push({ filter, update });
+        if (filter?.status === "closed") return { modifiedCount: 1 };
+        return { modifiedCount: 1 };
+      },
+    },
+    "../../models/WhatsAppMessage": {
+      findOne() {
+        return { lean: async () => messageExists ? ({
+          messageId: "message-1",
+          conversationId: "conversation-1",
+          communicationId: "inbound-1",
+          idempotencyKey: "inbound:provider:provider-1",
+          direction: "inbound",
+          messageType: "text",
+          text: "Hello again",
+          status: "received",
+          occurredAt: new Date(),
+          crmReadAt: null,
+          metadata: { imported: false },
+        }) : null };
+      },
+      async updateOne(_filter, _update, options) {
+        if (options?.upsert) messageExists = true;
+        return options?.upsert ? { upsertedCount: 1 } : { modifiedCount: 1 };
+      },
+    },
+    "../../models/Communication": {
+      findOne() { return { lean: async () => null }; },
+    },
+    "../../models/Enquiry": {
+      find() { return chainResult([]); },
+      countDocuments() { return { maxTimeMS: async () => 0 }; },
+    },
+    "./communication-service": {},
+    "../../utils/uuid": () => "generated-id",
+    "../../utils/pagination": { cursorPaginate() {}, getPagination() { return { limit: 20, cursor: "" }; } },
+  });
+
+  const inbound = {
+    communication: {
+      communicationId: "inbound-1",
+      providerMessageId: "provider-1",
+      channel: "whatsapp",
+      direction: "inbound",
+      purpose: "inbound_message",
+      recipientContact: "9876543210",
+      message: "Hello again",
+      status: "received",
+      metadata: { accountType: "customer" },
+    },
+    messageType: "text",
+  };
+  const result = await inbox.recordInbound(inbound);
+  const duplicate = await inbox.recordInbound(inbound);
+
+  assert.equal(result.inserted, true);
+  assert.equal(duplicate.inserted, false);
+  const reopenUpdates = conversationUpdates.filter((entry) => entry.filter?.status === "closed");
+  assert.equal(reopenUpdates.length, 1);
+  assert.equal(reopenUpdates[0].update.$set.status, "open");
+  assert.equal(reopenUpdates[0].update.$set.closedAt, null);
+  assert.equal(reopenUpdates[0].update.$set.closedBy, "");
+});
+
+test("historical WhatsApp import does not reopen a closed conversation", async () => {
+  const conversationUpdates = [];
+  let messageExists = false;
+  const inbox = loadWithStubs("services/communication/whatsapp-inbox-service.js", {
+    "../../models/WhatsAppConversation": {
+      findOne() { return chainResult({ conversationId: "conversation-1" }); },
+      findOneAndUpdate() {
+        return { lean: async () => ({ conversationId: "conversation-1", contactNumber: "9876543210", status: "closed" }) };
+      },
+      async updateOne(filter, update) {
+        conversationUpdates.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    "../../models/WhatsAppMessage": {
+      findOne() {
+        return { lean: async () => messageExists ? ({
+          messageId: "message-history",
+          conversationId: "conversation-1",
+          communicationId: "history-1",
+          idempotencyKey: "inbound:provider:history-provider",
+          direction: "inbound",
+          messageType: "text",
+          text: "Old message",
+          status: "received",
+          occurredAt: new Date(),
+          crmReadAt: new Date(),
+          metadata: { imported: true },
+        }) : null };
+      },
+      async updateOne(_filter, _update, options) {
+        if (options?.upsert) messageExists = true;
+        return options?.upsert ? { upsertedCount: 1 } : { modifiedCount: 1 };
+      },
+    },
+    "../../models/Communication": {
+      findOne() { return { lean: async () => null }; },
+    },
+    "../../models/Enquiry": {
+      find() { return chainResult([]); },
+      countDocuments() { return { maxTimeMS: async () => 0 }; },
+    },
+    "./communication-service": {},
+    "../../utils/uuid": () => "generated-id",
+    "../../utils/pagination": { cursorPaginate() {}, getPagination() { return { limit: 20, cursor: "" }; } },
+  });
+
+  await inbox.recordCommunication({
+    communicationId: "history-1",
+    providerMessageId: "history-provider",
+    channel: "whatsapp",
+    direction: "inbound",
+    purpose: "inbound_message",
+    recipientContact: "9876543210",
+    message: "Old message",
+    status: "received",
+    metadata: { accountType: "customer" },
+  }, { imported: true, markUnread: false });
+
+  assert.equal(conversationUpdates.some((entry) => entry.filter?.status === "closed"), false);
+});

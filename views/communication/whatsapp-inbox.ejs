@@ -185,6 +185,21 @@
                             </div>
                           </template>
 
+                          <template x-if="message.messageType === 'location'">
+                            <div class="crm-wa-location-card">
+                              <span class="crm-wa-location-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>
+                              </span>
+                              <span class="crm-wa-location-details">
+                                <strong x-text="message.location?.name || 'Shared location'"></strong>
+                                <span x-show="message.location?.address" x-text="message.location?.address"></span>
+                                <small x-show="hasValidLocation(message)" x-text="formatCoordinates(message.location)"></small>
+                                <small x-show="!hasValidLocation(message)">Location details are unavailable.</small>
+                              </span>
+                              <a x-show="hasValidLocation(message)" class="btn btn-light btn-sm crm-wa-location-action" :href="locationMapsUrl(message)" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+                            </div>
+                          </template>
+
                           <div class="crm-wa-media-state is-pending" x-show="message.media && ['pending','processing'].includes(message.media.storageStatus)">
                             Media is being saved securely. It will appear here automatically.
                           </div>
@@ -507,6 +522,23 @@
             const name = String(conversation?.displayName || conversation?.latestEnquiryName || '').trim();
             if (name) return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
             return String(conversation?.contactNumber || '').slice(-2) || 'WA';
+          },
+          hasValidLocation(message) {
+            const latitude = Number(message?.location?.latitude);
+            const longitude = Number(message?.location?.longitude);
+            return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+          },
+          formatCoordinates(location) {
+            const latitude = Number(location?.latitude);
+            const longitude = Number(location?.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return '';
+            return latitude.toFixed(6) + ', ' + longitude.toFixed(6);
+          },
+          locationMapsUrl(message) {
+            if (!this.hasValidLocation(message)) return '';
+            const latitude = Number(message.location.latitude);
+            const longitude = Number(message.location.longitude);
+            return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(latitude + ',' + longitude);
           },
           mediaUrl(message, disposition = 'inline') {
             if (!message?.messageId) return '';

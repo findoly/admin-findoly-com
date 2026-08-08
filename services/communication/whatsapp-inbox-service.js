@@ -333,7 +333,51 @@ function normalizeMessageType(value) {
   return MESSAGE_TYPES.includes(raw) ? raw : "unknown";
 }
 
+function finiteCoordinate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function safeLocationText(value, maxLength) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function normalizeInboundLocation(value = {}) {
+  if (!value || typeof value !== "object") return null;
+  const latitude = finiteCoordinate(value.latitude ?? value.lat);
+  const longitude = finiteCoordinate(value.longitude ?? value.lng ?? value.lon);
+  if (latitude === null || longitude === null || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return null;
+  }
+  return {
+    latitude,
+    longitude,
+    name: safeLocationText(value.name, 200),
+    address: safeLocationText(value.address, 500),
+  };
+}
+
+function locationFromCommunication(communication = {}) {
+  const metadataLocation = communication.metadata?.whatsappLocation;
+  if (metadataLocation) return normalizeInboundLocation(metadataLocation);
+  const payload = communication.externalResponse?.payload?.payload || communication.externalResponse?.payload || {};
+  const location = payload.location && typeof payload.location === "object" ? payload.location : payload;
+  return normalizeInboundLocation({
+    latitude: location.latitude ?? location.lat,
+    longitude: location.longitude ?? location.lng ?? location.lon,
+    name: location.name || "",
+    address: location.address || "",
+  });
+}
+
 function previewFor(type, text) {
+  if (type === "location") return "Shared a location";
   const cleanText = String(text || "").replace(/\s+/g, " ").trim();
   const labels = {
     image: "Image",
@@ -509,10 +553,34 @@ async function insertMessageOnce(document) {
 async function updateConversationLastMessage(conversationId, message) {
   const occurredAt = new Date(message.occurredAt || Date.now());
   const timeField = message.direction === "inbound" ? "lastInboundAt" : "lastOutboundAt";
+  const updateTime = new Date();
+
+  if (message.direction === "inbound" && message.metadata?.imported !== true) {
+    const reopened = await WhatsAppConversation.updateOne(
+      { conversationId, status: "closed" },
+      {
+        $set: {
+          status: "open",
+          closedAt: null,
+          closedBy: "",
+          updatedAt: updateTime,
+        },
+      },
+    );
+    if (Number(reopened.modifiedCount || 0) > 0) {
+      console.info({
+        event: "whatsapp_inbox_conversation_reopened",
+        conversationId,
+        messageId: String(message.messageId || "").slice(0, 120),
+        reason: "new_inbound_message",
+      });
+    }
+  }
+
   await WhatsAppConversation.updateOne(
     { conversationId },
     {
-      $set: { updatedAt: new Date() },
+      $set: { updatedAt: updateTime },
       $max: { [timeField]: occurredAt },
     },
   );
@@ -581,6 +649,9 @@ async function recordCommunication(communication, options = {}) {
   });
   const historicalRead = options.markUnread === false && source.direction === "inbound";
   const media = options.media ? validateInboundMedia(options.media) : null;
+  const location = type === "location"
+    ? normalizeInboundLocation(options.location || locationFromCommunication(source))
+    : null;
   const messageDocument = {
     messageId: uuid(),
     conversationId: conversation.conversationId,
@@ -603,6 +674,7 @@ async function recordCommunication(communication, options = {}) {
     failedAt: source.failedAt || null,
     crmReadAt: historicalRead ? new Date() : null,
     ...(media ? { media: initialMediaDocument(media) } : {}),
+    ...(location ? { location } : {}),
     metadata: {
       purpose: String(source.purpose || ""),
       trigger: String(source.trigger || ""),
@@ -620,6 +692,13 @@ async function recordCommunication(communication, options = {}) {
       { $set: { media: mediaFields, updatedAt: new Date() } },
     );
     result.message = { ...result.message, media: mediaFields };
+  }
+  if (!result.inserted && result.message && location && !normalizeInboundLocation(result.message.location)) {
+    await WhatsAppMessage.updateOne(
+      { messageId: result.message.messageId },
+      { $set: { location, updatedAt: new Date() } },
+    );
+    result.message = { ...result.message, location };
   }
   if (!result.inserted && result.message && (messageDocument.employeeId || messageDocument.employeeName)) {
     const employeeFields = {};
@@ -824,12 +903,13 @@ async function getMessageMedia(messageId, disposition = "attachment") {
   });
 }
 
-async function recordInbound({ communication, messageType = "text", occurredAt = new Date(), media = null }) {
+async function recordInbound({ communication, messageType = "text", occurredAt = new Date(), media = null, location = null }) {
   const result = await recordCommunication(communication, {
     messageType,
     occurredAt,
     markUnread: true,
     media,
+    location,
   });
   if (!result.skipped) {
     console.info({
@@ -840,6 +920,7 @@ async function recordInbound({ communication, messageType = "text", occurredAt =
       inserted: result.inserted === true,
       messageType: normalizeMessageType(messageType),
       mediaExpected: Boolean(media),
+      locationAvailable: Boolean(location),
     });
     if (media && result.message?.messageId) {
       queueInboundMediaStorage({ messageId: result.message.messageId, media });
@@ -1153,6 +1234,8 @@ module.exports = {
   normalizeMessageType,
   previewFor,
   validateInboundMedia,
+  normalizeInboundLocation,
+  locationFromCommunication,
   safeMediaFileName,
   privateMediaKey,
   contentTypeAllowed,
