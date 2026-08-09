@@ -143,7 +143,7 @@ Verification sends only:
 }
 ```
 
-Successful verification creates a signed, HTTP-only cookie session valid for 24 hours. In production the cookie is also marked `Secure` and uses `SameSite=Lax`. Set a strong `AUTH_COOKIE_SECRET`; old `ADMIN_EMAIL` and `ADMIN_PASSWORD` variables are not used.
+Successful verification creates a signed, HTTP-only cookie session valid for 24 hours. In production the cookie is also marked `Secure` and uses `SameSite=Lax`. Set a strong `AUTH_COOKIE_SECRET` and keep it unchanged across routine deployments; rotating it invalidates every existing CRM session and intentionally signs all employees out. Old `ADMIN_EMAIL` and `ADMIN_PASSWORD` variables are not used.
 
 ### First Super Admin setup
 

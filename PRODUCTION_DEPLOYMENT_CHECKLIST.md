@@ -51,6 +51,7 @@ CRM_QUERY_MAX_TIME_MS=10000
 Security-sensitive requirements:
 
 - [ ] `AUTH_COOKIE_SECRET` is a non-placeholder random value of at least 32 characters.
+- [ ] `AUTH_COOKIE_SECRET`, `AUTH_COOKIE_NAME`, and any cookie domain setting are unchanged from the previous release unless a global CRM logout is intentional.
 - [ ] `PUBLIC_INTAKE_API_TOKEN` is a non-placeholder random value of at least 32 characters.
 - [ ] `MONGODB_URI` includes the explicit database name.
 - [ ] `CORS_ORIGINS` contains only trusted HTTPS browser origins.
