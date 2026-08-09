@@ -14,9 +14,15 @@ const {
   validationError,
   queryTextValue,
 } = require("../../utils/validation");
-const { normalizeChannelId } = require("./slack-service");
 
-const RECIPIENT_SOURCES = Object.freeze(["customer", "provider", "agent", "employee", "manual"]);
+const RECIPIENT_SOURCES = Object.freeze(["customer", "provider", "agent", "employee", "manual", "internal"]);
+const INTERNAL_ALERT_EVENTS = Object.freeze([
+  "lead_created",
+  "partner_lead_submitted",
+  "agent_created",
+  "provider_join_request_submitted",
+  "provider_created",
+]);
 const EVENTS = Object.freeze([
   "lead_created",
   "lead_status_changed",
@@ -40,6 +46,7 @@ const EVENTS = Object.freeze([
   "agent_created",
   "employee_created",
   "partner_lead_submitted",
+  "provider_join_request_submitted",
 ]);
 
 const COMMON_VARIABLES = Object.freeze([
@@ -76,6 +83,10 @@ const EVENT_VARIABLES = Object.freeze({
     "agent_name", "agent_id", "referral_id", "customer_name", "lead_id", "service_type",
     "service_types", "category", "lead_location", "requirement_title", "priority",
     "source_channel", "source_website", ...COMMON_VARIABLES,
+  ]),
+  provider_join_request_submitted: Object.freeze([
+    "provider_join_request_id", "provider_name", "business_name", "category",
+    "service_location", "city", "state", "registration_date", ...COMMON_VARIABLES,
   ]),
   default: COMMON_VARIABLES,
 });
@@ -167,20 +178,30 @@ function normalizeMappings(value, event, template, currentMappings = []) {
 const normalizeInput = async function (input, current) {
   const existing = current || {};
   const event = normalizeEvent(input.event ?? existing.event);
+  const requestedRecipientSource = input.recipientSource ?? existing.recipientSource ?? "customer";
+  const recipientSource = event === "nearby_lead_available"
+    ? "provider"
+    : enumValue(requestedRecipientSource, RECIPIENT_SOURCES, {
+      label: "Rule recipient source",
+      fallback: existing.recipientSource || "customer",
+    });
   const whatsappOnly = event === "nearby_lead_available";
-  const internalSlackOnly = event === "partner_lead_submitted";
-  const whatsappEnabled = internalSlackOnly ? false : booleanValue(input.whatsappEnabled, {
+  const internalOnly = recipientSource === "internal";
+  if (internalOnly && !INTERNAL_ALERT_EVENTS.includes(event)) {
+    throw validationError("Select a supported internal email alert event");
+  }
+  const whatsappEnabled = internalOnly ? false : booleanValue(input.whatsappEnabled, {
     label: "WhatsApp enabled",
     fallback: existing.whatsappEnabled || false,
   });
-  const emailEnabled = (whatsappOnly || internalSlackOnly) ? false : booleanValue(input.emailEnabled, {
-    label: "Email enabled",
-    fallback: existing.emailEnabled || false,
-  });
-  const slackEnabled = whatsappOnly ? false : booleanValue(input.slackEnabled, {
-    label: "Slack enabled",
-    fallback: existing.slackEnabled || false,
-  });
+  const emailEnabled = whatsappOnly
+    ? false
+    : internalOnly
+      ? true
+      : booleanValue(input.emailEnabled, {
+          label: "Email enabled",
+          fallback: existing.emailEnabled || false,
+        });
   const whatsappTemplate = await validateTemplate(
     input.whatsappTemplateId ?? existing.whatsappTemplateId,
     "whatsapp",
@@ -229,32 +250,7 @@ const normalizeInput = async function (input, current) {
     whatsappActionButtonIndex,
     emailEnabled,
     emailTemplateId: emailTemplate?.templateId || "",
-    slackEnabled,
-    slackChannelId: normalizeChannelId(
-      input.slackChannelId ?? existing.slackChannelId ?? process.env.SLACK_DEFAULT_CHANNEL_ID ?? "",
-      {
-        label: "Slack channel ID",
-        required: slackEnabled,
-      },
-    ),
-    slackChannelName: textValue(
-      input.slackChannelName ?? existing.slackChannelName ?? process.env.SLACK_DEFAULT_CHANNEL_NAME ?? "internal-team",
-      {
-        label: "Slack channel name",
-        required: slackEnabled,
-        maxLength: 100,
-      },
-    ).replace(/^#/, ""),
-    slackMessage: textValue(input.slackMessage ?? existing.slackMessage, {
-      label: "Slack message",
-      required: slackEnabled,
-      maxLength: 10000,
-      preserveWhitespace: true,
-    }),
-    recipientSource: whatsappOnly ? "provider" : internalSlackOnly ? "manual" : enumValue(input.recipientSource, RECIPIENT_SOURCES, {
-      label: "Rule recipient source",
-      fallback: existing.recipientSource || "customer",
-    }),
+    recipientSource,
     description: textValue(input.description ?? existing.description, {
       label: "Rule description",
       maxLength: 1000,
@@ -262,26 +258,18 @@ const normalizeInput = async function (input, current) {
     }),
   };
   if (whatsappOnly) {
+    data.emailEnabled = false;
     data.emailTemplateId = "";
-    data.slackChannelId = "";
-    data.slackChannelName = "";
-    data.slackMessage = "";
   }
-  if (internalSlackOnly) {
+  if (internalOnly) {
     data.whatsappEnabled = false;
     data.whatsappTemplateId = "";
     data.whatsappParameterMappings = [];
     data.whatsappActionType = "";
     data.whatsappActionButtonIndex = null;
-    data.emailEnabled = false;
-    data.emailTemplateId = "";
-    data.recipientSource = "manual";
   }
-  if (data.enabled && !data.whatsappEnabled && !data.emailEnabled && !data.slackEnabled) {
-    throw validationError("Enable at least one channel before enabling the rule");
-  }
-  if (data.slackEnabled && !data.slackMessage.trim()) {
-    throw validationError("Slack message is required when Slack is enabled");
+  if (data.enabled && !data.whatsappEnabled && !data.emailEnabled) {
+    throw validationError("Enable WhatsApp or email before enabling the automation");
   }
   return data;
 };
@@ -296,11 +284,14 @@ const list = async function (filters) {
       label: "Rule recipient filter",
     });
   }
+  if (!source.recipientSource && String(source.excludeInternal || "").toLowerCase() === "true") {
+    query.recipientSource = { $ne: "internal" };
+  }
   if (source.enabled !== undefined && source.enabled !== "") {
     query.enabled = booleanValue(source.enabled, { label: "Rule enabled filter" });
   }
   if (source.channel) {
-    const channel = enumValue(source.channel, ["whatsapp", "email", "slack"], {
+    const channel = enumValue(source.channel, ["whatsapp", "email"], {
       label: "Rule channel filter",
     });
     query[`${channel}Enabled`] = true;
@@ -352,10 +343,19 @@ const create = async function (input, actor) {
 
 const update = async function (ruleId, input, actor) {
   const current = await get(ruleId);
-  if (input.ruleId && String(input.ruleId) !== current.ruleId) {
+  const source = input || {};
+  if (source.ruleId && String(source.ruleId) !== current.ruleId) {
     throw validationError("Rule ID cannot be changed");
   }
-  const data = await normalizeInput(input || {}, current);
+  if (current.recipientSource === "internal") {
+    if (source.event !== undefined && String(source.event) !== current.event) {
+      throw validationError("Internal alert event cannot be changed");
+    }
+    if (source.recipientSource !== undefined && String(source.recipientSource) !== "internal") {
+      throw validationError("Internal alert recipient cannot be changed");
+    }
+  }
+  const data = await normalizeInput(source, current);
   data.updatedBy = actor || "admin";
   try {
     await CommunicationRule.updateOne({ ruleId: current.ruleId }, { $set: data });
@@ -375,6 +375,7 @@ module.exports = {
   quickReplyIndexes,
   EVENTS,
   RECIPIENT_SOURCES,
+  INTERNAL_ALERT_EVENTS,
   EVENT_VARIABLES,
   EVENT_VARIABLE_METADATA,
   DEFAULT_NEARBY_MAPPINGS,

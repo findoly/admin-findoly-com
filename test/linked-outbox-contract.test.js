@@ -24,6 +24,7 @@ test("CRM communication idempotency uses the provider outbox event ID", async ()
   const sent = [];
   const queryResult = (value) => ({ async lean() { return value; } });
   const service = compile("services/communication/system-event-service.js", {
+    "../../models/CommunicationRule": {},
     "../../models/CommunicationTemplate": {
       async updateOne() {},
       findOne() { return queryResult({ templateId: "template-1" }); },
@@ -37,9 +38,12 @@ test("CRM communication idempotency uses the provider outbox event ID", async ()
     "../../models/Provider": {
       findOne() { return queryResult({ providerId: "provider-1", name: "Provider", email: "provider@example.com" }); },
     },
+    "../../models/Agent": {},
+    "../../models/ProviderJoinRequest": {},
     "./communication-service": {
-      async send(input) { sent.push(input); return { communicationId: `communication-${sent.length}` }; },
+      async send(input) { sent.push(input); return { communicationId: `communication-${sent.length}`, status: "accepted" }; },
     },
+    "./default-template-service": {},
   });
 
   const base = {
@@ -51,12 +55,10 @@ test("CRM communication idempotency uses the provider outbox event ID", async ()
   await service.dispatch("provider_lead_unlocked", { ...base, integrationEventId: "outbox-event-a" });
   await service.dispatch("provider_lead_unlocked", { ...base, integrationEventId: "outbox-event-b" });
 
-  assert.equal(sent.length, 4);
+  assert.equal(sent.length, 2);
   assert.match(sent[0].idempotencyKey, /outbox-event-a$/);
-  assert.match(sent[1].idempotencyKey, /outbox-event-a$/);
-  assert.match(sent[2].idempotencyKey, /outbox-event-b$/);
-  assert.match(sent[3].idempotencyKey, /outbox-event-b$/);
-  assert.notEqual(sent[0].idempotencyKey, sent[2].idempotencyKey);
+  assert.match(sent[1].idempotencyKey, /outbox-event-b$/);
+  assert.notEqual(sent[0].idempotencyKey, sent[1].idempotencyKey);
 });
 
 function statusServiceFor({
@@ -277,7 +279,6 @@ test("the integration controller suppresses communications for stale events", as
       async dispatch() { dispatchCalls += 1; return []; },
     },
     "../services/communication/webhook-service": {},
-    "../services/communication/slack-service": {},
     "../services/communication/communication-config": { configurationStatus: () => ({}) },
     "../services/provider-unlock/provider-status-service": {
       providerStatusFromEvent: () => "contacted",

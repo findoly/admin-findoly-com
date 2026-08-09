@@ -1,22 +1,24 @@
 <%
-  const communicationSection = typeof active === "string" ? active : "overview";
-  const communicationSections = {
-    overview: { label: "Overview", href: "/communications", description: "Channel health, delivery totals and recent activity." },
-    logs: { label: "Message logs", href: "/communications/logs", description: "Search sent, delivered and failed communication." },
-    send: { label: "Send message", href: "/communications/send", description: "Send an approved WhatsApp or email template to a recipient." },
-    record: { label: "Log communication", href: "/communications/new", description: "Record a call, note or communication activity manually." },
-    templates: { label: "Manage templates", href: "/communications/templates", description: "Create and maintain WhatsApp and email content." },
-    rules: { label: "Manage rules", href: "/communications/rules", description: "Choose which business events notify each recipient." },
-    otp: { label: "OTP activity", href: "/communications/otp", description: "Review OTP delivery and verification activity." },
-    settings: { label: "Channel management", href: "/communications/settings", description: "Check WhatsApp, email, Slack and OTP configuration." },
-  };
-  const currentCommunicationSection = communicationSections[communicationSection] || communicationSections.overview;
+  const channel = typeof communicationChannel === 'string' ? communicationChannel : '';
+  const base = channel === 'email' ? '/communications/email' : '/communications/whatsapp';
+  const items = channel === 'email'
+    ? [
+        { key: 'overview', label: 'Email overview', href: base },
+        { key: 'internal-alerts', label: 'Internal alerts', href: base + '/internal-alerts' },
+        { key: 'templates', label: 'Templates', href: base + '/templates' },
+        { key: 'rules', label: 'Automations', href: base + '/automations' },
+        { key: 'logs', label: 'Message logs', href: base + '/logs' },
+      ]
+    : [
+        { key: 'overview', label: 'WhatsApp overview', href: base },
+        { key: 'inbox', label: 'Open Inbox ↗', href: '/whatsapp-inbox', external: true },
+        { key: 'templates', label: 'Templates', href: base + '/templates' },
+        { key: 'rules', label: 'Automations', href: base + '/automations' },
+        { key: 'logs', label: 'Message logs', href: base + '/logs' },
+      ];
 %>
-<div class="crm-communication-context" aria-label="Communication Center location">
-  <div class="crm-communication-breadcrumb">
-    <a href="/communications">Communication Center</a>
-    <span aria-hidden="true">/</span>
-    <strong><%= currentCommunicationSection.label %></strong>
-  </div>
-  <p><%= currentCommunicationSection.description %></p>
-</div>
+<nav class="crm-communication-tabs mb-3" aria-label="<%= channel === 'email' ? 'Email management' : 'WhatsApp management' %>">
+  <% items.forEach((item) => { %>
+    <a class="<%= active === item.key ? 'active' : '' %>" href="<%= item.href %>" <%- item.external ? 'target="_blank" rel="noopener"' : '' %>><%= item.label %></a>
+  <% }) %>
+</nav>

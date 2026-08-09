@@ -215,7 +215,6 @@ function communicationServiceWithModel(Communication) {
       tokenHash() { return "hash"; },
       actionExpiryMinutes() { return 60; },
     },
-    "./slack-service": { normalizeChannelId: identity },
     "./template-renderer": {
       renderText: identity,
       normalizeVariables: identity,

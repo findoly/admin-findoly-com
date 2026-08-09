@@ -26,7 +26,6 @@ const DEFAULT_RULES = Object.freeze([
   ["Provider account created", "provider_created", "Welcome notification after a provider is created successfully", "provider"],
   ["Agent registration", "agent_created", "Welcome email after an agent is created successfully", "agent"],
   ["Employee registration", "employee_created", "Welcome email after an employee is created successfully", "employee"],
-  ["Partner lead submitted", "partner_lead_submitted", "Internal Slack alert after a Partner submits a new customer enquiry", "manual", "*New Partner Lead Submitted*\nPartner: {{agent_name}} ({{agent_id}})\nLead: {{lead_id}}\nCustomer: {{customer_name}}\nService: {{service_types}}\nCategory: {{category}}\nLocation: {{lead_location}}\nRequirement: {{requirement_title}}\nReferral: {{referral_id}}"],
 ]);
 
 let defaultSetupPromise = null;
@@ -52,10 +51,6 @@ const ensureDefaultRules = async function () {
               whatsappActionButtonIndex: null,
               emailEnabled: false,
               emailTemplateId: "",
-              slackEnabled: false,
-              slackChannelId: "",
-              slackChannelName: "",
-              slackMessage: row[4] || "",
               createdBy: "system",
               updatedBy: "system",
             },
@@ -63,7 +58,9 @@ const ensureDefaultRules = async function () {
           { upsert: true },
         );
       }
-      return defaultTemplateService.ensureDefaultProviderTemplates();
+      const providerTemplates = await defaultTemplateService.ensureDefaultProviderTemplates();
+      const internalAlerts = await defaultTemplateService.ensureInternalAlertTemplatesAndRules();
+      return { providerTemplates, internalAlerts };
     })();
   }
   try {
@@ -79,6 +76,7 @@ const resolveRecipient = function (rule, context) {
   const provider = context.provider || {};
   const agent = context.agent || {};
   const employee = context.employee || {};
+  const providerJoinRequest = context.providerJoinRequest || context.joinRequest || {};
   if (rule.recipientSource === "provider") {
     return {
       name: provider.name || provider.businessName || "Provider",
@@ -101,6 +99,13 @@ const resolveRecipient = function (rule, context) {
       mobile: employee.mobile || "",
       email: employee.email || "",
       employeeId: employee.employeeId || "",
+    };
+  }
+  if (rule.recipientSource === "internal") {
+    return {
+      name: "Findoly internal alerts",
+      mobile: "",
+      email: String(process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com").trim().toLowerCase(),
     };
   }
   return { name: lead.name || "Customer", mobile: lead.mobile || "", email: lead.email || "" };
@@ -132,6 +137,7 @@ const variablesFor = function (context) {
   const provider = context.provider || {};
   const agent = context.agent || {};
   const employee = context.employee || {};
+  const providerJoinRequest = context.providerJoinRequest || context.joinRequest || {};
   const note = context.note || context.reason || "";
   const status = context.status || lead.status || lead.journeyStatus || "";
   const supportEmail = process.env.SUPPORT_EMAIL || "support@findoly.com";
@@ -151,15 +157,16 @@ const variablesFor = function (context) {
     source_website: lead.sourceWebsite || "",
     provider_name: provider.name || provider.businessName || context.providerName || "",
     provider_id: provider.providerId || "",
-    business_name: provider.businessName || agent.businessName || "",
+    provider_join_request_id: providerJoinRequest.providerJoinRequestId || context.providerJoinRequestId || "",
+    business_name: providerJoinRequest.businessName || provider.businessName || agent.businessName || "",
     email: provider.email || agent.email || employee.email || lead.email || "",
     phone: provider.mobile || agent.mobile || employee.mobile || lead.mobile || "",
     status: provider.status || agent.status || employee.status || status,
     onboarding_stage: provider.onboardingStage || "",
     service_categories: Array.isArray(provider.categorySlugs) ? provider.categorySlugs.join(", ") : "",
-    service_location: providerLocation,
-    city: provider.city || agent.city || "",
-    state: provider.state || agent.state || "",
+    service_location: providerJoinRequest.providerJoinRequestId ? joinLocation(providerJoinRequest.city, providerJoinRequest.state, providerJoinRequest.servicePincode) : providerLocation,
+    city: providerJoinRequest.city || provider.city || agent.city || "",
+    state: providerJoinRequest.state || provider.state || agent.state || "",
     agent_name: agent.name || agent.businessName || lead.agentName || lead.agentBusinessName || "",
     agent_id: agent.agentId || lead.agentId || "",
     referral_id: agent.referralId || lead.referralId || "",
@@ -179,7 +186,7 @@ const variablesFor = function (context) {
       (employee.employeeId ? process.env.EMPLOYEE_CRM_LOGIN_URL || process.env.CRM_LOGIN_URL : "") ||
       "",
     support_email: supportEmail,
-    registration_date: registrationDate(context, provider.providerId ? provider : agent.agentId ? agent : employee),
+    registration_date: registrationDate(context, providerJoinRequest.providerJoinRequestId ? providerJoinRequest : provider.providerId ? provider : agent.agentId ? agent : employee),
     note,
     "1": lead.name || provider.name || agent.name || employee.name || "Customer",
     "2": lead.enquiryId || provider.providerId || agent.agentId || employee.employeeId || "",
@@ -244,8 +251,9 @@ const sendRule = async function (rule, context, actor) {
   const provider = context.provider || {};
   const agent = context.agent || {};
   const employee = context.employee || {};
+  const providerJoinRequest = context.providerJoinRequest || context.joinRequest || {};
   const entityId = context.idempotencyEntityId
-    || (lead.enquiryId || lead.id || provider.providerId || agent.agentId || employee.employeeId || rule.event);
+    || (lead.enquiryId || lead.id || provider.providerId || agent.agentId || employee.employeeId || providerJoinRequest.providerJoinRequestId || rule.event);
   const base = {
     enquiryId: lead.enquiryId || lead.id || "",
     providerId: recipient.providerId || provider.providerId || "",
@@ -260,8 +268,9 @@ const sendRule = async function (rule, context, actor) {
       event: rule.event,
       status: context.status || lead.status || provider.status || agent.status || employee.status || "",
       note: context.note || context.reason || "",
-      accountType: provider.providerId ? "provider" : agent.agentId ? "agent" : employee.employeeId ? "employee" : "",
-      accountId: provider.providerId || agent.agentId || employee.employeeId || "",
+      accountType: provider.providerId ? "provider" : agent.agentId ? "agent" : employee.employeeId ? "employee" : providerJoinRequest.providerJoinRequestId ? "provider_join_request" : "",
+      accountId: provider.providerId || agent.agentId || employee.employeeId || providerJoinRequest.providerJoinRequestId || "",
+      providerJoinRequestId: providerJoinRequest.providerJoinRequestId || "",
       employeeId: employee.employeeId || "",
     },
   };
@@ -352,27 +361,6 @@ const sendRule = async function (rule, context, actor) {
       ),
     );
   }
-  const slackMessage = String(rule.slackMessage || "").trim();
-  if (!whatsappOnly && rule.slackEnabled && slackMessage) {
-    const channelId = String(rule.slackChannelId || process.env.SLACK_DEFAULT_CHANNEL_ID || "").trim();
-    const channelName = String(rule.slackChannelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team").replace(/^#/, "");
-    results.push(
-      await communicationService.send(
-        {
-          ...base,
-          channel: "slack",
-          channelId,
-          channelName,
-          recipientName: "Internal team",
-          message: renderText(slackMessage, variables),
-          subject: `CRM notification: ${rule.name}`,
-          idempotencyKey: `${rule.ruleId}:slack:${entityId}:${suffix}`,
-          metadata: { ...base.metadata, slackChannelId: channelId, slackChannelName: channelName },
-        },
-        actor,
-      ),
-    );
-  }
   return results;
 };
 
@@ -381,7 +369,7 @@ const trigger = async function (event, context, actor) {
   const source = context || {};
   const events = [event];
   if (event !== "lead_status_changed" && event.startsWith("lead_")) events.push("lead_status_changed");
-  const rules = await CommunicationRule.find({ event: { $in: events }, enabled: true }).lean();
+  const rules = await CommunicationRule.find({ event: { $in: events }, enabled: true, recipientSource: { $ne: "internal" } }).lean();
   const output = [];
   console.info({
     event: "communication_rules_loaded",

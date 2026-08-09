@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div><div class="crm-page-eyebrow">Communication Center</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0"><%= communicationChannel === 'email' ? 'Manage Amazon SES templates, internal alerts, automations and delivery history.' : 'Manage Gupshup templates, automations and WhatsApp delivery history.' %></p></div>
+          <% if (communicationChannel === 'whatsapp') { %><a class="btn btn-primary crm-primary-action" href="/whatsapp-inbox" target="_blank" rel="noopener">Open WhatsApp Inbox</a><% } else { %><a class="btn btn-primary crm-primary-action" href="/communications/email/internal-alerts">Manage internal alerts</a><% } %>
+        </div>
+      </div>
+      <div class="content">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <%- include('_navigation', { active: 'overview', communicationChannel }) %>
+        <section class="crm-channel-home-grid">
+          <% if (communicationChannel === 'email') { %>
+            <a class="card crm-channel-home-card" href="/communications/email/internal-alerts"><div class="card-body"><span class="crm-channel-home-icon">AL</span><h3>Internal alerts</h3><p>Control automatic operational emails sent to alert@findoly.com.</p><strong>Manage alerts →</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/email/templates"><div class="card-body"><span class="crm-channel-home-icon">TM</span><h3>Email templates</h3><p>Edit SES subjects, text bodies, HTML and supported variables.</p><strong>Manage templates →</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/email/automations"><div class="card-body"><span class="crm-channel-home-icon">AU</span><h3>Email automations</h3><p>Connect CRM events to customer, provider, Partner or employee emails.</p><strong>Manage automations →</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/email/logs"><div class="card-body"><span class="crm-channel-home-icon">LG</span><h3>Email message logs</h3><p>Track accepted, delivered, bounced, complained and failed emails.</p><strong>View logs →</strong></div></a>
+          <% } else { %>
+            <a class="card crm-channel-home-card" href="/whatsapp-inbox" target="_blank" rel="noopener"><div class="card-body"><span class="crm-channel-home-icon">IN</span><h3>WhatsApp Inbox</h3><p>Open the full-screen customer chat workspace in a new tab.</p><strong>Open Inbox ↗</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/whatsapp/templates"><div class="card-body"><span class="crm-channel-home-icon">TM</span><h3>WhatsApp templates</h3><p>Synchronize and manage approved Gupshup templates.</p><strong>Manage templates →</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/whatsapp/automations"><div class="card-body"><span class="crm-channel-home-icon">AU</span><h3>WhatsApp automations</h3><p>Choose an event, recipient, approved template and variable mapping.</p><strong>Manage automations →</strong></div></a>
+            <a class="card crm-channel-home-card" href="/communications/whatsapp/logs"><div class="card-body"><span class="crm-channel-home-icon">LG</span><h3>WhatsApp message logs</h3><p>Track inbound messages and outbound accepted, delivered, read or failed states.</p><strong>View logs →</strong></div></a>
+          <% } %>
+        </section>
+        <div class="alert alert-info mt-3 mb-0">Communication and OTP activity logs are retained according to the configured CRM retention period.</div>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

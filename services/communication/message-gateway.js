@@ -1,6 +1,5 @@
 const whatsappService = require("./whatsapp-service");
 const emailService = require("./email-service");
-const slackService = require("./slack-service");
 const lambdaService = require("./lambda-message-service");
 const { deliveryMode } = require("./communication-config");
 const { validationError } = require("../../utils/validation");
@@ -23,12 +22,6 @@ const send = async function (payload) {
     return {
       mode,
       ...(await emailService.sendEmail(payload)),
-    };
-  }
-  if (payload.channel === "slack") {
-    return {
-      mode,
-      ...(await slackService.sendMessage(payload)),
     };
   }
   throw validationError(`Delivery is not supported for channel ${payload.channel}`);

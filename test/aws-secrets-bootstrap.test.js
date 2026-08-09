@@ -56,7 +56,7 @@ test("secret values overwrite application env while Hostinger bootstrap values s
     MONGODB_URI: "mongodb://new-value",
     AUTH_COOKIE_SECRET: "x".repeat(40),
     DASHBOARD_CACHE_TTL_MS: 60000,
-    SYSTEM_EVENT_SLACK_ENABLED: false,
+    INTERNAL_ALERT_EMAIL_ENABLED: false,
     NODE_ENV: "development",
     PORT: 9999,
     CRM_SECRETS_REGION: "us-east-1",
@@ -65,7 +65,7 @@ test("secret values overwrite application env while Hostinger bootstrap values s
   assert.equal(env.MONGODB_URI, "mongodb://new-value");
   assert.equal(env.AUTH_COOKIE_SECRET, "x".repeat(40));
   assert.equal(env.DASHBOARD_CACHE_TTL_MS, "60000");
-  assert.equal(env.SYSTEM_EVENT_SLACK_ENABLED, "false");
+  assert.equal(env.INTERNAL_ALERT_EMAIL_ENABLED, "false");
   assert.equal(env.NODE_ENV, "production");
   assert.equal(env.PORT, "3200");
   assert.equal(env.CRM_SECRETS_REGION, "ap-south-1");

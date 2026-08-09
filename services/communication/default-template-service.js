@@ -237,9 +237,171 @@ async function ensureDefaultProviderTemplates() {
   return { email, whatsapp, nearbyLeadWhatsapp, rule: providerRule, nearbyLeadRule };
 }
 
+
+const INTERNAL_ALERT_DEFINITIONS = Object.freeze([
+  {
+    event: "lead_created",
+    name: "findoly_internal_crm_lead_created",
+    displayName: "Internal alert — CRM lead created",
+    ruleName: "CRM lead created",
+    description: "Email alert to the Findoly operations inbox when a CRM employee creates a lead.",
+    subject: "[Findoly Alert] New CRM lead — {{lead_id}}",
+    body: [
+      "A new lead was created in Findoly CRM.",
+      "",
+      "Lead ID: {{lead_id}}",
+      "Customer: {{customer_name}}",
+      "Requirement: {{requirement_title}}",
+      "Service types: {{service_types}}",
+      "Category: {{category}}",
+      "Location: {{lead_location}}",
+      "Created by: {{created_by}}",
+      "Created at: {{event_time}}",
+    ].join("\n"),
+  },
+  {
+    event: "partner_lead_submitted",
+    name: "findoly_internal_partner_lead_submitted",
+    displayName: "Internal alert — Partner lead submitted",
+    ruleName: "Partner lead submitted",
+    description: "Email alert to the Findoly operations inbox when a Partner submits a lead.",
+    subject: "[Findoly Alert] New Partner lead — {{lead_id}}",
+    body: [
+      "A Partner submitted a new lead.",
+      "",
+      "Partner: {{agent_name}}",
+      "Partner ID: {{agent_id}}",
+      "Referral ID: {{referral_id}}",
+      "Lead ID: {{lead_id}}",
+      "Customer: {{customer_name}}",
+      "Requirement: {{requirement_title}}",
+      "Service types: {{service_types}}",
+      "Category: {{category}}",
+      "Location: {{lead_location}}",
+      "Submitted at: {{event_time}}",
+    ].join("\n"),
+  },
+  {
+    event: "agent_created",
+    name: "findoly_internal_partner_account_created",
+    displayName: "Internal alert — Partner account created",
+    ruleName: "Partner account created",
+    description: "Email alert to the Findoly operations inbox when a Partner account is created.",
+    subject: "[Findoly Alert] New Partner account — {{agent_id}}",
+    body: [
+      "A new Partner account was created.",
+      "",
+      "Partner: {{agent_name}}",
+      "Partner ID: {{agent_id}}",
+      "Referral ID: {{referral_id}}",
+      "Business: {{business_name}}",
+      "Partner type: {{agent_type}}",
+      "Category: {{category_name}}",
+      "Location: {{assigned_location}}",
+      "Created at: {{registration_date}}",
+    ].join("\n"),
+  },
+  {
+    event: "provider_join_request_submitted",
+    name: "findoly_internal_provider_join_request_submitted",
+    displayName: "Internal alert — Provider joining request",
+    ruleName: "Provider joining request submitted",
+    description: "Email alert to the Findoly operations inbox when a provider submits a joining request.",
+    subject: "[Findoly Alert] New provider joining request — {{provider_join_request_id}}",
+    body: [
+      "A new provider joining request was submitted.",
+      "",
+      "Request ID: {{provider_join_request_id}}",
+      "Provider: {{provider_name}}",
+      "Business: {{business_name}}",
+      "Category: {{category}}",
+      "Service location: {{service_location}}",
+      "Submitted at: {{registration_date}}",
+    ].join("\n"),
+  },
+  {
+    event: "provider_created",
+    name: "findoly_internal_provider_account_created",
+    displayName: "Internal alert — Provider account created",
+    ruleName: "Provider account created — internal",
+    description: "Email alert to the Findoly operations inbox when a provider account is created.",
+    subject: "[Findoly Alert] New provider account — {{provider_id}}",
+    body: [
+      "A new provider account was created.",
+      "",
+      "Provider: {{provider_name}}",
+      "Provider ID: {{provider_id}}",
+      "Business: {{business_name}}",
+      "Categories: {{service_categories}}",
+      "Service location: {{service_location}}",
+      "Status: {{status}}",
+      "Created at: {{registration_date}}",
+    ].join("\n"),
+  },
+]);
+
+async function ensureInternalAlertTemplatesAndRules() {
+  const output = [];
+  for (const definition of INTERNAL_ALERT_DEFINITIONS) {
+    const template = await ensureTemplate({
+      name: definition.name,
+      displayName: definition.displayName,
+      channel: "email",
+      category: "transactional",
+      language: "en_US",
+      subject: definition.subject,
+      body: definition.body,
+      bodyHtml: "",
+      footer: "",
+      sampleVariables: [...new Set(
+        Array.from(
+          `${definition.subject}\n${definition.body}`.matchAll(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g),
+          (match) => match[1],
+        ),
+      )],
+      status: "active",
+      isActive: true,
+    });
+    const result = await CommunicationRule.updateOne(
+      { event: definition.event, recipientSource: "internal" },
+      {
+        $setOnInsert: {
+          name: definition.ruleName,
+          event: definition.event,
+          recipientSource: "internal",
+          description: definition.description,
+          enabled: true,
+          whatsappEnabled: false,
+          whatsappTemplateId: "",
+          whatsappParameterMappings: [],
+          whatsappActionType: "",
+          whatsappActionButtonIndex: null,
+          emailEnabled: true,
+          emailTemplateId: template.templateId,
+          createdBy: "system",
+          updatedBy: "system",
+        },
+      },
+      { upsert: true },
+    );
+    let rule = await CommunicationRule.findOne({ event: definition.event, recipientSource: "internal" }).lean();
+    if (rule && !String(rule.emailTemplateId || "").trim()) {
+      await CommunicationRule.updateOne(
+        { ruleId: rule.ruleId },
+        { $set: { emailTemplateId: template.templateId, updatedBy: "system" } },
+      );
+      rule = { ...rule, emailTemplateId: template.templateId };
+    }
+    output.push({ definition, template, rule, created: Boolean(result.upsertedCount) });
+  }
+  return output;
+}
+
 module.exports = {
   ensureDefaultProviderTemplates,
   EMAIL_TEMPLATE_NAME,
   WHATSAPP_TEMPLATE_NAME,
   NEARBY_LEAD_WHATSAPP_TEMPLATE_NAME,
+  INTERNAL_ALERT_DEFINITIONS,
+  ensureInternalAlertTemplatesAndRules,
 };

@@ -583,6 +583,8 @@ async function create(input = {}, actor = "admin") {
     lead: createdLead,
     status: createdLead.journeyStatus || createdLead.status,
     trigger: "lead_created",
+    createdBy: actor,
+    source: actor === "public-api" ? "public-api" : "crm",
     idempotencySuffix: createdLead.createdAt || now.toISOString(),
   }, actor);
   return createdLead;

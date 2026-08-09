@@ -212,7 +212,6 @@ test("nearby lead rule accepts a synced template and stores mappings plus select
     },
     "../../utils/pagination": { getPagination() { return { limit: 20, cursor: "" }; }, async cursorPaginate() { return { data: [], pagination: {} }; } },
     "../../utils/search-query": { buildSearchAlternatives() { return []; } },
-    "./slack-service": { normalizeChannelId(value) { return String(value || ""); } },
   });
   const normalized = await ruleService.normalizeInput({
     name: "Nearby provider lead alert",
@@ -241,7 +240,6 @@ test("nearby lead rule accepts a synced template and stores mappings plus select
   assert.equal(normalized.whatsappActionType, "unlock_lead");
   assert.equal(normalized.whatsappActionButtonIndex, 0);
   assert.equal(normalized.emailEnabled, false);
-  assert.equal(normalized.slackEnabled, false);
 });
 
 
