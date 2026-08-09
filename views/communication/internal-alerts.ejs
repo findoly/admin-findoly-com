@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Email management</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Control automatic Amazon SES alerts sent to the Findoly operations inbox.</p></div><a class="btn btn-light crm-primary-action" href="/communications/email/logs?purpose=internal_email_alert">View alert logs</a></div></div>
+      <div class="content" x-data="internalAlertPage()" x-init="load()">
+        <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div x-show="message" x-cloak class="alert alert-success" x-text="message"></div>
+        <%- include('_navigation', { active: 'internal-alerts', communicationChannel: 'email' }) %>
+        <div class="alert alert-info"><strong>Recipient:</strong> alert@findoly.com. This address is fixed by the <code>INTERNAL_ALERT_EMAIL</code> setting. Disabling an alert stops only that internal operational email.</div>
+        <section class="card crm-data-card">
+          <div class="card-header crm-card-heading"><div><h5 class="mb-1">Automatic internal alerts</h5><p class="text-muted mb-0">Choose an active email template, enable the alert and send a test when needed.</p></div></div>
+          <div class="table-responsive">
+            <table class="table crm-table mb-0">
+              <thead><tr><th>Event</th><th>Recipient</th><th>Email template</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                <template x-if="loading"><tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                <template x-for="definition in definitions" :key="definition.event"><tr>
+                  <td><div class="fw-semibold" x-text="definition.label"></div><div class="text-muted fs-sm" x-text="definition.description"></div><code class="fs-sm" x-text="definition.event"></code></td>
+                  <td><div class="fw-semibold">alert@findoly.com</div><div class="text-muted fs-sm">Amazon SES</div></td>
+                  <td><select class="form-select form-select-sm" x-model="ruleFor(definition.event).emailTemplateId" :disabled="!ruleFor(definition.event).ruleId"><option value="">Select email template</option><template x-for="template in templates" :key="template.templateId"><option :value="template.templateId" x-text="template.displayName || template.name"></option></template></select><a class="fs-sm d-inline-block mt-1" x-show="ruleFor(definition.event).emailTemplateId" :href="'/communications/templates/' + ruleFor(definition.event).emailTemplateId + '/edit?channel=email'">Edit selected template</a></td>
+                  <td><label class="crm-switch"><input type="checkbox" x-model="ruleFor(definition.event).enabled" :disabled="!ruleFor(definition.event).ruleId"><span></span></label><div class="text-muted fs-sm mt-1" x-text="ruleFor(definition.event).enabled ? 'Enabled' : 'Disabled'"></div></td>
+                  <td><div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary btn-sm" type="button" @click="save(definition.event)" :disabled="savingEvent === definition.event || !ruleFor(definition.event).ruleId" x-text="savingEvent === definition.event ? 'Saving…' : 'Save'"></button><button class="btn btn-light btn-sm" type="button" @click="test(definition.event)" :disabled="testingEvent === definition.event || !ruleFor(definition.event).emailTemplateId" x-text="testingEvent === definition.event ? 'Sending…' : 'Send test'"></button><a class="btn btn-light btn-sm" :href="'/communications/email/logs?purpose=internal_email_alert&trigger=' + definition.event">Logs</a></div></td>
+                </tr></template>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div><%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function internalAlertPage() {
+        const definitions = [
+          { event: 'lead_created', label: 'CRM lead created', description: 'A CRM employee creates a new lead.' },
+          { event: 'partner_lead_submitted', label: 'Partner lead submitted', description: 'A Partner submits a new customer lead.' },
+          { event: 'agent_created', label: 'Partner account created', description: 'A new Partner account is created.' },
+          { event: 'provider_join_request_submitted', label: 'Provider joining request submitted', description: 'A provider submits the joining form.' },
+          { event: 'provider_created', label: 'Provider account created', description: 'A provider request is approved and an account is created.' },
+        ];
+        return {
+          definitions, rules: {}, templates: [], loading: false, error: '', message: '', savingEvent: '', testingEvent: '',
+          emptyRule(event) { return { event, ruleId: '', name: '', recipientSource: 'internal', enabled: false, emailEnabled: true, emailTemplateId: '', whatsappEnabled: false, description: '' }; },
+          ruleFor(event) { if (!this.rules[event]) this.rules[event] = this.emptyRule(event); return this.rules[event]; },
+          async load() { this.loading = true; this.error = ''; try { const [ruleResult, templateResult] = await Promise.all([apiFetch('/api/communication/rules?recipientSource=internal&limit=100&sortOrder=event'), apiFetch('/api/communication/templates?channel=email&status=active&isActive=true&limit=100&sortOrder=name')]); this.rules = {}; for (const row of (ruleResult.data || [])) this.rules[row.event] = { ...row, enabled: row.enabled === true, emailEnabled: true, recipientSource: 'internal', whatsappEnabled: false }; this.templates = templateResult.data || []; for (const definition of definitions) this.ruleFor(definition.event); } catch (error) { this.error = error.message; } finally { this.loading = false; } },
+          async save(event) { const rule = this.ruleFor(event); if (!rule.ruleId || this.savingEvent) return; this.savingEvent = event; this.error = ''; this.message = ''; try { const payload = { ...rule, recipientSource: 'internal', whatsappEnabled: false, whatsappTemplateId: '', whatsappParameterMappings: [], emailEnabled: true }; const body = await apiFetch('/api/communication/rules/' + rule.ruleId, { method: 'PUT', body: JSON.stringify(payload) }); this.rules[event] = body.data; this.message = 'Internal email alert saved.'; } catch (error) { this.error = error.message; } finally { this.savingEvent = ''; } },
+          async test(event) { if (this.testingEvent) return; this.testingEvent = event; this.error = ''; this.message = ''; try { await apiFetch('/api/communication/internal-alerts/' + event + '/test', { method: 'POST', body: '{}' }); this.message = 'Test email submitted to alert@findoly.com.'; } catch (error) { this.error = error.message; } finally { this.testingEvent = ''; } },
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

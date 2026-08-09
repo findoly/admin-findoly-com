@@ -11,7 +11,7 @@
             <div>
               <div class="crm-page-eyebrow">Communication Center</div>
               <h1 class="page-title mb-1"><%= title %></h1>
-              <p class="crm-page-subtitle mb-0">Review manual, WhatsApp, email, Slack and OTP delivery records. Logs are retained for seven days.</p>
+              <p class="crm-page-subtitle mb-0">Review channel delivery records and status history. Logs follow the configured retention period.</p>
             </div>
             <div class="d-flex gap-2">
               <a href="/communications/send" class="btn btn-primary crm-primary-action">Send message</a>
@@ -22,16 +22,17 @@
         <div class="content" x-data="communicationLogs()" x-init="load()">
           <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
           <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
-          <%- include('_navigation', { active: 'logs' }) %>
+          <%- include('_navigation', { active: 'logs', communicationChannel }) %>
 
           <section class="card crm-filter-card mb-3">
             <form class="crm-filter-bar" @submit.prevent="search()">
               <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="q" placeholder="Search messages, contacts or IDs" aria-label="Search communication logs"></label>
-              <label class="crm-filter-field"><span>Channel</span><select x-model="channel"><option value="">All channels</option><option value="call">Call</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="sms">SMS</option><option value="slack">Slack</option></select></label>
+              
               <label class="crm-filter-field"><span>Direction</span><select x-model="direction"><option value="">All directions</option><option value="outbound">Outbound</option><option value="inbound">Inbound</option></select></label>
               <label class="crm-filter-field"><span>Status</span><select x-model="status"><option value="">All statuses</option><option value="received">Received</option><option value="logged">Logged</option><option value="queued">Queued</option><option value="accepted">Accepted</option><option value="sent">Sent</option><option value="delivered">Delivered</option><option value="read">Read</option><option value="failed">Failed</option><option value="bounced">Bounced</option><option value="complained">Complained</option><option value="rejected">Rejected</option></select></label>
               <label class="crm-filter-field"><span>Recipient type</span><select x-model="accountType"><option value="">All recipients</option><option value="customer">Customer</option><option value="provider">Provider</option><option value="agent">Agent</option><option value="employee">Employee</option><option value="manual">Manual entry</option></select></label>
-              <label class="crm-filter-field crm-filter-field-wide"><span>Purpose</span><input type="text" x-model="purpose" maxlength="100" placeholder="provider_created"></label>
+              <label class="crm-filter-field crm-filter-field-wide"><span>Purpose</span><input type="text" x-model="purpose" maxlength="100" placeholder="internal_email_alert"></label>
+              <label class="crm-filter-field crm-filter-field-wide"><span>Event</span><input type="text" x-model="trigger" maxlength="100" placeholder="lead_created"></label>
               <label class="crm-filter-field"><span>Date</span><select x-model="dateField"><option value="createdAt">Created</option><option value="updatedAt">Updated</option><option value="sentAt">Sent</option></select></label>
               <label class="crm-filter-field crm-filter-date"><span>From</span><input type="date" x-model="startDate"></label>
               <label class="crm-filter-field crm-filter-date"><span>To</span><input type="date" x-model="endDate"></label>
@@ -71,13 +72,13 @@
     <script>
       function communicationLogs() {
         return {
-          rows: [], q: queryValue('q'), channel: queryValue('channel'), direction: queryValue('direction'), status: queryValue('status'), accountType: queryValue('accountType'), purpose: queryValue('purpose'), dateField: queryValue('dateField') || 'createdAt', startDate: queryValue('startDate'), endDate: queryValue('endDate'), sortOrder: queryValue('sortOrder') || 'newest', pagination: createCursorPagination(Number(queryValue('limit') || 20)), loading: false, error: '',
-          query(includeCursor = true) { const values = { q: this.q, channel: this.channel, direction: this.direction, status: this.status, accountType: this.accountType, purpose: this.purpose, dateField: this.dateField, startDate: this.startDate, endDate: this.endDate, sortOrder: this.sortOrder, limit: this.pagination.limit }; if (includeCursor) values.cursor = this.pagination.cursor; const query = new URLSearchParams(values); [...query].forEach(([key,value]) => { if (!value) query.delete(key); }); return query.toString(); },
-          hasFilters() { return Boolean(this.q || this.channel || this.direction || this.status || this.accountType || this.purpose || this.startDate || this.endDate || this.dateField !== 'createdAt' || this.sortOrder !== 'newest' || this.pagination.limit !== 20); },
-          syncUrl() { history.replaceState({}, '', '/communications/logs' + (this.query(false) ? '?' + this.query(false) : '')); },
+          rows: [], q: queryValue('q'), channel: '<%= communicationChannel %>', direction: queryValue('direction'), status: queryValue('status'), accountType: queryValue('accountType'), purpose: queryValue('purpose'), trigger: queryValue('trigger'), dateField: queryValue('dateField') || 'createdAt', startDate: queryValue('startDate'), endDate: queryValue('endDate'), sortOrder: queryValue('sortOrder') || 'newest', pagination: createCursorPagination(Number(queryValue('limit') || 20)), loading: false, error: '',
+          query(includeCursor = true) { const values = { q: this.q, channel: this.channel, direction: this.direction, status: this.status, accountType: this.accountType, purpose: this.purpose, trigger: this.trigger, dateField: this.dateField, startDate: this.startDate, endDate: this.endDate, sortOrder: this.sortOrder, limit: this.pagination.limit }; if (includeCursor) values.cursor = this.pagination.cursor; const query = new URLSearchParams(values); [...query].forEach(([key,value]) => { if (!value) query.delete(key); }); return query.toString(); },
+          hasFilters() { return Boolean(this.q || this.direction || this.status || this.accountType || this.purpose || this.trigger || this.startDate || this.endDate || this.dateField !== 'createdAt' || this.sortOrder !== 'newest' || this.pagination.limit !== 20); },
+          syncUrl() { history.replaceState({}, '', '/communications/<%= communicationChannel %>/logs' + (this.query(false) ? '?' + this.query(false) : '')); },
           async load() { this.loading = true; this.error = ''; try { const body = await apiFetch('/api/communication?' + this.query()); this.rows = body.data || []; applyCursorPagination(this.pagination, body.pagination || {}); } catch (error) { this.error = error.message; } finally { this.loading = false; } },
           search() { resetCursorPagination(this.pagination); this.syncUrl(); this.load(); },
-          reset() { this.q = ''; this.channel = ''; this.direction = ''; this.status = ''; this.accountType = ''; this.purpose = ''; this.dateField = 'createdAt'; this.startDate = ''; this.endDate = ''; this.sortOrder = 'newest'; this.pagination.limit = 20; this.search(); },
+          reset() { this.q = ''; this.channel = '<%= communicationChannel %>';  this.direction = ''; this.status = ''; this.accountType = ''; this.purpose = ''; this.trigger = ''; this.dateField = 'createdAt'; this.startDate = ''; this.endDate = ''; this.sortOrder = 'newest'; this.pagination.limit = 20; this.search(); },
           next() { if (cursorNext(this.pagination)) this.load(); },
           previous() { if (cursorPrevious(this.pagination)) this.load(); },
           actionStatus(row) { const unlock = row?.metadata?.whatsappUnlock; if (unlock?.status) return humanize(unlock.status); if (row?.metadata?.actionStatus) return humanize(row.metadata.actionStatus); if (row?.metadata?.actionReason) return humanize(row.metadata.actionReason); return '—'; },

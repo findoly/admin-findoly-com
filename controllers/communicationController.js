@@ -10,7 +10,6 @@ const otpService = require("../services/communication/otp-service");
 const notificationService = require("../services/communication/notification-service");
 const systemEventService = require("../services/communication/system-event-service");
 const webhookService = require("../services/communication/webhook-service");
-const slackService = require("../services/communication/slack-service");
 const { configurationStatus } = require("../services/communication/communication-config");
 const providerStatusService = require("../services/provider-unlock/provider-status-service");
 
@@ -19,30 +18,34 @@ const actor = function (req) {
 };
 
 function integrationIdentity(context = {}, eventName = "") {
-  const normalizedEvent = String(eventName || "").trim().toLowerCase();
+  const normalizedEvent = String(eventName || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   const providerEvents = new Set([
     "provider_lead_unlocked",
-    "provider-lead-unlocked",
     "provider_feedback_updated",
-    "provider-feedback-updated",
     "provider_outcome_updated",
-    "provider-outcome-updated",
   ]);
   const integrationEventId = String(context.integrationEventId || "").trim();
   if (normalizedEvent === "partner_lead_submitted") {
     const enquiryId = String(context.enquiryId || context.lead?.enquiryId || "").trim();
-    if (!integrationEventId || integrationEventId.length > 120 || /[\0\r\n]/.test(integrationEventId)) {
+    if (!integrationEventId || integrationEventId.length > 180 || /[\0\r\n]/.test(integrationEventId)) {
       throw Object.assign(new Error("Integration event ID is required and must be valid"), { status: 400 });
     }
     if (!enquiryId || enquiryId.length > 120 || /[\0\r\n]/.test(enquiryId)) {
       throw Object.assign(new Error("Enquiry ID is required and must be valid"), { status: 400 });
     }
-    return {
-      accepted: true,
-      eventName: "partner_lead_submitted",
-      integrationEventId,
-      enquiryId,
-    };
+    return { accepted: true, eventName: normalizedEvent, integrationEventId, enquiryId };
+  }
+  if (normalizedEvent === "provider_join_request_submitted") {
+    const providerJoinRequestId = String(
+      context.providerJoinRequestId || context.providerJoinRequest?.providerJoinRequestId || "",
+    ).trim();
+    if (!integrationEventId || integrationEventId.length > 180 || /[\0\r\n]/.test(integrationEventId)) {
+      throw Object.assign(new Error("Integration event ID is required and must be valid"), { status: 400 });
+    }
+    if (!providerJoinRequestId || providerJoinRequestId.length > 120 || /[\0\r\n]/.test(providerJoinRequestId)) {
+      throw Object.assign(new Error("Provider joining request ID is required and must be valid"), { status: 400 });
+    }
+    return { accepted: true, eventName: normalizedEvent, integrationEventId, providerJoinRequestId };
   }
   if (!providerEvents.has(normalizedEvent)) return null;
   const providerLeadUnlockId = String(context.providerLeadUnlockId || "").trim();
@@ -51,18 +54,12 @@ function integrationIdentity(context = {}, eventName = "") {
     throw Object.assign(new Error("Integration event ID is required and must be valid"), { status: 400 });
   }
   if (!providerLeadUnlockId || providerLeadUnlockId.length > 120 || /[\0\r\n]/.test(providerLeadUnlockId)) {
-    throw Object.assign(new Error("Provider lead unlock ID is required and must be valid"), { status: 400 });
+    throw Object.assign(new Error("Provider lead access ID is required and must be valid"), { status: 400 });
   }
   if (typeof integrationEventSequence !== "number" || !Number.isSafeInteger(integrationEventSequence) || integrationEventSequence < 1) {
     throw Object.assign(new Error("Integration event sequence must be a positive whole number"), { status: 400 });
   }
-  return {
-    accepted: true,
-    eventName: String(eventName || ""),
-    integrationEventId,
-    providerLeadUnlockId,
-    integrationEventSequence,
-  };
+  return { accepted: true, eventName: normalizedEvent, integrationEventId, providerLeadUnlockId, integrationEventSequence };
 }
 
 const list = async function (req, res, next) {
@@ -101,38 +98,6 @@ const update = async function (req, res, next) {
 const send = async function (req, res, next) {
   try {
     res.status(201).json({ success: true, data: await service.send(req.body, actor(req)) });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const sendSlack = async function (req, res, next) {
-  try {
-    res.status(201).json({
-      success: true,
-      data: await service.send(
-        {
-          ...(req.body || {}),
-          channel: "slack",
-          purpose: req.body?.purpose || "internal_team_notification",
-          trigger: req.body?.trigger || "manual_slack",
-        },
-        actor(req),
-      ),
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-const listSlackChannels = async function (req, res, next) {
-  try {
-    const refresh = ["1", "true", "yes"].includes(String(req.query?.refresh || "").toLowerCase());
-    res.json({
-      success: true,
-      data: await slackService.listChannels({ refresh }),
-    });
   } catch (error) {
     next(error);
   }
@@ -319,11 +284,28 @@ const triggerEvent = async function (req, res, next) {
   }
 };
 
+const testInternalAlert = async function (req, res, next) {
+  try {
+    res.status(201).json({
+      success: true,
+      data: await systemEventService.testInternalAlert(req.params.event, actor(req)),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const integrationEvent = async function (req, res, next) {
   try {
     const context = { ...(req.body || {}) };
     const normalizedIntegrationEvent = String(req.params.event || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
     const acknowledgement = integrationIdentity(context, normalizedIntegrationEvent);
+    if (normalizedIntegrationEvent === "partner_lead_submitted") {
+      console.info({ event: "partner_lead_event_received", integrationEventId: acknowledgement?.integrationEventId || "", enquiryId: acknowledgement?.enquiryId || "" });
+    }
+    if (normalizedIntegrationEvent === "provider_join_request_submitted") {
+      console.info({ event: "provider_join_request_event_received", integrationEventId: acknowledgement?.integrationEventId || "", providerJoinRequestId: acknowledgement?.providerJoinRequestId || "" });
+    }
     const providerLeadStatus = providerStatusService.providerStatusFromEvent(
       req.params.event,
       context.activityStatus || context.status,
@@ -379,17 +361,15 @@ const integrationEvent = async function (req, res, next) {
     }
 
     const sourcePortal = normalizedIntegrationEvent === "partner_lead_submitted" ? "partner-portal" : "provider-portal";
-    const channelDeliveries = normalizedIntegrationEvent === "partner_lead_submitted"
-      ? []
-      : await systemEventService.dispatch(
-        normalizedIntegrationEvent,
-        {
-          ...context,
-          source: sourcePortal,
-          trigger: normalizedIntegrationEvent,
-        },
-        "integration-api",
-      );
+    const channelDeliveries = await systemEventService.dispatch(
+      normalizedIntegrationEvent,
+      {
+        ...context,
+        source: sourcePortal,
+        trigger: normalizedIntegrationEvent,
+      },
+      "integration-api",
+    );
 
     const notificationEvents = [];
     if (isProviderFeedbackEvent) {
@@ -495,8 +475,6 @@ module.exports = {
   create,
   update,
   send,
-  sendSlack,
-  listSlackChannels,
   retry,
   dashboard,
   config,
@@ -512,6 +490,7 @@ module.exports = {
   createRule,
   updateRule,
   triggerEvent,
+  testInternalAlert,
   integrationEvent,
   sendOtp,
   verifyOtp,

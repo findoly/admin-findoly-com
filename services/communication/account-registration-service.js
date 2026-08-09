@@ -7,7 +7,6 @@ async function dispatch(event, context, actor) {
       {
         ...(context || {}),
         trigger: event,
-        skipSystemDispatch: true,
       },
       actor || "crm-admin",
     );

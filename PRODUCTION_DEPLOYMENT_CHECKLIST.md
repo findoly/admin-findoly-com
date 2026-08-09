@@ -55,7 +55,7 @@ Security-sensitive requirements:
 - [ ] `MONGODB_URI` includes the explicit database name.
 - [ ] `CORS_ORIGINS` contains only trusted HTTPS browser origins.
 - [ ] `CRM_ADMIN_ORIGIN` exactly matches the admin browser origin and contains no path.
-- [ ] Secrets Manager, S3, CloudWatch, Razorpay, WhatsApp, SES and Slack credentials are scoped with least privilege.
+- [ ] Secrets Manager, S3, CloudWatch, Razorpay, WhatsApp and SES credentials are scoped with least privilege.
 
 Recommended database and OTP settings:
 
@@ -216,7 +216,7 @@ npm run verify:query-plans
 
 - [ ] Create or edit the nearby-lead WhatsApp template and enter the exact approved Gupshup template ID.
 - [ ] Activate the local template only after the Gupshup template is approved.
-- [ ] Enable the `nearby_lead_available` rule with WhatsApp enabled; email and Slack remain disabled for this event.
+- [ ] Enable the `nearby_lead_available` rule with WhatsApp enabled; email remains disabled for this event.
 - [ ] Publish a category-matching lead with valid coordinates.
 - [ ] A portal-enabled active Provider at exactly 20.0 km receives one WhatsApp alert.
 - [ ] A Provider farther than 20.0 km receives no WhatsApp alert, including when the lead becomes visible later.
@@ -280,3 +280,17 @@ Broad free-text search should move to Atlas Search or dedicated normalized searc
 - [ ] If a release blocker appears, stop traffic, restore the previous release, and follow the verified database rollback/restore procedure.
 
 > Current empty-database release: no migration or backfill is required. Run `ensure:indexes` in CRM first and Provider second, then deploy the two packages together.
+
+
+## 13. Communication Center email-alert migration
+
+- [ ] Set `INTERNAL_ALERT_EMAIL=alert@findoly.com` and `INTERNAL_ALERT_EMAIL_ENABLED=true`.
+- [ ] Confirm the existing SES sender identity, IAM permissions and configuration set are valid.
+- [ ] Open **Communication Center → Email → Internal alerts** and verify all five approved events have an active template.
+- [ ] Send one test for each internal alert and confirm the email appears in Email Message Logs.
+- [ ] Run `npm run migrate:remove-slack-rules -- --dry-run`.
+- [ ] Review the count, then run `npm run migrate:remove-slack-rules`.
+- [ ] Confirm historical Slack Communication rows remain readable through direct audit records, while Slack is absent from active navigation and runtime.
+- [ ] Remove obsolete Slack secrets only after the new SES alerts are verified.
+- [ ] Submit one Partner lead and one Provider joining request; confirm each portal outbox reaches `synced` after the CRM email acknowledgement.
+- [ ] Create one CRM lead, Partner account and Provider account; confirm one internal email per event and no duplicate delivery.

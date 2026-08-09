@@ -243,37 +243,58 @@ Set the RazorpayX values from `.env.example`, allowlist the CRM server IP in Raz
 
 ## Communication Center
 
-The CRM includes a built-in Communication Center at `/communications` for:
-
-- Gupshup WhatsApp template-ID management, delivery tracking and test sending
-- approved WhatsApp Utility, Authentication and Marketing templates
-- Amazon SES email templates and test sending
-- internal Slack messages to multiple manually created channels through one bot token
-- WhatsApp, email or Slack lead-status notification rules
-- separate OTP request and verification APIs with hashed OTP storage, expiry, resend cooldown and attempt limits
-- WhatsApp delivery/read/failure webhooks and inbound-message logging
-- Amazon SES/SNS delivery, bounce, complaint, reject, open and delay updates
-- lead-level communication history and manual failed-message retry
-- MongoDB TTL deletion of communication and OTP activity logs after seven days
-- local delivery now, with a Lambda delivery mode later without changing CRM rules or logs
-
-### Main pages
+The Communication Center is intentionally split by channel so employees do not need to work through one mixed configuration screen.
 
 ```text
-/communications                 dashboard
-/communications/logs            message history
-/communications/send            manual template send
-/communications/templates       WhatsApp and email templates
-/communications/rules           event-to-template rules
-/communications/otp             OTP activity and test send
-/communications/settings        configuration readiness
+/communications/whatsapp                 WhatsApp overview
+/communications/whatsapp/templates       Gupshup templates
+/communications/whatsapp/automations     WhatsApp automations
+/communications/whatsapp/logs            WhatsApp message logs
+/whatsapp-inbox                           standalone customer inbox
+
+/communications/email                    Email overview
+/communications/email/internal-alerts    Internal operational alerts
+/communications/email/templates          Amazon SES templates
+/communications/email/automations        Email automations
+/communications/email/logs               Email message logs
+
+/communications/otp                      OTP activity
 ```
+
+The active channels are:
+
+- **WhatsApp:** Gupshup template synchronization, automated template messages, delivery/read/failure status, inbound messages and the standalone WhatsApp Inbox.
+- **Email:** Amazon SES templates, automatic internal alerts, event automations, test sending and SES delivery/bounce/complaint history.
+- **OTP:** request and verification activity with hashed OTP storage, expiry, resend cooldown and attempt limits.
+
+Slack is not an active delivery channel. Historical Slack Communication rows are preserved for audit, but Slack services, channel synchronization, sending controls and rule execution have been removed.
+
+### Automatic internal email alerts
+
+The CRM sends operational alerts through Amazon SES to the fixed recipient configured by:
+
+```env
+INTERNAL_ALERT_EMAIL=alert@findoly.com
+INTERNAL_ALERT_EMAIL_ENABLED=true
+```
+
+Employees can enable or disable each alert, select its template, edit the template, send a test and open filtered logs from **Communication Center → Email → Internal alerts**.
+
+System-managed events are:
+
+```text
+lead_created                         CRM lead created
+partner_lead_submitted               Partner lead submitted
+agent_created                        Partner account created
+provider_join_request_submitted      Provider joining request submitted
+provider_created                     Provider account created
+```
+
+The internal recipient is read-only in the UI. Messages exclude customer mobile numbers, customer email addresses, full street addresses, OTPs and credentials. Each automatic alert uses a deterministic idempotency key so repeated integration requests do not create duplicate emails.
 
 ### Public and integration endpoints
 
 ```text
-GET  /api/communication/slack/channels
-POST /api/communication/slack/send
 POST /api/communication/otp/send
 POST /api/communication/otp/verify
 GET  /api/webhooks/whatsapp
@@ -283,98 +304,58 @@ POST /api/webhooks/message-delivery
 POST /api/communication/events/:event
 ```
 
-`/api/communication/events/:event` is intended for the provider or agent portal. Protect it with `COMMUNICATION_EVENT_API_TOKEN` and send the token in either `x-communication-token` or `Authorization: Bearer <token>`.
+Protect `/api/communication/events/:event` with `COMMUNICATION_EVENT_API_TOKEN` and send the token in `x-communication-token` or `Authorization: Bearer <token>`.
 
-### Provider communication integration
+### Partner and Provider event reliability
 
-The provider backend sends two primary server-to-server events:
+The Partner Portal sends `partner_lead_submitted` from its transactional outbox after a requirement commits. The Provider Portal sends `provider_join_request_submitted` from its own transactional outbox after a joining request commits. CRM loads the authoritative database record and sends the configured SES internal alert.
+
+A temporary CRM, network or immediate SES delivery failure does not roll back the submitted lead or joining request. The portal outbox keeps retrying with an atomic lease and deterministic event identity. If an internal alert is deliberately disabled in Communication Center, CRM acknowledges the event without sending email.
+
+Provider access and feedback integrations continue to use:
 
 ```text
 provider_lead_unlocked
 provider_feedback_updated
 ```
 
-`provider_lead_unlocked` is emitted only after a credit or direct-payment unlock commits successfully. `provider_feedback_updated` is emitted after a provider saves the mandatory Confirmed/Not Confirmed outcome and any optional activity status.
-
-Named status events such as `provider_confirmed`, `provider_rejected`, and `provider_contacted`, plus the generic `provider_status` and `provider_status_updated` names, remain supported for compatible integrations.
-
-Identify the unlocked provider record using `providerLeadUnlockId`, or by the unique combination of `enquiryId` and `providerId`:
-
-```json
-{
-  "providerLeadUnlockId": "UNLOCK_REFERENCE",
-  "enquiryId": "LEAD_REFERENCE",
-  "providerId": "PROVIDER_REFERENCE",
-  "outcome": "confirmed",
-  "activityStatus": "contacted",
-  "reason": "",
-  "note": "Customer confirmed the purchase"
-}
-```
-
-Provider sale outcome is mandatory (`confirmed` or `not_confirmed`); activity status is optional. The lead remains at the CRM `approved` stage while denormalized fields track `providerConfirmedCount` and `providerSaleConversionStatus`. Employees do not manually overwrite provider conversion.
-
-No reconciliation scan runs when a lead is opened. The provider action updates the compact unlock record and the enquiry counters in one transaction, then sends the CRM communication event after commit.
-
-### Local-to-Lambda migration
-
-Keep this during the first deployment:
-
-```env
-MESSAGE_DELIVERY_MODE=local
-```
-
-Later deploy the message sender in Lambda and change only:
-
-```env
-MESSAGE_DELIVERY_MODE=lambda
-MESSAGE_LAMBDA_URL=https://your-lambda-endpoint
-MESSAGE_LAMBDA_AUTH_TOKEN=your-private-token
-MESSAGE_LAMBDA_WEBHOOK_TOKEN=your-private-webhook-token
-```
-
-The Lambda request receives the channel, recipient, template, variables, rendered email content, communication ID, purpose and metadata. It should return `providerMessageId` and `status`, then call `/api/webhooks/message-delivery` for later delivery updates.
+Provider sale outcomes and status updates remain synchronized independently from the new internal operational alerts.
 
 ### Gupshup WhatsApp setup
 
-1. Configure the Gupshup API key, app name, source WhatsApp number and webhook token.
-2. Configure the Gupshup callback URL as `/api/webhooks/whatsapp?token=<CRM_GUPSHUP_WEBHOOK_TOKEN>`.
-3. Create and approve each WhatsApp template in Gupshup, then save its template ID in CRM and activate it.
-4. Assign the activated template to notification rules. Use the `nearby_lead_available` provider rule for immediate alerts within 20 km.
+1. Configure the Gupshup API key, app ID, app name, source number and webhook token.
+2. Configure the callback URL as `/api/webhooks/whatsapp?token=<CRM_GUPSHUP_WEBHOOK_TOKEN>`.
+3. Synchronize approved templates from **Communication Center → WhatsApp → Templates**.
+4. Configure event mappings from **WhatsApp → Automations**.
+5. Use the standalone `/whatsapp-inbox` page for two-way customer conversations.
 
 ### Amazon SES setup
 
 1. Verify `SES_FROM_EMAIL` or its domain in the configured AWS Region.
-2. Use an IAM role in production or local AWS credentials during development.
-3. For delivery events, configure an SES configuration set and an SNS event destination pointing to `/api/webhooks/ses`.
-4. Keep bounce and complaint monitoring enabled for production sending.
+2. Use an IAM role in production, or local AWS credentials only during development.
+3. Configure `SES_CONFIGURATION_SET` and an SNS event destination pointing to `/api/webhooks/ses`.
+4. Keep bounce and complaint monitoring enabled.
+5. Confirm `INTERNAL_ALERT_EMAIL=alert@findoly.com`, then use **Send test** for every internal alert.
 
-### Slack setup
+### Retention
 
-1. Create or open the Slack app and add the bot scopes `chat:write`, `channels:read`, and `groups:read`. Add `chat:write.public` only when the bot must post to public channels without being invited.
-2. Install or reinstall the app to the workspace and copy the **Bot User OAuth Token** beginning with `xoxb-`.
-3. Set `SLACK_BOT_TOKEN`, `SLACK_DEFAULT_CHANNEL_ID`, and `SLACK_DEFAULT_CHANNEL_NAME`. The default channel receives every automatic CRM/provider event. `SLACK_CHANNEL_CACHE_SECONDS` remains optional.
-4. Invite the Slack app to every private channel that should appear in the CRM channel selector.
-5. Use **Sync channels** on `/communications` or `/communications/rules`, then select the required channel and send or save the rule.
-
-The CRM calls Slack `conversations.list` to discover accessible public/private channels and `chat.postMessage` to send. One bot token supports multiple manually created channels; each rule stores both the Slack channel ID and display name.
-
-### Seven-day MongoDB TTL retention
-
-`communications` records use a TTL index on `createdAt`. OTP activity uses its own TTL index. With the default environment values, MongoDB deletes both after seven days without an application cron job. TTL cleanup is asynchronous, so a record may remain briefly after its expiry time. Templates, notification rules, settings, leads and CRM audit notes are unaffected.
+`communications` and OTP activity use MongoDB TTL indexes. With the default values, both are deleted after seven days; cleanup is asynchronous. Templates, rules, internal-alert settings, leads and audit notes are not affected.
 
 ```env
 COMMUNICATION_LOG_RETENTION_DAYS=7
 OTP_RETENTION_DAYS=7
 ```
 
-Secrets are never stored or displayed in the CRM database. The settings page only reports whether required environment variables are present.
+### Removing legacy Slack rule configuration
 
-### Slack in notification rules
+After deploying the email-based Communication Center, run:
 
-Communication Rules can also send internal Slack notifications. Enable Slack on a rule, select a synchronized channel, and write the message using supported variables such as `{{lead_id}}`, `{{customer_name}}`, `{{lead_status}}`, `{{provider_name}}`, and `{{note}}`.
+```bash
+npm run migrate:remove-slack-rules -- --dry-run
+npm run migrate:remove-slack-rules
+```
 
-Each rule stores the Slack channel ID used by `chat.postMessage` and the channel name used for CRM display/logging. Blank Slack messages and missing channel IDs are rejected. Existing webhook-era Slack rules should be opened once and saved with a synchronized channel.
+This clears deprecated Slack fields from existing rules. It does not delete rules and does not delete historical Slack Communication records. Obsolete Slack environment variables can be removed from Secrets Manager after verification.
 
 ## Provider portal synchronization
 
@@ -388,7 +369,7 @@ POST /api/communication/events/provider_lead_unlocked
 POST /api/communication/events/provider_feedback_updated
 ```
 
-Both services must share `COMMUNICATION_EVENT_API_TOKEN`. The Provider Portal persists every CRM event in a transactional outbox, retries with an atomic lease and exponential backoff, moves exhausted events to dead-letter state, and expires successful rows after retention; CRM communication processing remains idempotent by outbox event ID. Slack/email delivery failures are logged independently and never roll back a committed lead action. See `PROVIDER_CRM_SYNC_SETUP.md` for coordinated deployment, retry and reservation-cleanup instructions.
+Both services must share `COMMUNICATION_EVENT_API_TOKEN`. The Provider Portal persists every CRM event in a transactional outbox, retries with an atomic lease and exponential backoff, moves exhausted events to dead-letter state, and expires successful rows after retention; CRM communication processing remains idempotent by outbox event ID. Provider confirmation-email failures are logged independently and never roll back a committed lead action. Provider joining requests use a separate durable outbox to trigger the CRM internal SES alert. See `PROVIDER_CRM_SYNC_SETUP.md` for coordinated deployment, retry and reservation-cleanup instructions.
 
 ## Scalable marketplace maintenance
 
@@ -422,8 +403,15 @@ Nearby providers can unlock an eligible lead from the approved Gupshup quick-rep
 
 WhatsApp templates are synchronized from Gupshup in **Communication Center → Templates** using `CRM_GUPSHUP_APP_ID` and `CRM_GUPSHUP_API_KEY`. Admins control the local enabled state and assign an approved template, variable mappings and quick-reply action to each communication rule. Template IDs are not hard-coded in deployment environment variables.
 
-## Partner lead submitted event
+## Automatic internal email alerts
 
-The Partner Portal sends `partner_lead_submitted` to the protected communication-event API after a requirement is committed. CRM loads the authoritative Enquiry record, exposes Partner and lead variables to Communication Center, and delivers only through the configured rule. The event bypasses the legacy all-system-events Slack route so administrators have complete enable/disable and channel control from **Communication Center → Manage Rules**.
+The CRM creates editable SES templates and internal-alert rules for CRM lead creation, Partner lead submission, Partner account creation, Provider joining-request submission, and Provider account creation. The default recipient is `alert@findoly.com`, controlled by `INTERNAL_ALERT_EMAIL`. Employees can enable or disable each alert, select an active email template, edit the template, send a test email, and inspect SES delivery logs under **Communication Center → Email → Internal alerts**.
 
-Default Slack variables include `agent_name`, `agent_id`, `referral_id`, `lead_id`, `customer_name`, `service_types`, `category`, `lead_location`, and `requirement_title`.
+The Partner Portal sends `partner_lead_submitted` from its transactional outbox after a requirement is committed. The Provider Portal sends `provider_join_request_submitted` from its own transactional outbox after a joining request is committed. Both integrations retry safely and use deterministic event IDs, so temporary CRM or SES failures do not remove business records or create duplicate internal emails.
+
+Before deploying this change, remove legacy Slack configuration from communication rules without deleting historical communication rows:
+
+```bash
+npm run migrate:remove-slack-rules -- --dry-run
+npm run migrate:remove-slack-rules
+```

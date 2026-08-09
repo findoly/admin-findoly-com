@@ -132,7 +132,7 @@ These are not hidden; they require production infrastructure or a broader archit
 1. **Free-text search at one million records.** Exact mobile/email/ID lookups are indexed and general text searches are bounded, but broad name/message prefix search should move to MongoDB Atlas Search or dedicated normalized search fields before sustained million-record use.
 2. **Real query-plan certification.** Run `npm run verify:query-plans` against representative data and review Atlas Performance Advisor. Empty development databases cannot prove production selectivity.
 3. **Provider Portal contact registry.** This CRM owns the shared registry, but the public Provider Portal should adopt the same transactional contact-reservation service so public submissions cannot race CRM account creation.
-4. **Communication delivery.** External email/WhatsApp/Slack delivery is still initiated from application workflows. A transactional outbox and background worker are recommended at higher traffic.
+4. **Communication delivery.** External email/WhatsApp delivery is still initiated from application workflows. A transactional outbox and background worker are recommended at higher traffic.
 5. **Shared caches and distributed rate limits.** Dashboard caches and the public-intake IP limiter are per process. Redis or another shared store is recommended when running multiple instances.
 6. **Customer Portal authentication.** The current shared service token should eventually be replaced with customer-scoped, expiring signed sessions/tokens.
 7. **Sensitive S3 uploads.** Add post-upload file-signature verification, checksum enforcement, malware scanning, and quarantine before using S3 for identity documents.

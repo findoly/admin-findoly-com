@@ -4,7 +4,6 @@ const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const messageGateway = require("./message-gateway");
 const whatsappService = require("./whatsapp-service");
 const { createUnlockAction, tokenHash, actionExpiryMinutes } = require("./whatsapp-action-token");
-const { normalizeChannelId } = require("./slack-service");
 const { renderText, normalizeVariables, templateParameterValues } = require("./template-renderer");
 const { validateMobile } = require("../../utils/mobile");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
@@ -62,6 +61,7 @@ const historyPush = function (entry) {
 };
 
 const COMMUNICATION_CHANNELS = Object.freeze(["call", "whatsapp", "email", "sms", "slack"]);
+const ACTIVE_COMMUNICATION_CHANNELS = Object.freeze(["whatsapp", "email"]);
 const COMMUNICATION_DIRECTIONS = Object.freeze(["outbound", "inbound"]);
 const DELIVERY_STATUSES = Object.freeze([
   "logged",
@@ -89,22 +89,25 @@ const normalizeRecipientContact = function (value, channel) {
   const contact = textValue(value, { label: "Recipient contact", maxLength: 254 });
   if (!contact) return "";
   if (channel === "email") return emailValue(contact, { label: "Recipient email" });
-  if (channel === "slack") {
-    return normalizeChannelId(contact, {
-      label: "Slack channel ID",
-      required: true,
-    });
-  }
   return validateMobile(contact, { label: "Recipient mobile number", required: false });
 };
 
-const normalizeCommunicationInput = function (input, current) {
+const normalizeCommunicationInput = function (input, current, options = {}) {
   const source = input || {};
   const existing = current || {};
-  const channel = enumValue(source.channel, COMMUNICATION_CHANNELS, {
-    label: "Communication channel",
-    fallback: existing.channel || "call",
-  });
+  const requestedChannel = source.channel ?? existing.channel ?? "whatsapp";
+  const preservingHistoricalChannel = Boolean(
+    options.allowHistoricalChannel
+      && existing.channel
+      && source.channel === undefined
+      && COMMUNICATION_CHANNELS.includes(existing.channel),
+  );
+  const channel = preservingHistoricalChannel
+    ? existing.channel
+    : enumValue(requestedChannel, ACTIVE_COMMUNICATION_CHANNELS, {
+        label: "Communication channel",
+        fallback: "whatsapp",
+      });
   return {
     enquiryId: optionalIdentifier(source.enquiryId ?? existing.enquiryId, "Requirement ID"),
     providerId: optionalIdentifier(source.providerId ?? existing.providerId, "Provider ID"),
@@ -194,6 +197,9 @@ const list = async function (filters) {
   if (source.purpose) {
     query.purpose = textValue(source.purpose, { label: "Communication purpose filter", maxLength: 100 }).toLowerCase();
   }
+  if (source.trigger) {
+    query.trigger = textValue(source.trigger, { label: "Communication event filter", maxLength: 100 }).toLowerCase();
+  }
   if (source.accountType) {
     const accountType = enumValue(source.accountType, ["customer", "provider", "agent", "employee", "manual"], {
       label: "Communication recipient type filter",
@@ -241,7 +247,7 @@ const get = async function (communicationId) {
 };
 
 const create = async function (input) {
-  return Communication.create(normalizeCommunicationInput(input || {}, {}));
+  return Communication.create(normalizeCommunicationInput(input || {}, {}, { allowHistoricalChannel: false }));
 };
 
 const update = async function (communicationId, input) {
@@ -249,7 +255,7 @@ const update = async function (communicationId, input) {
   assertCommunicationIdUnchanged(current, input || {});
   const result = await Communication.updateOne(
     { communicationId: current.communicationId },
-    { $set: { ...normalizeCommunicationInput(input || {}, current), updatedAt: new Date() } },
+    { $set: { ...normalizeCommunicationInput(input || {}, current, { allowHistoricalChannel: true }), updatedAt: new Date() } },
   );
   if (!result.matchedCount) throw Object.assign(new Error("Communication not found"), { status: 404 });
   return get(current.communicationId);
@@ -280,52 +286,13 @@ const deliveryPreview = function (template, variables) {
 
 const send = async function (input, actor) {
   const source = input || {};
-  const channel = enumValue(source.channel, ["whatsapp", "email", "slack"], {
+  const channel = enumValue(source.channel, ["whatsapp", "email"], {
     label: "Delivery channel",
   });
-  const isSlack = channel === "slack";
-  let template = null;
-  let preview = null;
-  let recipientContact = "";
-  let slackChannelName = "";
-
-  if (isSlack) {
-    recipientContact = normalizeRecipientContact(
-      source.channelId || source.recipientContact || process.env.SLACK_DEFAULT_CHANNEL_ID || "",
-      channel,
-    );
-    slackChannelName = textValue(
-      source.channelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
-      {
-        label: "Slack channel name",
-        required: false,
-        maxLength: 100,
-      },
-    ).replace(/^#/, "");
-    const message = textValue(source.message || source.text || "", {
-      label: "Slack message",
-      required: true,
-      maxLength: 10000,
-      preserveWhitespace: true,
-    });
-    preview = {
-      subject: textValue(source.subject || "Internal Slack notification", {
-        label: "Slack subject",
-        maxLength: 300,
-      }),
-      message,
-      html: "",
-      variables: {},
-    };
-  } else {
-    template = await getTemplate(
-      source.templateId,
-      channel,
-    );
-    recipientContact = normalizeRecipientContact(source.recipientContact, channel);
-    if (!recipientContact) throw validationError("Recipient contact is required");
-    preview = deliveryPreview(template, source.variables || {});
-  }
+  const template = await getTemplate(source.templateId, channel);
+  const recipientContact = normalizeRecipientContact(source.recipientContact, channel);
+  if (!recipientContact) throw validationError("Recipient contact is required");
+  const preview = deliveryPreview(template, source.variables || {});
 
   const idempotencyKey = textValue(source.idempotencyKey, {
     label: "Idempotency key",
@@ -349,10 +316,6 @@ const send = async function (input, actor) {
     label: "Communication metadata",
     maxBytes: 50000,
   });
-  if (isSlack) {
-    metadata.slackChannelId = recipientContact;
-    metadata.slackChannelName = slackChannelName;
-  }
   if (channel === "whatsapp") {
     if (Array.isArray(source.templateParamsOverride)) {
       metadata.whatsappTemplateParams = source.templateParamsOverride.map((value) => String(value ?? ""));
@@ -367,11 +330,11 @@ const send = async function (input, actor) {
     enquiryId: optionalIdentifier(source.enquiryId, "Requirement ID"),
     providerId: optionalIdentifier(source.providerId, "Provider ID"),
     agentId: optionalIdentifier(source.agentId, "Agent ID"),
-    templateId: template ? template.templateId : "",
+    templateId: template.templateId,
     ruleId: optionalIdentifier(source.ruleId, "Rule ID"),
     recipientName: textValue(source.recipientName, {
       label: "Recipient name",
-      fallback: isSlack ? "Internal team" : "",
+      fallback: "",
       maxLength: 120,
     }),
     recipientContact,
@@ -379,12 +342,12 @@ const send = async function (input, actor) {
     direction: "outbound",
     purpose: textValue(source.purpose, {
       label: "Communication purpose",
-      fallback: isSlack ? "internal_team_notification" : "manual",
+      fallback: "manual",
       maxLength: 100,
     }),
     trigger: textValue(source.trigger, {
       label: "Communication trigger",
-      fallback: isSlack ? "manual_slack" : "manual",
+      fallback: "manual",
       maxLength: 100,
     }),
     subject: preview.subject,
@@ -451,19 +414,15 @@ const send = async function (input, actor) {
     const result = await messageGateway.send({
       channel,
       to: recipientContact,
-      channelId: isSlack ? recipientContact : "",
-      channelName: isSlack ? slackChannelName : "",
-      templateName: template ? template.name : "",
-      externalTemplateId: template ? template.externalTemplateId : "",
-      templateParams: template
-        ? templateParameterValues(template, preview.variables, {
-          override: Array.isArray(source.templateParamsOverride) ? source.templateParamsOverride : undefined,
-          buttonValues: Array.isArray(source.templateButtonValues) ? source.templateButtonValues : undefined,
-        })
-        : [],
+      templateName: template.name,
+      externalTemplateId: template.externalTemplateId,
+      templateParams: templateParameterValues(template, preview.variables, {
+        override: Array.isArray(source.templateParamsOverride) ? source.templateParamsOverride : undefined,
+        buttonValues: Array.isArray(source.templateButtonValues) ? source.templateButtonValues : undefined,
+      }),
       postbackTexts,
-      language: template ? template.language : "",
-      category: template ? template.category : "",
+      language: template.language,
+      category: template.category,
       subject: preview.subject,
       text: preview.message,
       html: preview.html,
@@ -664,34 +623,13 @@ const sendWhatsappSession = async function (input, actor = "system") {
   return completedCommunication;
 };
 
-const retry = async function (communicationId, actor) {
+const retry = async function (communicationId, actor, options = {}) {
   const current = await get(communicationId);
-  if (!["whatsapp", "email", "slack"].includes(current.channel)) {
-    throw validationError("Only WhatsApp, email and Slack deliveries can be retried");
+  if (!["whatsapp", "email"].includes(current.channel)) {
+    throw validationError("Only WhatsApp and email deliveries can be retried");
   }
   if (current.purpose === "otp") {
     throw validationError("OTP deliveries cannot be retried; request a new OTP instead");
-  }
-  if (current.channel === "slack") {
-    return send(
-      {
-        channel: "slack",
-        channelId: current.recipientContact || current.metadata?.slackChannelId || process.env.SLACK_DEFAULT_CHANNEL_ID || "",
-        channelName: current.metadata?.slackChannelName || process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
-        recipientName: current.recipientName || "Internal team",
-        message: current.message || "",
-        subject: current.subject || "Internal Slack notification",
-        purpose: current.purpose || "internal_team_notification",
-        trigger: "manual_retry",
-        automatic: false,
-        metadata: {
-          ...(current.metadata || {}),
-          retriedFromCommunicationId: current.communicationId,
-        },
-        idempotencyKey: `retry:${current.communicationId}:${Date.now()}`,
-      },
-      actor || "admin",
-    );
   }
   if (!current.templateId) {
     throw validationError("This communication does not have a reusable template");
@@ -974,12 +912,7 @@ async function buildDashboard() {
     .limit(10)
     .maxTimeMS(COMMUNICATION_QUERY_MAX_TIME_MS)
     .lean();
-  const recentSlack = await Communication.find({ channel: "slack" })
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(10)
-    .maxTimeMS(COMMUNICATION_QUERY_MAX_TIME_MS)
-    .lean();
-  return { statuses, channelTotals, recent, recentSlack, failed };
+  return { statuses, channelTotals, recent, failed };
 }
 
 const dashboard = async function (options = {}) {
@@ -1018,6 +951,7 @@ module.exports = {
   normalizeRecipientContact,
   assertCommunicationIdUnchanged,
   COMMUNICATION_CHANNELS,
+  ACTIVE_COMMUNICATION_CHANNELS,
   COMMUNICATION_DIRECTIONS,
   DELIVERY_STATUSES,
 };

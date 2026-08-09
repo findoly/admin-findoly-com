@@ -40,7 +40,6 @@ function controllerHarness() {
       async dispatch() { dispatchCalls += 1; return []; },
     },
     "../services/communication/webhook-service": {},
-    "../services/communication/slack-service": {},
     "../services/communication/communication-config": { configurationStatus: () => ({}) },
     "../services/provider-unlock/provider-status-service": {
       providerStatusFromEvent: () => "",

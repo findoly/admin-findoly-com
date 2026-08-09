@@ -41,11 +41,15 @@ test("provider creation dispatches once after successful persistence and maps te
   assert.match(notification, /values\["6"\]\s*=\s*values\.support_email/);
 });
 
-test("Provider-created rule is visible and exposes provider variables", () => {
+test("Provider-created automation remains selectable and exposes provider variables through metadata", () => {
   const rules = read("views/communication/rules.ejs");
-  assert.match(rules, /provider_created/);
-  assert.match(rules, /Provider created rule/);
+  const ruleService = read("services/communication/rule-service.js");
+  const controller = read("controllers/communicationController.js");
+  assert.match(rules, /selectableEvents/);
+  assert.match(rules, /Event provides/);
+  assert.match(controller, /eventVariables:\s*ruleService\.EVENT_VARIABLES/);
+  assert.match(ruleService, /provider_created/);
   for (const variable of ["provider_name", "provider_id", "business_name", "service_categories", "login_url", "support_email"]) {
-    assert.match(rules, new RegExp(variable));
+    assert.match(ruleService, new RegExp(variable));
   }
 });

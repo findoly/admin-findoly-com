@@ -5,6 +5,20 @@ const { pageAuth, requirePermission } = require("../middleware/auth");
 
 const protectedPage = (permission) => [pageAuth, requirePermission(permission)];
 
+function communicationChannel(channel) {
+  return (req, res, next) => {
+    res.locals.communicationChannel = channel;
+    next();
+  };
+}
+
+function templateChannelFromQuery(req, res, next) {
+  res.locals.communicationChannel = String(req.query.channel || "whatsapp").toLowerCase() === "email"
+    ? "email"
+    : "whatsapp";
+  next();
+}
+
 router.get("/login", page.login);
 router.get("/", (req, res) => res.redirect(req.admin ? "/dashboard" : "/login"));
 router.get("/dashboard", ...protectedPage("dashboard.view"), page.dashboard);
@@ -40,8 +54,20 @@ router.get("/service-types", ...protectedPage("categories.view"), page.serviceTy
 router.get("/follow-ups", ...protectedPage("followUps.view"), page.followUps);
 router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followUpCreate);
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);
-router.get("/communications", ...protectedPage("communications.view"), page.communications);
-router.get("/communications/logs", ...protectedPage("communications.view"), page.communicationLogs);
+router.get("/communications", ...protectedPage("communications.view"), (req, res) => res.redirect(302, "/communications/whatsapp"));
+router.get("/communications/whatsapp", ...protectedPage("communications.view"), communicationChannel("whatsapp"), page.communicationWhatsapp);
+router.get("/communications/whatsapp/templates", ...protectedPage("communications.view"), communicationChannel("whatsapp"), page.communicationWhatsappTemplates);
+router.get("/communications/whatsapp/automations", ...protectedPage("communications.view"), communicationChannel("whatsapp"), page.communicationWhatsappRules);
+router.get("/communications/whatsapp/logs", ...protectedPage("communications.view"), communicationChannel("whatsapp"), page.communicationWhatsappLogs);
+router.get("/communications/email", ...protectedPage("communications.view"), communicationChannel("email"), page.communicationEmail);
+router.get("/communications/email/internal-alerts", ...protectedPage("communications.view"), communicationChannel("email"), page.communicationEmailInternalAlerts);
+router.get("/communications/email/templates", ...protectedPage("communications.view"), communicationChannel("email"), page.communicationEmailTemplates);
+router.get("/communications/email/automations", ...protectedPage("communications.view"), communicationChannel("email"), page.communicationEmailRules);
+router.get("/communications/email/logs", ...protectedPage("communications.view"), communicationChannel("email"), page.communicationEmailLogs);
+router.get("/communications/logs", ...protectedPage("communications.view"), (req, res) => {
+  const channel = String(req.query.channel || "").toLowerCase();
+  res.redirect(302, channel === "whatsapp" ? "/communications/whatsapp/logs" : "/communications/email/logs");
+});
 router.get("/whatsapp-inbox", ...protectedPage("communications.view"), page.whatsappInbox);
 router.get("/communications/whatsapp-inbox", ...protectedPage("communications.view"), (req, res) => {
   const queryIndex = req.originalUrl.indexOf("?");
@@ -49,12 +75,18 @@ router.get("/communications/whatsapp-inbox", ...protectedPage("communications.vi
   res.redirect(302, `/whatsapp-inbox${query}`);
 });
 router.get("/communications/send", ...protectedPage("communications.send"), page.communicationSend);
-router.get("/communications/templates", ...protectedPage("communications.view"), page.communicationTemplates);
-router.get("/communications/templates/new", ...protectedPage("communications.manage"), page.communicationTemplateCreate);
-router.get("/communications/templates/:templateId/edit", ...protectedPage("communications.manage"), page.communicationTemplateEdit);
-router.get("/communications/rules", ...protectedPage("communications.view"), page.communicationRules);
+router.get("/communications/templates", ...protectedPage("communications.view"), (req, res) => {
+  const channel = String(req.query.channel || "").toLowerCase();
+  res.redirect(302, channel === "whatsapp" ? "/communications/whatsapp/templates" : "/communications/email/templates");
+});
+router.get("/communications/templates/new", ...protectedPage("communications.manage"), templateChannelFromQuery, page.communicationTemplateCreate);
+router.get("/communications/templates/:templateId/edit", ...protectedPage("communications.manage"), templateChannelFromQuery, page.communicationTemplateEdit);
+router.get("/communications/rules", ...protectedPage("communications.view"), (req, res) => {
+  const channel = String(req.query.channel || "").toLowerCase();
+  res.redirect(302, channel === "whatsapp" ? "/communications/whatsapp/automations" : "/communications/email/automations");
+});
 router.get("/communications/otp", ...protectedPage("communications.view"), page.communicationOtp);
-router.get("/communications/settings", ...protectedPage("communications.manage"), page.communicationSettings);
+router.get("/communications/settings", ...protectedPage("communications.manage"), (req, res) => res.redirect(302, "/communications/email"));
 router.get("/communications/new", ...protectedPage("communications.send"), page.communicationCreate);
 router.get("/communications/:communicationId/edit", ...protectedPage("communications.manage"), page.communicationEdit);
 router.get("/communications/:communicationId", ...protectedPage("communications.view"), page.communicationShow);
@@ -75,7 +107,17 @@ router.get("/search/enquiries", ...protectedPage("requirements.view"), page.enqu
 router.get("/search/providers", ...protectedPage("providers.view"), page.providers);
 router.get("/search/agents", ...protectedPage("agents.view"), page.agents);
 router.get("/search/follow-ups", ...protectedPage("followUps.view"), page.followUps);
-router.get("/search/communications", ...protectedPage("communications.view"), page.communicationLogs);
+router.get("/search/communications", ...protectedPage("communications.view"), (req, res) => {
+  const channel = String(req.query.channel || "").toLowerCase() === "whatsapp" ? "whatsapp" : "email";
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (key === "channel") continue;
+    if (Array.isArray(value)) value.forEach((entry) => query.append(key, String(entry)));
+    else if (value !== undefined && value !== null && String(value) !== "") query.set(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  res.redirect(302, `/communications/${channel}/logs${suffix}`);
+});
 router.get("/search/invoices", ...protectedPage("billing.view"), page.invoices);
 
 module.exports = router;

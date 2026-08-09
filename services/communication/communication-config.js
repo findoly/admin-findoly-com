@@ -53,15 +53,9 @@ const configurationStatus = function () {
       fromName: process.env.SES_FROM_NAME || process.env.APP_NAME || "Findoly",
       configurationSet: process.env.SES_CONFIGURATION_SET || "",
     },
-    slack: {
-      botToken: Boolean(process.env.SLACK_BOT_TOKEN),
-      defaultChannelId: process.env.SLACK_DEFAULT_CHANNEL_ID || "",
-      defaultChannelName: process.env.SLACK_DEFAULT_CHANNEL_NAME || "internal-team",
-      channelCacheSeconds: Math.max(30, Number(process.env.SLACK_CHANNEL_CACHE_SECONDS || 300) || 300),
-      available: mode === "lambda" ? Boolean(process.env.MESSAGE_LAMBDA_URL) : Boolean(process.env.SLACK_BOT_TOKEN),
-    },
     systemRouting: {
-      slackAllEvents: process.env.SYSTEM_EVENT_SLACK_ENABLED === undefined ? true : truthy(process.env.SYSTEM_EVENT_SLACK_ENABLED),
+      internalAlertEmail: process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com",
+      internalAlertEmailEnabled: process.env.INTERNAL_ALERT_EMAIL_ENABLED === undefined ? true : truthy(process.env.INTERNAL_ALERT_EMAIL_ENABLED),
       providerUnlockAndStatusEmail: process.env.PROVIDER_EVENT_EMAIL_ENABLED === undefined ? true : truthy(process.env.PROVIDER_EVENT_EMAIL_ENABLED),
       whatsappIntegrated: Boolean(
         process.env.CRM_GUPSHUP_API_KEY

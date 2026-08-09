@@ -49,12 +49,8 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4Z"/><path d="M8 9h8M8 13h5"/></svg><span>Communication Center</span>
             </button>
             <ul id="communicationCenterSubmenu" class="nav nav-group-sub crm-sidebar-submenu" x-show="communicationMenuOpen || pathIs('/communications')" x-cloak>
-              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications" class="nav-link" :class="{active:location.pathname === '/communications'}" @click="sidebarOpen=false"><span>Overview</span></a></li><% } %>
-              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/logs" class="nav-link" :class="{active:pathIs('/communications/logs') || location.pathname === '/communications/new' || /^\/communications\/[^/]+\/edit$/.test(location.pathname)}" @click="sidebarOpen=false"><span>Message logs</span></a></li><% } %>
-              <% if (canAccess('communications.send')) { %><li class="nav-item"><a href="/communications/send" class="nav-link" :class="{active:pathIs('/communications/send')}" @click="sidebarOpen=false"><span>Send message</span></a></li><% } %>
-              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/templates" class="nav-link" :class="{active:pathIs('/communications/templates')}" @click="sidebarOpen=false"><span>Manage templates</span></a></li><% } %>
-              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/rules" class="nav-link" :class="{active:pathIs('/communications/rules')}" @click="sidebarOpen=false"><span>Manage rules</span></a></li><% } %>
-              <% if (canAccess('communications.manage')) { %><li class="nav-item"><a href="/communications/settings" class="nav-link" :class="{active:pathIs('/communications/settings')}" @click="sidebarOpen=false"><span>Channel management</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/whatsapp" class="nav-link" :class="{active:pathIs('/communications/whatsapp')}" @click="sidebarOpen=false"><span>WhatsApp</span></a></li><% } %>
+              <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/email" class="nav-link" :class="{active:pathIs('/communications/email')}" @click="sidebarOpen=false"><span>Email</span></a></li><% } %>
               <% if (canAccess('communications.view')) { %><li class="nav-item"><a href="/communications/otp" class="nav-link" :class="{active:pathIs('/communications/otp')}" @click="sidebarOpen=false"><span>OTP activity</span></a></li><% } %>
             </ul>
           </li>

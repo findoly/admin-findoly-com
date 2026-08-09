@@ -2,103 +2,67 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Communication Center uses a clear permission-aware sidebar submenu", () => {
+test("Communication Center sidebar exposes only WhatsApp, Email and OTP management", () => {
   const sidebar = read("views/partials/sidebar.ejs");
-  const scripts = read("views/partials/scripts.ejs");
-  const context = read("views/communication/_navigation.ejs");
-  const css = read("public/css/app.css");
-
-  for (const label of [
-    "Overview",
-    "Message logs",
-    "Send message",
-    "Manage templates",
-    "Manage rules",
-    "Channel management",
-    "OTP activity",
-  ]) {
-    assert.match(sidebar, new RegExp(label));
-  }
-  assert.match(sidebar, /communicationMenuOpen/);
-  assert.match(sidebar, /aria-controls="communicationCenterSubmenu"/);
-  assert.match(sidebar, /communications\.send/);
-  assert.match(sidebar, /communications\.manage/);
-  assert.match(scripts, /communicationMenuOpen:\s*location\.pathname/);
-  assert.match(context, /crm-communication-breadcrumb/);
-  assert.match(context, /Communication Center/);
-  assert.doesNotMatch(context, /crm-communication-nav-link/);
-  assert.match(css, /\.crm-sidebar-submenu/);
-  assert.match(css, /\.crm-communication-context/);
+  assert.match(sidebar, /href="\/communications\/whatsapp"/);
+  assert.match(sidebar, /href="\/communications\/email"/);
+  assert.match(sidebar, /href="\/communications\/otp"/);
+  assert.match(sidebar, />WhatsApp</);
+  assert.match(sidebar, />Email</);
+  assert.match(sidebar, />OTP activity</);
+  assert.doesNotMatch(sidebar, /Channel management/);
+  assert.doesNotMatch(sidebar, /Manage rules/);
 });
 
-test("Communication lists provide consistent search filters and pagination", () => {
-  const pages = {
-    "views/communication/logs.ejs": ["Recipient type", "Purpose", "Rows"],
-    "views/communication/templates.ejs": ["Category", "Language", "Active", "Rows"],
-    "views/communication/rules.ejs": ["Recipient", "Channel", "Status", "Rows"],
-    "views/communication/otp.ejs": ["Purpose", "From", "To", "Rows"],
-  };
-  for (const [file, labels] of Object.entries(pages)) {
-    const source = read(file);
-    assert.match(source, /crm-filter-bar/, `${file} must use shared filter bar`);
-    assert.match(source, /crm-filter-actions/, `${file} must group actions`);
-    assert.match(source, /crm-filter-page-size/, `${file} must expose rows selector`);
-    assert.match(source, /createCursorPagination/, `${file} must paginate`);
-    assert.match(source, /crm-table/, `${file} must use CRM table styling`);
-    assert.match(source, /crm-table-footer/, `${file} must have pagination footer`);
-    for (const label of labels) assert.match(source, new RegExp(label));
+test("WhatsApp and Email have separate focused navigation and pages", () => {
+  const routes = read("routes/frontend.js");
+  const navigation = read("views/communication/_navigation.ejs");
+  const home = read("views/communication/channel-home.ejs");
+  assert.match(routes, /\/communications\/whatsapp\/templates/);
+  assert.match(routes, /\/communications\/whatsapp\/automations/);
+  assert.match(routes, /\/communications\/whatsapp\/logs/);
+  assert.match(routes, /\/communications\/email\/internal-alerts/);
+  assert.match(routes, /\/communications\/email\/templates/);
+  assert.match(routes, /\/communications\/email\/automations/);
+  assert.match(routes, /\/communications\/email\/logs/);
+  assert.match(navigation, /Internal alerts/);
+  assert.match(navigation, /Open Inbox/);
+  assert.match(home, /Amazon SES/);
+  assert.match(home, /Gupshup/);
+});
+
+test("channel lists remain searchable and cursor paginated", () => {
+  for (const file of ["views/communication/logs.ejs", "views/communication/templates.ejs", "views/communication/rules.ejs"]) {
+    const page = read(file);
+    assert.match(page, /crm-filter-bar/);
+    assert.match(page, /createCursorPagination/);
+    assert.match(page, /crm-table/);
+    assert.match(page, /crm-table-footer/);
   }
 });
 
-test("Communication APIs expose filtered cursor pagination", () => {
-  const templateService = read("services/communication/template-service.js");
-  const ruleService = read("services/communication/rule-service.js");
-  const otpService = read("services/communication/otp-service.js");
-  const communicationService = read("services/communication/communication-service.js");
-  const controller = read("controllers/communicationController.js");
-
-  for (const source of [templateService, ruleService, otpService]) {
-    assert.match(source, /cursorPaginate/);
-    assert.match(source, /getPagination/);
+test("internal email alert page exposes fixed recipient, templates, status, tests and logs", () => {
+  const page = read("views/communication/internal-alerts.ejs");
+  for (const label of ["CRM lead created", "Partner lead submitted", "Partner account created", "Provider joining request submitted", "Provider account created"]) {
+    assert.match(page, new RegExp(label));
   }
-  assert.match(templateService, /source\.category/);
-  assert.match(templateService, /source\.language/);
-  assert.match(ruleService, /source\.recipientSource/);
-  assert.match(ruleService, /source\.channel/);
-  assert.match(otpService, /source\.purpose/);
-  assert.match(otpService, /applyDateRange/);
-  assert.match(communicationService, /source\.accountType/);
-  assert.match(communicationService, /source\.purpose/);
-  assert.match(controller, /pagination:\s*result\.pagination/);
+  assert.match(page, /alert@findoly\.com/);
+  assert.match(page, /emailTemplateId/);
+  assert.match(page, /Send test/);
+  assert.match(page, /internal_email_alert/);
+  assert.doesNotMatch(page, /Slack/);
 });
 
-test("Communication Center separates channel and automation management", () => {
-  const overview = read("views/communication/index.ejs");
-  const settings = read("views/communication/settings.ejs");
-  const templates = read("views/communication/templates.ejs");
-  const templateForm = read("views/communication/template-form.ejs");
-  const rules = read("views/communication/rules.ejs");
 
-  assert.match(overview, /crm-communication-start/);
-  assert.match(overview, /id="slack-tools"/);
-  for (const channel of ["WhatsApp", "Email", "Slack", "OTP", "Delivery &amp; retention"]) {
-    assert.match(settings, new RegExp(channel));
-  }
-  assert.match(settings, /activeChannel/);
-  assert.match(settings, /crm-channel-picker-card/);
-  assert.match(templates, /WhatsApp templates/);
-  assert.match(templates, /Email templates/);
-  assert.match(templates, /queryValue\('channel'\)/);
-  assert.match(templateForm, /selectChannel\('whatsapp'\)/);
-  assert.match(templateForm, /selectChannel\('email'\)/);
-  assert.match(rules, /Create automation rule/);
-  assert.match(rules, /crm-rule-channel-grid/);
-  assert.match(rules, /method:\s*this\.mode === 'create' \? 'POST' : 'PUT'/);
-  assert.match(rules, /Enable only the channels needed/);
+test("legacy communication search redirects into the selected focused channel", () => {
+  const routes = read("routes/frontend.js");
+  assert.match(routes, /\/search\/communications/);
+  assert.match(routes, /`\/communications\/\$\{channel\}\/logs\$\{suffix\}`/);
+  assert.doesNotMatch(routes, /search\/communications[^\n]+page\.communicationLogs/);
 });
