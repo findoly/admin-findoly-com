@@ -31,6 +31,9 @@ const MODELS = Object.freeze([
   require("../models/ProviderSubscription"),
   require("../models/Role"),
   require("../models/ServiceType"),
+  require("../models/WebsiteMedia"),
+  require("../models/WebsiteCatalogItem"),
+  require("../models/HomepageContent"),
   require("../models/SystemMigration"),
   require("../models/WalletTransaction"),
 ]);

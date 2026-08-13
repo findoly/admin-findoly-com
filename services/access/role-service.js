@@ -53,6 +53,8 @@ function normalizePermissions(value, current = []) {
     "agents.edit": ["agents.view", "categories.view"],
     "partnerPayouts.manage": ["partnerPayouts.view"],
     "categories.manage": ["categories.view"],
+    "websiteContent.manage": ["websiteContent.view"],
+    "websiteContent.publish": ["websiteContent.view"],
     "followUps.create": ["followUps.view"],
     "followUps.edit": ["followUps.view"],
     "communications.send": ["communications.view"],

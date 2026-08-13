@@ -51,6 +51,11 @@ router.get("/partner-withdrawals", ...protectedPage("partnerPayouts.view"), page
 router.get("/partner-withdrawals/:withdrawalId", ...protectedPage("partnerPayouts.view"), page.partnerWithdrawalShow);
 router.get("/categories", ...protectedPage("categories.view"), page.categories);
 router.get("/service-types", ...protectedPage("categories.view"), page.serviceTypes);
+router.get("/website-content", ...protectedPage("websiteContent.view"), (req, res) => res.redirect(302, "/website-content/homepage"));
+router.get("/website-content/homepage", ...protectedPage("websiteContent.view"), page.websiteHomepage);
+router.get("/website-content/services", ...protectedPage("websiteContent.view"), page.websiteServices);
+router.get("/website-content/products", ...protectedPage("websiteContent.view"), page.websiteProducts);
+router.get("/website-content/media", ...protectedPage("websiteContent.view"), page.websiteMedia);
 router.get("/follow-ups", ...protectedPage("followUps.view"), page.followUps);
 router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followUpCreate);
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);

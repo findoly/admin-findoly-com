@@ -3,6 +3,9 @@ const controller = require("../controllers/customerPortalController");
 const { requireCustomerPortalToken } = require("../middleware/customerPortalAuth");
 
 router.use(requireCustomerPortalToken);
+router.get("/website", controller.website);
+router.post("/otp/send", controller.sendOtp);
+router.post("/otp/verify", controller.verifyOtp);
 router.get("/categories", controller.categories);
 router.post("/enquiries", controller.createEnquiry);
 router.get("/enquiries", controller.listEnquiries);

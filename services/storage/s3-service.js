@@ -593,6 +593,13 @@ async function putObject(input = {}) {
   };
 }
 
+async function deleteObject(input = {}) {
+  const settings = assertConfigured();
+  const key = normalizeObjectKey(input.key, settings);
+  await fetchS3(settings, "DELETE", key, { operation: "delete_object" });
+  return { key, deleted: true };
+}
+
 async function createUploadUrl(input = {}) {
   const upload = validateUpload(input);
   if (!upload.replace && (await exists(upload.key))) {
@@ -654,6 +661,7 @@ module.exports = {
   createFolder,
   createUploadUrl,
   createDownloadUrl,
+  deleteObject,
   putObject,
   normalizeObjectKey,
   presignedUrl,

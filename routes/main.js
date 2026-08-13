@@ -24,6 +24,7 @@ router.use("/employees", require("./employee"));
 router.use("/role", require("./role"));
 router.use("/roles", require("./role"));
 router.use("/catalog", require("./catalog"));
+router.use("/website-content", require("./website-content"));
 router.use("/location", require("./location"));
 router.use("/enquiry", require("./enquiry"));
 router.use("/enquiries", require("./enquiry"));

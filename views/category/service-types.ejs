@@ -1,6 +1,7 @@
 <%
   const canAccess = typeof can === 'function' ? can : () => true;
   const canManageCatalog = canAccess('categories.manage');
+  const canViewWebsiteMedia = canAccess('websiteContent.view');
 %>
 <!doctype html>
 <html lang="en" dir="ltr">
@@ -66,6 +67,8 @@
                           <input id="service-order" type="number" class="form-control" min="0" max="100000" step="1" x-model.number="form.displayOrder">
                           <div class="form-text">Use 0 for the first item, then 10, 20, 30 to leave room between items.</div>
                         </div>
+                        <% if (canViewWebsiteMedia) { %><div class="mb-3"><label class="form-label" for="service-image">Website image</label><select id="service-image" class="form-select" x-model="form.imageMediaId"><option value="">No image</option><template x-for="media in mediaItems" :key="media.mediaId"><option :value="media.mediaId" x-text="media.altText || media.originalName || media.fileName"></option></template></select><div class="form-text"><a href="/website-content/media">Open Media Library</a> to upload or manage images.</div></div><% } else { %><div class="alert alert-light border mb-3">Website images are managed by users with Website Content access.</div><% } %>
+                        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="service-website" x-model="form.websiteVisible"><label class="form-check-label" for="service-website">Visible on Findoly.com</label></div>
                         <div class="form-check"><input class="form-check-input" type="checkbox" id="service-active" x-model="form.active"><label class="form-check-label" for="service-active">Active and selectable in new lead forms</label></div>
                       </div>
                       <div class="card-footer d-flex gap-2"><button type="button" class="btn btn-light" x-show="editingId" @click="resetForm()">Cancel</button><button class="btn btn-primary ms-auto" :disabled="saving || !form.categoryId" x-text="saving ? 'Saving…' : (editingId ? 'Update subcategory' : 'Add subcategory')"></button></div>
@@ -115,10 +118,10 @@
             <script>
               function serviceTypeManager() {
                 return {
-                  categories: [], serviceTypes: [], editingId: '', loading: true, saving: false,
+                  categories: [], serviceTypes: [], mediaItems: [], editingId: '', loading: true, saving: false,
                   error: '', success: '', q: '', categorySlug: queryValue('categorySlug'), status: '', sort: 'order_asc',
                   pagination: createCursorPagination(20), slugTouched: false,
-                  form: { categoryId: '', name: '', slug: '', description: '', displayOrder: 0, active: true },
+                  form: { categoryId: '', name: '', slug: '', description: '', displayOrder: 0, websiteVisible: true, imageMediaId: '', active: true },
                   slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); },
                   syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
                   categoryBySlug(slug) { return this.categories.find((category) => category.slug === slug); },
@@ -133,6 +136,7 @@
                     try {
                       const categoryBody = await apiFetch('/api/catalog/categories?includeInactive=true');
                       this.categories = categoryBody.data || [];
+                      if (<%= canViewWebsiteMedia ? 'true' : 'false' %>) this.mediaItems = (await apiFetch('/api/website-content/media?limit=500')).data || [];
                       const selected = this.categoryBySlug(this.categorySlug);
                       if (selected) this.form.categoryId = selected.categoryId;
                       await this.load();
@@ -156,20 +160,20 @@
                   clearFilters() { this.q = ''; this.categorySlug = ''; this.status = ''; this.sort = 'order_asc'; this.pagination.limit = 20; if (!this.editingId) this.form.categoryId = ''; this.search(); },
                   editServiceType(item) {
                     this.editingId = item.serviceTypeId;
-                    this.form = { categoryId: item.categoryId || '', name: item.name || '', slug: item.slug || '', description: item.description || '', displayOrder: Number(item.displayOrder || 0), active: item.active !== false };
+                    this.form = { categoryId: item.categoryId || '', name: item.name || '', slug: item.slug || '', description: item.description || '', displayOrder: Number(item.displayOrder || 0), websiteVisible: item.websiteVisible !== false, imageMediaId: item.imageMediaId || '', active: item.active !== false };
                     this.slugTouched = true; this.error = ''; this.success = '';
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   },
                   resetForm(categoryId = '') {
                     this.editingId = ''; this.slugTouched = false;
-                    this.form = { categoryId: categoryId || this.categoryBySlug(this.categorySlug)?.categoryId || '', name: '', slug: '', description: '', displayOrder: 0, active: true };
+                    this.form = { categoryId: categoryId || this.categoryBySlug(this.categorySlug)?.categoryId || '', name: '', slug: '', description: '', displayOrder: 0, websiteVisible: true, imageMediaId: '', active: true };
                   },
                   async saveServiceType() {
                     if (this.saving || !this.form.categoryId) return;
                     this.saving = true; this.error = ''; this.success = '';
                     try {
                       const selectedCategoryId = this.form.categoryId;
-                      const payload = { name: this.form.name, slug: this.form.slug, description: this.form.description, displayOrder: this.form.displayOrder, active: this.form.active };
+                      const payload = { name: this.form.name, slug: this.form.slug, description: this.form.description, displayOrder: this.form.displayOrder, websiteVisible: this.form.websiteVisible, imageMediaId: this.form.imageMediaId, active: this.form.active };
                       const url = this.editingId ? '/api/catalog/service-types/' + encodeURIComponent(this.editingId) : '/api/catalog/categories/' + encodeURIComponent(selectedCategoryId) + '/service-types';
                       await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(payload) });
                       this.success = this.editingId ? 'Subcategory updated successfully.' : 'Subcategory created successfully.';

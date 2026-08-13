@@ -2,6 +2,7 @@ const Category = require("../../models/Category");
 const ServiceType = require("../../models/ServiceType");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const WebsiteMedia = require("../../models/WebsiteMedia");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { prefixRegex } = require("../../utils/search-query");
@@ -36,6 +37,13 @@ function categoryQuery(categoryId) {
 function serviceTypeQuery(serviceTypeId) {
   const value = identifierValue(serviceTypeId, { label: "Service Type ID" });
   return { $or: [{ serviceTypeId: value }, { id: value }] };
+}
+
+async function validateWebsiteMediaIds(values = []) {
+  const ids = [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+  if (!ids.length) return;
+  const count = await WebsiteMedia.countDocuments({ mediaId: { $in: ids }, active: { $ne: false } });
+  if (count !== ids.length) throw validationError("One or more selected website images are invalid");
 }
 
 function presentCategory(row = {}) {
@@ -80,6 +88,19 @@ function normalizeCategoryInput(input = {}, current = null) {
       label: "Category description",
       maxLength: 2000,
     }),
+    displayOrder: numberValue(input.displayOrder, {
+      label: "Category display order",
+      fallback: existing.displayOrder ?? 0,
+      min: 0,
+      max: 100000,
+      integer: true,
+    }),
+    websiteVisible: booleanValue(input.websiteVisible, {
+      label: "Category website visibility",
+      fallback: existing.websiteVisible !== false,
+    }),
+    imageMediaId: String(input.imageMediaId ?? existing.imageMediaId ?? "").trim().slice(0, 64),
+    bannerMediaId: String(input.bannerMediaId ?? existing.bannerMediaId ?? "").trim().slice(0, 64),
     active: booleanValue(input.active, {
       label: "Category active state",
       fallback: existing.active !== false,
@@ -120,6 +141,11 @@ function normalizeServiceTypeInput(input = {}, current = {}) {
       max: 100000,
       integer: true,
     }),
+    websiteVisible: booleanValue(input.websiteVisible, {
+      label: "Service Type website visibility",
+      fallback: current.websiteVisible !== false,
+    }),
+    imageMediaId: String(input.imageMediaId ?? current.imageMediaId ?? "").trim().slice(0, 64),
     active: booleanValue(input.active, {
       label: "Service Type active state",
       fallback: current.active !== false,
@@ -233,6 +259,7 @@ async function listCategoryPage(options = {}) {
 
 async function createCategory(input = {}) {
   const data = normalizeCategoryInput(input);
+  await validateWebsiteMediaIds([data.imageMediaId, data.bannerMediaId]);
   const existing = await Category.findOne({ slug: data.slug }).lean();
   if (existing) {
     throw Object.assign(new Error("A category with this slug already exists"), {
@@ -264,11 +291,16 @@ async function updateCategory(categoryId, input = {}) {
     throw Object.assign(new Error("Category not found"), { status: 404 });
   }
   const data = normalizeCategoryInput(input, existing);
+  await validateWebsiteMediaIds([data.imageMediaId, data.bannerMediaId]);
 
   await Category.updateOne(query, {
     $set: {
       name: data.name,
       description: data.description,
+      displayOrder: data.displayOrder,
+      websiteVisible: data.websiteVisible,
+      imageMediaId: data.imageMediaId,
+      bannerMediaId: data.bannerMediaId,
       active: data.active,
       updatedAt: new Date(),
     },
@@ -349,6 +381,7 @@ async function createServiceType(categoryId, input = {}) {
     throw validationError("Create the parent category in Catalog before adding Service Types");
   }
   const data = normalizeServiceTypeInput(input);
+  await validateWebsiteMediaIds([data.imageMediaId]);
   try {
     const row = await ServiceType.create({
       ...data,
@@ -369,6 +402,7 @@ async function updateServiceType(serviceTypeId, input = {}) {
   const current = await ServiceType.findOne(query).lean();
   if (!current) throw Object.assign(new Error("Service Type not found"), { status: 404 });
   const data = normalizeServiceTypeInput(input, current);
+  await validateWebsiteMediaIds([data.imageMediaId]);
   try {
     await ServiceType.updateOne(query, { $set: { ...data, updatedAt: new Date() } });
   } catch (error) {
