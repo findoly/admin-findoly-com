@@ -1,8 +1,12 @@
 const crypto = require("crypto");
 const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
+const OtpRequest = require("../../models/OtpRequest");
 const enquiryService = require("../enquiry/enquiry-service");
 const catalogService = require("../catalog/catalog-service");
+const otpService = require("../communication/otp-service");
+const websiteContentService = require("../website-content/website-content-service");
+const { geocodePincode } = require("../location/geocoding-service");
 const { validateMobile } = require("../../utils/mobile");
 const { numberValue, plainObjectValue, pincodeValue } = require("../../utils/validation");
 
@@ -93,8 +97,59 @@ async function categories() {
     }));
 }
 
+
+async function website() {
+  return websiteContentService.publicWebsite();
+}
+
+async function sendOtp(input = {}, request) {
+  const normalizedMobile = mobile(input.mobile);
+  const result = await otpService.send({
+    channel: "whatsapp",
+    mobile: normalizedMobile,
+    purpose: "customer_requirement",
+    recipientName: text(input.name, 120) || "Customer",
+  }, request);
+  return {
+    otpId: result.otpId,
+    mobile: normalizedMobile,
+    maskedMobile: `+91 ••••••${normalizedMobile.slice(-4)}`,
+    expiresAt: result.expiresAt,
+    resendAfter: result.resendAfter,
+  };
+}
+
+async function verifyOtp(input = {}) {
+  const normalizedMobile = mobile(input.mobile);
+  const result = await otpService.verify({
+    otpId: identifier(input.otpId, "OTP reference"),
+    otp: text(input.otp, 12),
+  });
+  const record = await OtpRequest.findOne({ otpId: result.otpId }).lean();
+  if (!record || record.recipient !== normalizedMobile || record.purpose !== "customer_requirement" || record.status !== "verified") {
+    throw Object.assign(new Error("OTP verification does not match this customer requirement"), { status: 400 });
+  }
+  return { otpId: result.otpId, mobile: normalizedMobile, verifiedAt: result.verifiedAt };
+}
+
+async function assertVerifiedOtp(otpIdInput, mobileInput) {
+  const otpId = identifier(otpIdInput, "OTP reference");
+  const normalizedMobile = mobile(mobileInput);
+  const record = await OtpRequest.findOne({
+    otpId,
+    recipient: normalizedMobile,
+    purpose: "customer_requirement",
+    status: "verified",
+  }).lean();
+  if (!record?.verifiedAt) {
+    throw Object.assign(new Error("Verify the customer mobile number before submitting the requirement"), { status: 403 });
+  }
+  return record;
+}
+
 async function createEnquiry(input = {}) {
   const normalizedMobile = mobile(input.mobile);
+  const verifiedOtp = await assertVerifiedOtp(input.otpId, normalizedMobile);
   const externalEnquiryId = identifier(
     input.externalEnquiryId || crypto.randomUUID(),
     "Submission reference",
@@ -118,17 +173,28 @@ async function createEnquiry(input = {}) {
     slug: categorySlug,
     active: { $ne: false },
   }).lean();
+  const pincode = pincodeValue(input.pincode, { label: "Pincode", required: true });
+  let city = text(input.city, 100);
+  let state = text(input.state, 100);
+  let addressLine = text(input.addressLine, 500);
+  if (!city || !state) {
+    const location = await geocodePincode(pincode);
+    city = city || text(location?.city || location?.district || location?.locality, 100);
+    state = state || text(location?.state, 100);
+    addressLine = addressLine || text(location?.formattedAddress, 500);
+  }
 
   const created = await enquiryService.create(
     {
       name: text(input.name, 120),
       mobile: normalizedMobile,
-      addressLine: text(input.addressLine, 500),
-      city: text(input.city, 100),
-      state: text(input.state, 100),
-      pincode: pincodeValue(input.pincode, { label: "Pincode", required: true }),
+      addressLine,
+      city,
+      state,
+      pincode,
       category: category?.name || text(input.category, 120) || categorySlug,
       categorySlug,
+      serviceTypes: input.serviceTypeId ? [text(input.serviceTypeId, 128)] : [],
       serviceType: text(input.serviceType, 120),
       requirementTitle: text(input.requirementTitle, 200),
       preferredDate: text(input.preferredDate, 10),
@@ -153,7 +219,8 @@ async function createEnquiry(input = {}) {
       metadata: {
         customerPortalSubmission: true,
         customerMobileVerified: true,
-        customerPortalVersion: "1.0",
+        customerPortalVersion: "2.0",
+        customerOtpId: verifiedOtp.otpId,
       },
     },
     "customer-portal",
@@ -233,7 +300,10 @@ async function cancelEnquiry(mobileInput, enquiryId) {
 }
 
 module.exports = {
+  website,
   categories,
+  sendOtp,
+  verifyOtp,
   createEnquiry,
   listEnquiries,
   getEnquiry,

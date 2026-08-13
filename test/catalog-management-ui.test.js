@@ -18,15 +18,15 @@ test("Catalog has separate permission-protected Category and Subcategory pages",
   assert.match(controller, /serviceTypes: render\("category\/service-types", "Subcategories"\)/);
 });
 
-test("Catalog sidebar is expandable and highlights both child pages", () => {
+test("Website Content sidebar is expandable and keeps Category/Subcategory navigation", () => {
   const sidebar = read("views/partials/sidebar.ejs");
   const scripts = read("views/partials/scripts.ejs");
 
   assert.match(sidebar, /aria-controls="catalogSubmenu"/);
-  assert.match(sidebar, />Catalog<\/span>/);
-  assert.match(sidebar, /href="\/categories"[\s\S]{0,180}>Manage categories<\/span>/);
-  assert.match(sidebar, /href="\/service-types"[\s\S]{0,180}>Manage subcategories<\/span>/);
-  assert.match(sidebar, /pathIs\('\/categories'\) \|\| pathIs\('\/service-types'\)/);
+  assert.match(sidebar, />Website Content<\/span>/);
+  assert.match(sidebar, /href="\/categories"[\s\S]{0,220}>Categories<\/span>/);
+  assert.match(sidebar, /href="\/service-types"[\s\S]{0,220}>Subcategories<\/span>/);
+  assert.match(sidebar, /pathIs\('\/categories'\) \|\| pathIs\('\/service-types'\) \|\| pathIs\('\/website-content'\)/);
   assert.match(sidebar, /:aria-current="pathIs\('\/categories'\) \? 'page' : null"/);
   assert.match(sidebar, /:aria-current="pathIs\('\/service-types'\) \? 'page' : null"/);
   assert.match(scripts, /catalogMenuOpen:[^\n]+\/service-types/);

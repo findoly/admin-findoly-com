@@ -9,6 +9,10 @@ const categorySchema = new mongoose.Schema(
     sourceWebsite: { type: String, default: "any" },
     formType: { type: String, default: "default" },
     description: { type: String, default: "", maxlength: 2000 },
+    displayOrder: { type: Number, default: 0, min: 0, max: 100000, index: true },
+    websiteVisible: { type: Boolean, default: true, index: true },
+    imageMediaId: { type: String, default: "", index: true, maxlength: 64 },
+    bannerMediaId: { type: String, default: "", index: true, maxlength: 64 },
     active: { type: Boolean, default: true },
   },
   {

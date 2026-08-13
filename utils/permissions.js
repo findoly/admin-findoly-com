@@ -58,6 +58,15 @@ const PERMISSION_GROUPS = Object.freeze([
     ],
   },
   {
+    key: "websiteContent",
+    label: "Website Content",
+    permissions: [
+      { key: "websiteContent.view", label: "View website content" },
+      { key: "websiteContent.manage", label: "Manage website content and drafts" },
+      { key: "websiteContent.publish", label: "Publish website content to Findoly.com" },
+    ],
+  },
+  {
     key: "provider_unlocks",
     label: "Provider unlocks",
     permissions: [{ key: "provider_unlocks.view", label: "View provider lead unlocks" }],

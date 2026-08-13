@@ -1,0 +1,98 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+  const canManage = canAccess('websiteContent.manage');
+  const contentKind = typeof kind === 'string' ? kind : 'service';
+  const contentLabel = contentKind === 'product' ? 'Products' : 'Services';
+%>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div><div class="crm-page-eyebrow">Website Content / <%= contentLabel %></div><h1 class="page-title mb-1"><%= contentLabel %></h1><p class="crm-page-subtitle mb-0">Manage the customer-facing <%= contentKind %> names, images and content shown on Findoly.com.</p></div>
+          <div class="crm-page-actions"><a href="/website-content/media" class="btn btn-light">Media Library</a><a href="/website-content/homepage" class="btn btn-primary">Homepage</a></div>
+        </div>
+      </div>
+      <div class="content" x-data="websiteItemsPage('<%= contentKind %>')" x-init="init()">
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
+        <div class="row g-3">
+          <% if (canManage) { %>
+          <div class="col-xl-4">
+            <form class="card crm-catalog-form-card" @submit.prevent="save()">
+              <div class="card-header"><div><h5 class="mb-1" x-text="editingId ? 'Edit <%= contentKind %>' : 'Create <%= contentKind %>'"></h5><p class="text-muted mb-0">Category and Subcategory stay fixed after creation so saved customer links remain stable.</p></div></div>
+              <div class="card-body">
+                <div class="mb-3"><label class="form-label">Category</label><select class="form-select" x-model="form.categoryId" @change="form.serviceTypeId=''" :disabled="Boolean(editingId)" required><option value="">Choose Category</option><template x-for="category in categories" :key="category.categoryId"><option :value="category.categoryId" x-text="category.name"></option></template></select></div>
+                <div class="mb-3"><label class="form-label">Subcategory</label><select class="form-select" x-model="form.serviceTypeId" :disabled="Boolean(editingId)" required><option value="">Choose Subcategory</option><template x-for="sub in filteredSubcategories" :key="sub.serviceTypeId"><option :value="sub.serviceTypeId" x-text="sub.name"></option></template></select></div>
+                <div class="mb-3"><label class="form-label">Name</label><input class="form-control" x-model="form.name" @input="syncSlug()" maxlength="160" required></div>
+                <div class="mb-3"><label class="form-label">Slug</label><input class="form-control" x-model="form.slug" @input="slugTouched=true" maxlength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></div>
+                <div class="mb-3"><label class="form-label">Short description</label><textarea class="form-control" rows="2" x-model="form.shortDescription" maxlength="500"></textarea></div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" rows="5" x-model="form.description" maxlength="5000"></textarea></div>
+                <div class="mb-3">
+                  <label class="form-label">Cover image</label>
+                  <select class="form-select" x-model="form.coverMediaId"><option value="">No image</option><template x-for="media in mediaItems" :key="media.mediaId"><option :value="media.mediaId" x-text="media.altText || media.originalName || media.fileName"></option></template></select>
+                  <template x-if="coverMedia"><div class="mt-2"><img :src="coverMedia.publicUrl" :alt="coverMedia.altText || ''" class="img-thumbnail" style="max-height:160px"></div></template>
+                  <div class="form-text"><a href="/website-content/media">Upload or manage images in Media Library</a>.</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Gallery images</label>
+                  <div class="border rounded p-2" style="max-height:220px; overflow:auto"><template x-for="media in mediaItems" :key="'gallery-'+media.mediaId"><label class="form-check mb-2"><input type="checkbox" class="form-check-input" :value="media.mediaId" x-model="form.galleryMediaIds"><span class="form-check-label" x-text="media.altText || media.originalName || media.fileName"></span></label></template><div class="text-muted" x-show="!mediaItems.length">No images uploaded yet.</div></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Display order</label><input class="form-control" type="number" min="0" max="100000" x-model.number="form.displayOrder"></div>
+                <div class="form-check mb-2"><input id="website-visible" type="checkbox" class="form-check-input" x-model="form.websiteVisible"><label class="form-check-label" for="website-visible">Visible on Findoly.com</label></div>
+                <div class="form-check"><input id="website-active" type="checkbox" class="form-check-input" x-model="form.active"><label class="form-check-label" for="website-active">Active</label></div>
+              </div>
+              <div class="card-footer d-flex gap-2"><button type="button" class="btn btn-light" x-show="editingId" @click="reset()">Cancel</button><button class="btn btn-primary ms-auto" :disabled="saving" x-text="saving ? 'Saving…' : (editingId ? 'Update' : 'Create')"></button></div>
+            </form>
+          </div>
+          <% } %>
+          <div class="<%= canManage ? 'col-xl-8' : 'col-12' %>">
+            <div class="card">
+              <div class="card-header crm-card-heading"><div><h5 class="mb-1"><%= contentLabel %></h5><p class="text-muted mb-0">These records are delivered to the customer website through the secure Customer Portal API.</p></div></div>
+              <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Image</th><th><%= contentKind === 'product' ? 'Product' : 'Service' %></th><th>Category</th><th>Subcategory</th><th>Order</th><th>Website</th><th class="text-end">Action</th></tr></thead><tbody>
+                <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                <template x-for="item in items" :key="item.itemId"><tr>
+                  <td><img x-show="item.coverImage?.publicUrl" :src="item.coverImage?.publicUrl" :alt="item.coverImage?.altText || ''" class="rounded" style="width:56px;height:56px;object-fit:cover"><span x-show="!item.coverImage?.publicUrl" class="text-muted">—</span></td>
+                  <td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.shortDescription || item.slug"></small></td>
+                  <td x-text="categoryName(item.categoryId)"></td><td x-text="subcategoryName(item.serviceTypeId)"></td><td x-text="Number(item.displayOrder || 0)"></td>
+                  <td><span class="badge" :class="item.active !== false && item.websiteVisible !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false && item.websiteVisible !== false ? 'Visible' : 'Hidden'"></span></td>
+                  <td class="text-end"><% if (canManage) { %><button type="button" class="btn btn-light btn-sm" @click="edit(item)">Edit</button><% } else { %><span class="text-muted">View only</span><% } %></td>
+                </tr></template>
+                <tr x-show="!loading && !items.length"><td colspan="7" class="text-center py-5"><strong>No <%= contentKind %> content yet</strong><div class="text-muted mt-1">Create the first <%= contentKind %> when you are ready to manage it from CRM.</div></td></tr>
+              </tbody></table></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <%- include('../partials/footer') %>
+    </div></div></div>
+    <script>
+      function websiteItemsPage(kind) {
+        return {
+          kind, items: [], categories: [], subcategories: [], mediaItems: [], editingId: '', loading: true, saving: false, error: '', success: '', slugTouched: false,
+          form: { categoryId:'', serviceTypeId:'', name:'', slug:'', shortDescription:'', description:'', coverMediaId:'', galleryMediaIds:[], displayOrder:0, websiteVisible:true, active:true },
+          get filteredSubcategories() { return this.subcategories.filter((row) => row.categoryId === this.form.categoryId); },
+          get coverMedia() { return this.mediaItems.find((row) => row.mediaId === this.form.coverMediaId) || null; },
+          slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); },
+          syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
+          categoryName(id) { return this.categories.find((row) => row.categoryId === id)?.name || '—'; },
+          subcategoryName(id) { return this.subcategories.find((row) => row.serviceTypeId === id)?.name || '—'; },
+          async init() {
+            try {
+              const [cats, subs, media] = await Promise.all([apiFetch('/api/catalog/categories?includeInactive=true'), apiFetch('/api/catalog/service-types?includeInactive=true'), apiFetch('/api/website-content/media?limit=500')]);
+              this.categories = cats.data || []; this.subcategories = subs.data || []; this.mediaItems = media.data || []; await this.load();
+            } catch (error) { this.error = error.message; this.loading = false; }
+          },
+          async load() { this.loading = true; try { this.items = (await apiFetch('/api/website-content/items?kind='+encodeURIComponent(this.kind)+'&includeInactive=true')).data || []; } catch (error) { this.error = error.message; } finally { this.loading = false; } },
+          reset() { this.editingId=''; this.slugTouched=false; this.form={categoryId:'',serviceTypeId:'',name:'',slug:'',shortDescription:'',description:'',coverMediaId:'',galleryMediaIds:[],displayOrder:0,websiteVisible:true,active:true}; },
+          edit(item) { this.editingId=item.itemId; this.slugTouched=true; this.form={categoryId:item.categoryId,serviceTypeId:item.serviceTypeId,name:item.name||'',slug:item.slug||'',shortDescription:item.shortDescription||'',description:item.description||'',coverMediaId:item.coverMediaId||'',galleryMediaIds:[...(item.galleryMediaIds||[])],displayOrder:Number(item.displayOrder||0),websiteVisible:item.websiteVisible!==false,active:item.active!==false}; window.scrollTo({top:0,behavior:'smooth'}); },
+          async save() { if(this.saving)return; this.saving=true; this.error=''; this.success=''; try { const payload={...this.form,kind:this.kind}; const url=this.editingId?'/api/website-content/items/'+encodeURIComponent(this.editingId):'/api/website-content/items'; await apiFetch(url,{method:this.editingId?'PUT':'POST',body:JSON.stringify(payload)}); this.success=this.editingId?'Content updated successfully.':'Content created successfully.'; this.reset(); await this.load(); } catch(error){this.error=error.message;} finally{this.saving=false;} }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>
