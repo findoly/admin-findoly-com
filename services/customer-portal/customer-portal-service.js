@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const Category = require("../../models/Category");
+const ServiceType = require("../../models/ServiceType");
 const Enquiry = require("../../models/Enquiry");
 const enquiryService = require("../enquiry/enquiry-service");
 const catalogService = require("../catalog/catalog-service");
@@ -125,10 +126,29 @@ async function createEnquiry(input = {}) {
   }
 
   const categorySlug = text(input.categorySlug, 80).toLowerCase();
+  const serviceTypeSlug = text(input.serviceTypeSlug, 80).toLowerCase();
   const category = await Category.findOne({
     slug: categorySlug,
     active: { $ne: false },
   }).lean();
+  if (!category) {
+    throw Object.assign(new Error("Customer requirement category is not configured in CRM"), { status: 422, code: "CUSTOMER_CATEGORY_NOT_CONFIGURED" });
+  }
+
+  let resolvedServiceType = null;
+  if (serviceTypeSlug) {
+    resolvedServiceType = await ServiceType.findOne({
+      categorySlug,
+      slug: serviceTypeSlug,
+      active: { $ne: false },
+    }).lean();
+  }
+  if (categorySlug === "other" && serviceTypeSlug === "not-classified" && !resolvedServiceType) {
+    throw Object.assign(new Error("CRM fallback subcategory other / not-classified is not configured"), { status: 503, code: "CUSTOMER_FALLBACK_NOT_CONFIGURED" });
+  }
+
+  const resolvedServiceTypeId = text(resolvedServiceType?.serviceTypeId || input.serviceTypeId, 128);
+  const resolvedServiceTypeName = text(resolvedServiceType?.name || input.serviceType, 120);
   const pincode = pincodeValue(input.pincode, { label: "Pincode", required: true });
   let city = text(input.city, 100);
   let state = text(input.state, 100);
@@ -148,10 +168,10 @@ async function createEnquiry(input = {}) {
       city,
       state,
       pincode,
-      category: category?.name || text(input.category, 120) || categorySlug,
+      category: category.name || text(input.category, 120) || categorySlug,
       categorySlug,
-      serviceTypes: input.serviceTypeId ? [text(input.serviceTypeId, 128)] : [],
-      serviceType: text(input.serviceType, 120),
+      serviceTypes: resolvedServiceTypeId ? [resolvedServiceTypeId] : [],
+      serviceType: resolvedServiceTypeName,
       requirementTitle: text(input.requirementTitle, 200),
       preferredDate: text(input.preferredDate, 10),
       preferredSlot: text(input.preferredSlot, 100),
@@ -159,14 +179,19 @@ async function createEnquiry(input = {}) {
         ? input.priority
         : "normal",
       notes: text(input.notes, 5000),
-      additionalDetails: plainObjectValue(input.additionalDetails, {
-        label: "Additional details",
-        fallback: {},
-        maxKeys: 100,
-        maxDepth: 6,
-        maxArrayLength: 100,
-        maxBytes: 50_000,
-      }),
+      additionalDetails: {
+        ...plainObjectValue(input.additionalDetails, {
+          label: "Additional details",
+          fallback: {},
+          maxKeys: 100,
+          maxDepth: 6,
+          maxArrayLength: 100,
+          maxBytes: 50_000,
+        }),
+        categorySlug,
+        serviceTypeSlug,
+        resolvedServiceTypeId: resolvedServiceTypeId || "",
+      },
       sourceWebsite: "findoly.com",
       sourceChannel: "customer-website",
       sourceType: "direct-customer",
