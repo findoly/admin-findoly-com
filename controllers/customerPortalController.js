@@ -2,14 +2,6 @@ async function website(req, res, next) {
   try { return res.json({ success: true, data: await service.website() }); } catch (error) { return next(error); }
 }
 
-async function sendOtp(req, res, next) {
-  try { return res.status(201).json({ success: true, data: await service.sendOtp(req.body, req) }); } catch (error) { return next(error); }
-}
-
-async function verifyOtp(req, res, next) {
-  try { return res.json({ success: true, data: await service.verifyOtp(req.body) }); } catch (error) { return next(error); }
-}
-
 const service = require("../services/customer-portal/customer-portal-service");
 
 async function categories(req, res, next) {
@@ -66,8 +58,6 @@ async function cancelEnquiry(req, res, next) {
 
 module.exports = {
   website,
-  sendOtp,
-  verifyOtp,
   categories,
   createEnquiry,
   listEnquiries,

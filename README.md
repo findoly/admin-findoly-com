@@ -415,3 +415,15 @@ Before deploying this change, remove legacy Slack configuration from communicati
 npm run migrate:remove-slack-rules -- --dry-run
 npm run migrate:remove-slack-rules
 ```
+
+## Website image variants
+
+Website Content media uploads are processed by the CRM with `sharp` after the original JPEG/PNG/WebP is staged in the existing public S3 area. Each Media Library asset stores an optimized WebP master plus `thumbnail` (320x240), `card` (640x480), `medium` (960x720), `large` (1440x1080), and `banner` (1600x600) variants. The customer content API keeps the legacy `image` URL while also returning `imageVariants` so Findoly.com can use responsive `srcset` delivery.
+
+After deploying this release, process Media Library records created by older releases once with:
+
+```bash
+npm run migrate:website-media-variants
+```
+
+The migration uses the normal CRM runtime/Secrets Manager bootstrap, reuses the existing S3 bucket and CDN settings, and skips media that already has a card variant.

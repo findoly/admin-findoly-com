@@ -4,7 +4,9 @@ const ServiceType = require("../../models/ServiceType");
 const WebsiteMedia = require("../../models/WebsiteMedia");
 const WebsiteCatalogItem = require("../../models/WebsiteCatalogItem");
 const HomepageContent = require("../../models/HomepageContent");
+const uuid = require("../../utils/uuid");
 const storage = require("../storage/s3-service");
+const { processWebsiteImage } = require("./image-processor");
 const {
   humanTextValue,
   tokenValue,
@@ -17,6 +19,8 @@ const {
 
 const WEBSITE_PREFIX = "website-content/";
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_WEBSITE_SOURCE_BYTES = 12 * 1024 * 1024;
+const VARIANT_NAMES = ["thumbnail", "card", "medium", "large", "banner"];
 
 function actorName(actor) {
   return String(actor?.employeeId || actor?.name || actor || "crm-admin").slice(0, 160);
@@ -26,8 +30,40 @@ function slugify(value) {
   return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-function mediaPublicUrl(row) {
-  return row?.publicUrl || "";
+function presentVariant(value = {}) {
+  if (!value?.publicUrl && !value?.s3Key) return null;
+  return {
+    s3Key: value.s3Key || "",
+    publicUrl: value.publicUrl || "",
+    mimeType: value.mimeType || "image/webp",
+    sizeBytes: Number(value.sizeBytes || 0),
+    width: Number(value.width || 0),
+    height: Number(value.height || 0),
+  };
+}
+
+function presentVariants(row = {}) {
+  const variants = {};
+  for (const name of VARIANT_NAMES) {
+    const value = presentVariant(row?.variants?.[name]);
+    if (value) variants[name] = value;
+  }
+  return variants;
+}
+
+function mediaPublicUrl(row, variantName = "") {
+  if (!row) return "";
+  if (variantName && row.variants?.[variantName]?.publicUrl) return row.variants[variantName].publicUrl;
+  return row.publicUrl || "";
+}
+
+function mediaPublicVariants(row) {
+  if (!row) return {};
+  const variants = {};
+  for (const [name, value] of Object.entries(row.variants || {})) {
+    if (value?.publicUrl) variants[name] = { ...value };
+  }
+  return variants;
 }
 
 function presentMedia(row = {}) {
@@ -41,6 +77,7 @@ function presentMedia(row = {}) {
     sizeBytes: Number(row.sizeBytes || 0),
     width: Number(row.width || 0),
     height: Number(row.height || 0),
+    variants: presentVariants(row),
     altText: row.altText || "",
     caption: row.caption || "",
     active: row.active !== false,
@@ -82,41 +119,93 @@ async function createMediaUpload(input = {}) {
   const extension = mimeType === "image/webp" ? ".webp" : mimeType === "image/png" ? ".png" : ".jpg";
   const base = slugify(rawName.replace(/\.[^.]+$/, "")) || "image";
   const fileName = `${base}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}${extension}`;
-  const prefix = `${settings.publicPrefix}${WEBSITE_PREFIX}media/`;
+  const prefix = `${settings.publicPrefix}${WEBSITE_PREFIX}media/staging/`;
   return storage.createUploadUrl({ prefix, fileName, contentType: mimeType, sizeBytes, replace: false });
+}
+
+function storedVariant(settings, key, output) {
+  return {
+    s3Key: key,
+    publicUrl: storage.publicUrl(key, settings),
+    mimeType: output.mimeType,
+    sizeBytes: output.sizeBytes,
+    width: output.width,
+    height: output.height,
+  };
+}
+
+async function uploadProcessedMedia(mediaId, processed, settings) {
+  const prefix = `${settings.publicPrefix}${WEBSITE_PREFIX}media/${mediaId}/`;
+  const uploadedKeys = [];
+  try {
+    const originalKey = `${prefix}original.webp`;
+    await storage.putObject({ key: originalKey, contentType: "image/webp", body: processed.original.buffer });
+    uploadedKeys.push(originalKey);
+    const variants = {};
+    for (const name of VARIANT_NAMES) {
+      const output = processed.variants[name];
+      if (!output) continue;
+      const key = `${prefix}${name}.webp`;
+      await storage.putObject({ key, contentType: "image/webp", body: output.buffer });
+      uploadedKeys.push(key);
+      variants[name] = storedVariant(settings, key, output);
+    }
+    return {
+      original: storedVariant(settings, originalKey, processed.original),
+      variants,
+      uploadedKeys,
+    };
+  } catch (error) {
+    await Promise.allSettled(uploadedKeys.map((key) => storage.deleteObject({ key })));
+    throw error;
+  }
 }
 
 async function registerMedia(input = {}, actor) {
   const settings = storage.config();
-  const s3Key = storage.normalizeObjectKey(input.s3Key, settings);
-  const expectedPrefix = `${settings.publicPrefix}${WEBSITE_PREFIX}media/`;
-  if (!s3Key.startsWith(expectedPrefix)) throw validationError("Website image key is invalid");
-  const publicUrl = storage.publicUrl(s3Key, settings);
-  if (!publicUrl) throw validationError("Website image public URL could not be generated");
-  const mimeType = String(input.mimeType || "").trim().toLowerCase();
-  if (!IMAGE_TYPES.has(mimeType)) throw validationError("Website media must be JPEG, PNG, or WebP");
-  const uploaded = await storage.createDownloadUrl({ key: s3Key, disposition: "inline" });
-  const uploadedType = String(uploaded.contentType || "").split(";")[0].trim().toLowerCase();
-  if (uploadedType && !IMAGE_TYPES.has(uploadedType)) throw validationError("Uploaded S3 object is not a supported website image");
-  const declaredSize = numberValue(input.sizeBytes, { label: "Image size", min: 1, max: 50 * 1024 * 1024, integer: true });
-  if (uploaded.sizeBytes && Math.abs(Number(uploaded.sizeBytes) - declaredSize) > 1) {
-    throw validationError("Uploaded image size does not match the registered file");
+  const sourceKey = storage.normalizeObjectKey(input.s3Key, settings);
+  const expectedPrefix = `${settings.publicPrefix}${WEBSITE_PREFIX}media/staging/`;
+  if (!sourceKey.startsWith(expectedPrefix)) throw validationError("Website image key is invalid");
+  const mediaId = uuid();
+  try {
+    const uploaded = await storage.getObject({ key: sourceKey, maxBytes: MAX_WEBSITE_SOURCE_BYTES });
+    const uploadedType = String(uploaded.contentType || "").split(";")[0].trim().toLowerCase();
+    if (uploadedType && !IMAGE_TYPES.has(uploadedType)) throw validationError("Uploaded S3 object is not a supported website image");
+    const declaredSize = numberValue(input.sizeBytes, { label: "Image size", min: 1, max: MAX_WEBSITE_SOURCE_BYTES, integer: true });
+    if (Math.abs(Number(uploaded.sizeBytes) - declaredSize) > 1) throw validationError("Uploaded image size does not match the registered file");
+
+    const processed = await processWebsiteImage(uploaded.body);
+    const stored = await uploadProcessedMedia(mediaId, processed, settings);
+    let row;
+    try {
+      const originalName = humanTextValue(input.originalName, { label: "Original file name", maxLength: 255 });
+      const baseName = slugify(String(originalName || input.fileName || "image").replace(/\.[^.]+$/, "")) || "image";
+      row = await WebsiteMedia.create({
+        mediaId,
+        fileName: `${baseName}.webp`,
+        originalName,
+        s3Key: stored.original.s3Key,
+        publicUrl: stored.original.publicUrl,
+        mimeType: "image/webp",
+        sizeBytes: stored.original.sizeBytes,
+        width: stored.original.width,
+        height: stored.original.height,
+        variants: stored.variants,
+        altText: humanTextValue(input.altText, { label: "Alt text", maxLength: 300 }),
+        caption: humanTextValue(input.caption, { label: "Caption", maxLength: 1000 }),
+        uploadedBy: actorName(actor),
+        updatedBy: actorName(actor),
+      });
+    } catch (error) {
+      await Promise.allSettled(stored.uploadedKeys.map((key) => storage.deleteObject({ key })));
+      throw error;
+    }
+    return presentMedia(row.toObject());
+  } finally {
+    await storage.deleteObject({ key: sourceKey }).catch((error) => {
+      console.warn(`Website media staging cleanup failed for ${mediaId}: ${error.code || "S3_DELETE_FAILED"}`);
+    });
   }
-  const row = await WebsiteMedia.create({
-    fileName: humanTextValue(input.fileName || s3Key.split("/").pop(), { label: "File name", required: true, maxLength: 255 }),
-    originalName: humanTextValue(input.originalName, { label: "Original file name", maxLength: 255 }),
-    s3Key,
-    publicUrl,
-    mimeType,
-    sizeBytes: Number(uploaded.sizeBytes || declaredSize),
-    width: numberValue(input.width, { label: "Image width", fallback: 0, min: 0, max: 20000, integer: true }),
-    height: numberValue(input.height, { label: "Image height", fallback: 0, min: 0, max: 20000, integer: true }),
-    altText: humanTextValue(input.altText, { label: "Alt text", maxLength: 300 }),
-    caption: humanTextValue(input.caption, { label: "Caption", maxLength: 1000 }),
-    uploadedBy: actorName(actor),
-    updatedBy: actorName(actor),
-  });
-  return presentMedia(row.toObject());
 }
 
 async function updateMedia(mediaId, input = {}, actor) {
@@ -147,6 +236,13 @@ async function mediaUsage(mediaId) {
   };
 }
 
+function mediaStorageKeys(row) {
+  return [...new Set([
+    row?.s3Key,
+    ...VARIANT_NAMES.map((name) => row?.variants?.[name]?.s3Key),
+  ].filter(Boolean))];
+}
+
 async function deleteMedia(mediaId) {
   const id = identifierValue(mediaId, { label: "Media ID" });
   const row = await WebsiteMedia.findOne({ mediaId: id, active: { $ne: false } });
@@ -156,7 +252,9 @@ async function deleteMedia(mediaId) {
   if (references.length) {
     throw Object.assign(new Error("This image is still used by website content. Remove those references before deleting it."), { status: 409, details: usage });
   }
-  await storage.deleteObject({ key: row.s3Key });
+  const results = await Promise.allSettled(mediaStorageKeys(row).map((key) => storage.deleteObject({ key })));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
   row.active = false;
   await row.save();
   return { mediaId: id, deleted: true };
@@ -406,25 +504,32 @@ async function publicWebsite() {
     ...homepageMediaIds,
   ].filter(Boolean);
   const media = await mediaMap(mediaIds);
-  const itemRows = items.map((row) => ({
-    itemId: row.itemId,
-    id: row.slug,
-    kind: row.kind,
-    name: row.name,
-    slug: row.slug,
-    categoryId: row.categoryId,
-    categorySlug: row.categorySlug,
-    serviceTypeId: row.serviceTypeId,
-    serviceTypeSlug: row.serviceTypeSlug,
-    shortDescription: row.shortDescription || "",
-    description: row.description || "",
-    displayOrder: Number(row.displayOrder || 0),
-    image: mediaPublicUrl(media.get(row.coverMediaId)) || "/assets/requirement-fallback.svg",
-    fallbackImage: "/assets/requirement-fallback.svg",
-    gallery: (row.galleryMediaIds || []).map((id) => media.get(id)).filter(Boolean).map((asset) => asset.publicUrl),
-  }));
+  const itemRows = items.map((row) => {
+    const cover = media.get(row.coverMediaId);
+    const galleryAssets = (row.galleryMediaIds || []).map((id) => media.get(id)).filter(Boolean);
+    return {
+      itemId: row.itemId,
+      id: row.slug,
+      kind: row.kind,
+      name: row.name,
+      slug: row.slug,
+      categoryId: row.categoryId,
+      categorySlug: row.categorySlug,
+      serviceTypeId: row.serviceTypeId,
+      serviceTypeSlug: row.serviceTypeSlug,
+      shortDescription: row.shortDescription || "",
+      description: row.description || "",
+      displayOrder: Number(row.displayOrder || 0),
+      image: mediaPublicUrl(cover, "card") || "/assets/requirement-fallback.svg",
+      imageVariants: mediaPublicVariants(cover),
+      fallbackImage: "/assets/requirement-fallback.svg",
+      gallery: galleryAssets.map((asset) => mediaPublicUrl(asset, "medium") || asset.publicUrl).filter(Boolean),
+      galleryVariants: galleryAssets.map(mediaPublicVariants),
+    };
+  });
   const subcategoryMap = new Map();
   for (const row of serviceTypes) {
+    const imageAsset = media.get(row.imageMediaId);
     subcategoryMap.set(row.serviceTypeId, {
       serviceTypeId: row.serviceTypeId,
       id: row.slug,
@@ -434,21 +539,29 @@ async function publicWebsite() {
       categoryId: row.categoryId,
       categorySlug: row.categorySlug,
       displayOrder: Number(row.displayOrder || 0),
-      image: mediaPublicUrl(media.get(row.imageMediaId)) || "/assets/requirement-fallback.svg",
+      image: mediaPublicUrl(imageAsset, "card") || "/assets/requirement-fallback.svg",
+      imageVariants: mediaPublicVariants(imageAsset),
       items: itemRows.filter((item) => item.serviceTypeId === row.serviceTypeId),
     });
   }
-  const categoryRows = categories.map((row) => ({
-    categoryId: row.categoryId,
-    id: row.slug,
-    slug: row.slug,
-    name: row.name,
-    description: row.description || "",
-    displayOrder: Number(row.displayOrder || 0),
-    image: mediaPublicUrl(media.get(row.imageMediaId)) || "/assets/requirement-fallback.svg",
-    bannerImage: mediaPublicUrl(media.get(row.bannerMediaId)) || "",
-    subcategories: serviceTypes.filter((child) => child.categoryId === row.categoryId).map((child) => subcategoryMap.get(child.serviceTypeId)),
-  }));
+  const categoryRows = categories.map((row) => {
+    const imageAsset = media.get(row.imageMediaId);
+    const bannerAsset = media.get(row.bannerMediaId);
+    return {
+      categoryId: row.categoryId,
+      id: row.slug,
+      slug: row.slug,
+      name: row.name,
+      description: row.description || "",
+      displayOrder: Number(row.displayOrder || 0),
+      image: mediaPublicUrl(imageAsset, "card") || "/assets/requirement-fallback.svg",
+      imageVariants: mediaPublicVariants(imageAsset),
+      bannerImage: mediaPublicUrl(bannerAsset, "banner") || "",
+      bannerImageVariants: mediaPublicVariants(bannerAsset),
+      subcategories: serviceTypes.filter((child) => child.categoryId === row.categoryId).map((child) => subcategoryMap.get(child.serviceTypeId)),
+    };
+  });
+  const businessMedia = media.get(homepage.businessCta?.mediaId);
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
@@ -458,7 +571,8 @@ async function publicWebsite() {
       ...homepage,
       businessCta: {
         ...homepage.businessCta,
-        mediaUrl: mediaPublicUrl(media.get(homepage.businessCta?.mediaId)),
+        mediaUrl: mediaPublicUrl(businessMedia, "banner"),
+        mediaVariants: mediaPublicVariants(businessMedia),
       },
     },
   };
