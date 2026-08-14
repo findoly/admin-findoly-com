@@ -28,10 +28,11 @@
     "migrate:whatsapp-inbox": "node scripts/run-with-runtime.js scripts/backfill-whatsapp-inbox.js",
     "qa:hardening": "node --test test/production-hardening-expanded.test.js test/production-hardening-runtime.test.js",
     "verify:query-plans": "node scripts/run-with-runtime.js scripts/verify-query-plans.js",
-    "migrate:remove-slack-rules": "node scripts/run-with-runtime.js scripts/remove-slack-rules.js"
+    "migrate:remove-slack-rules": "node scripts/run-with-runtime.js scripts/remove-slack-rules.js",
+    "migrate:website-media-variants": "node scripts/run-with-runtime.js scripts/backfill-website-media-variants.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1086.0",
@@ -45,6 +46,7 @@
     "jquery": "3.7.1",
     "mongoose": "^8.24.1",
     "morgan": "^1.10.0",
+    "sharp": "^0.35.3",
     "uuid": "^11.1.1"
   },
   "devDependencies": {

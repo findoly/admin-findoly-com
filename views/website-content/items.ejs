@@ -34,7 +34,7 @@
                 <div class="mb-3">
                   <label class="form-label">Cover image</label>
                   <select class="form-select" x-model="form.coverMediaId"><option value="">No image</option><template x-for="media in mediaItems" :key="media.mediaId"><option :value="media.mediaId" x-text="media.altText || media.originalName || media.fileName"></option></template></select>
-                  <template x-if="coverMedia"><div class="mt-2"><img :src="coverMedia.publicUrl" :alt="coverMedia.altText || ''" class="img-thumbnail" style="max-height:160px"></div></template>
+                  <template x-if="coverMedia"><div class="mt-2"><img :src="coverMedia.variants?.thumbnail?.publicUrl || coverMedia.publicUrl" :alt="coverMedia.altText || ''" class="img-thumbnail" style="max-height:160px"></div></template>
                   <div class="form-text"><a href="/website-content/media">Upload or manage images in Media Library</a>.</div>
                 </div>
                 <div class="mb-3">
@@ -55,7 +55,7 @@
               <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Image</th><th><%= contentKind === 'product' ? 'Product' : 'Service' %></th><th>Category</th><th>Subcategory</th><th>Order</th><th>Website</th><th class="text-end">Action</th></tr></thead><tbody>
                 <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                 <template x-for="item in items" :key="item.itemId"><tr>
-                  <td><img x-show="item.coverImage?.publicUrl" :src="item.coverImage?.publicUrl" :alt="item.coverImage?.altText || ''" class="rounded" style="width:56px;height:56px;object-fit:cover"><span x-show="!item.coverImage?.publicUrl" class="text-muted">—</span></td>
+                  <td><img x-show="item.coverImage?.publicUrl" :src="item.coverImage?.variants?.thumbnail?.publicUrl || item.coverImage?.publicUrl" :alt="item.coverImage?.altText || ''" class="rounded" style="width:56px;height:56px;object-fit:cover"><span x-show="!item.coverImage?.publicUrl" class="text-muted">—</span></td>
                   <td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.shortDescription || item.slug"></small></td>
                   <td x-text="categoryName(item.categoryId)"></td><td x-text="subcategoryName(item.serviceTypeId)"></td><td x-text="Number(item.displayOrder || 0)"></td>
                   <td><span class="badge" :class="item.active !== false && item.websiteVisible !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false && item.websiteVisible !== false ? 'Visible' : 'Hidden'"></span></td>

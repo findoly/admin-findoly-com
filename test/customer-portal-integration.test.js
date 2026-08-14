@@ -27,3 +27,16 @@ test("customer website submissions are marked verified and direct", () => {
   assert.match(source, /customerMobileVerified: true/);
   assert.match(source, /externalEnquiryId/);
 });
+
+
+test("customer portal no longer proxies customer OTP through CRM", () => {
+  const routes = read("routes/customer-portal.js");
+  const service = read("services/customer-portal/customer-portal-service.js");
+  const indexes = read("scripts/ensure-indexes.js");
+  assert.doesNotMatch(routes, /\/otp\/send|\/otp\/verify/);
+  assert.doesNotMatch(service, /otp-proxy-client|CustomerOtpVerification|requestOtpApi|SEND_OTP_URL|VERIFY_OTP_URL/);
+  assert.match(service, /input\.mobileVerified !== true/);
+  assert.match(service, /customerVerificationSource: "findoly\.com-direct-otp"/);
+  assert.doesNotMatch(indexes, /CustomerOtpVerification/);
+});
+

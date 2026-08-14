@@ -1,14 +1,12 @@
 const crypto = require("crypto");
 const Category = require("../../models/Category");
 const Enquiry = require("../../models/Enquiry");
-const OtpRequest = require("../../models/OtpRequest");
 const enquiryService = require("../enquiry/enquiry-service");
 const catalogService = require("../catalog/catalog-service");
-const otpService = require("../communication/otp-service");
 const websiteContentService = require("../website-content/website-content-service");
 const { geocodePincode } = require("../location/geocoding-service");
 const { validateMobile } = require("../../utils/mobile");
-const { numberValue, plainObjectValue, pincodeValue } = require("../../utils/validation");
+const { plainObjectValue, pincodeValue } = require("../../utils/validation");
 
 const ENQUIRY_TIMELINE_LIMIT = 50;
 
@@ -102,54 +100,8 @@ async function website() {
   return websiteContentService.publicWebsite();
 }
 
-async function sendOtp(input = {}, request) {
-  const normalizedMobile = mobile(input.mobile);
-  const result = await otpService.send({
-    channel: "whatsapp",
-    mobile: normalizedMobile,
-    purpose: "customer_requirement",
-    recipientName: text(input.name, 120) || "Customer",
-  }, request);
-  return {
-    otpId: result.otpId,
-    mobile: normalizedMobile,
-    maskedMobile: `+91 ••••••${normalizedMobile.slice(-4)}`,
-    expiresAt: result.expiresAt,
-    resendAfter: result.resendAfter,
-  };
-}
-
-async function verifyOtp(input = {}) {
-  const normalizedMobile = mobile(input.mobile);
-  const result = await otpService.verify({
-    otpId: identifier(input.otpId, "OTP reference"),
-    otp: text(input.otp, 12),
-  });
-  const record = await OtpRequest.findOne({ otpId: result.otpId }).lean();
-  if (!record || record.recipient !== normalizedMobile || record.purpose !== "customer_requirement" || record.status !== "verified") {
-    throw Object.assign(new Error("OTP verification does not match this customer requirement"), { status: 400 });
-  }
-  return { otpId: result.otpId, mobile: normalizedMobile, verifiedAt: result.verifiedAt };
-}
-
-async function assertVerifiedOtp(otpIdInput, mobileInput) {
-  const otpId = identifier(otpIdInput, "OTP reference");
-  const normalizedMobile = mobile(mobileInput);
-  const record = await OtpRequest.findOne({
-    otpId,
-    recipient: normalizedMobile,
-    purpose: "customer_requirement",
-    status: "verified",
-  }).lean();
-  if (!record?.verifiedAt) {
-    throw Object.assign(new Error("Verify the customer mobile number before submitting the requirement"), { status: 403 });
-  }
-  return record;
-}
-
 async function createEnquiry(input = {}) {
   const normalizedMobile = mobile(input.mobile);
-  const verifiedOtp = await assertVerifiedOtp(input.otpId, normalizedMobile);
   const externalEnquiryId = identifier(
     input.externalEnquiryId || crypto.randomUUID(),
     "Submission reference",
@@ -166,6 +118,10 @@ async function createEnquiry(input = {}) {
       });
     }
     return presentCustomerEnquiry(existing);
+  }
+
+  if (input.mobileVerified !== true) {
+    throw Object.assign(new Error("Customer mobile must be verified by Findoly.com before submitting the requirement"), { status: 403 });
   }
 
   const categorySlug = text(input.categorySlug, 80).toLowerCase();
@@ -219,14 +175,15 @@ async function createEnquiry(input = {}) {
       metadata: {
         customerPortalSubmission: true,
         customerMobileVerified: true,
-        customerPortalVersion: "2.0",
-        customerOtpId: verifiedOtp.otpId,
+        customerPortalVersion: "3.0",
+        customerVerificationSource: "findoly.com-direct-otp",
       },
     },
     "customer-portal",
   );
 
-  const now = new Date();
+  const suppliedVerifiedAt = new Date(input.mobileVerifiedAt || "");
+  const now = Number.isFinite(suppliedVerifiedAt.getTime()) && suppliedVerifiedAt <= new Date() ? suppliedVerifiedAt : new Date();
   await Enquiry.updateOne(
     { enquiryId: created.enquiryId },
     {
@@ -302,8 +259,6 @@ async function cancelEnquiry(mobileInput, enquiryId) {
 module.exports = {
   website,
   categories,
-  sendOtp,
-  verifyOtp,
   createEnquiry,
   listEnquiries,
   getEnquiry,

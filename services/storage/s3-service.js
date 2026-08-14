@@ -434,8 +434,12 @@ async function fetchS3(settings, method, key, options = {}) {
       body: ["GET", "HEAD"].includes(method.toUpperCase()) ? undefined : request.body,
       signal: controller.signal,
     });
-    const body = method.toUpperCase() === "HEAD" ? "" : await response.text().catch(() => "");
-    if (!response.ok) throw s3Error(response.status, body);
+    const body = method.toUpperCase() === "HEAD"
+      ? ""
+      : options.responseType === "buffer"
+        ? Buffer.from(await response.arrayBuffer())
+        : await response.text().catch(() => "");
+    if (!response.ok) throw s3Error(response.status, Buffer.isBuffer(body) ? "" : body);
     return { response, body };
   } catch (error) {
     const normalized = error?.status
@@ -621,6 +625,53 @@ async function createUploadUrl(input = {}) {
   };
 }
 
+
+async function getObject(input = {}) {
+  const settings = assertConfigured();
+  const key = normalizeObjectKey(input.key, settings);
+  const maxBytes = numberValue(input.maxBytes, {
+    label: "Maximum download size",
+    fallback: settings.maxUploadBytes,
+    min: 1,
+    max: 500 * 1024 * 1024,
+    integer: true,
+  });
+  let metadata;
+  try {
+    metadata = await fetchS3(settings, "HEAD", key, { operation: "head_object", suppressNotFoundLog: true });
+  } catch (error) {
+    if (error?.status === 404) throw Object.assign(new Error("File not found"), { status: 404 });
+    throw error;
+  }
+  const declaredSize = Number(metadata.response.headers.get("content-length") || 0);
+  if (declaredSize > maxBytes) {
+    throw Object.assign(new Error("File exceeds the allowed processing size"), {
+      status: 413,
+      code: "S3_FILE_TOO_LARGE",
+      expose: true,
+    });
+  }
+  const result = await fetchS3(settings, "GET", key, { operation: "get_object", responseType: "buffer" });
+  if (!Buffer.isBuffer(result.body) || !result.body.length) {
+    throw Object.assign(new Error("Downloaded file is empty"), { status: 422, code: "S3_FILE_EMPTY", expose: true });
+  }
+  if (result.body.length > maxBytes) {
+    throw Object.assign(new Error("File exceeds the allowed processing size"), {
+      status: 413,
+      code: "S3_FILE_TOO_LARGE",
+      expose: true,
+    });
+  }
+  return {
+    key,
+    body: result.body,
+    sizeBytes: result.body.length,
+    contentType: metadata.response.headers.get("content-type") || result.response.headers.get("content-type") || "application/octet-stream",
+    lastModified: metadata.response.headers.get("last-modified") || null,
+    publicUrl: publicUrl(key, settings),
+  };
+}
+
 async function createDownloadUrl(input = {}) {
   const settings = assertConfigured();
   const key = normalizeObjectKey(input.key, settings);
@@ -661,6 +712,7 @@ module.exports = {
   createFolder,
   createUploadUrl,
   createDownloadUrl,
+  getObject,
   deleteObject,
   putObject,
   normalizeObjectKey,
