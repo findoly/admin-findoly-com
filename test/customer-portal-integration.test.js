@@ -40,3 +40,13 @@ test("customer portal no longer proxies customer OTP through CRM", () => {
   assert.doesNotMatch(indexes, /CustomerOtpVerification/);
 });
 
+
+test("customer enquiries resolve category and subcategory from CRM MongoDB slugs", () => {
+  const service = read("services/customer-portal/customer-portal-service.js");
+  assert.match(service, /models\/ServiceType/);
+  assert.match(service, /const serviceTypeSlug = text\(input\.serviceTypeSlug, 80\)\.toLowerCase\(\)/);
+  assert.match(service, /ServiceType\.findOne\(\{[\s\S]*categorySlug,[\s\S]*slug: serviceTypeSlug,[\s\S]*active:/);
+  assert.match(service, /categorySlug === "other" && serviceTypeSlug === "not-classified"/);
+  assert.match(service, /serviceTypes: resolvedServiceTypeId \? \[resolvedServiceTypeId\] : \[\]/);
+  assert.match(service, /serviceType: resolvedServiceTypeName/);
+});
