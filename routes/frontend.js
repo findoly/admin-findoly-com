@@ -56,6 +56,7 @@ router.get("/website-content/homepage", ...protectedPage("websiteContent.view"),
 router.get("/website-content/services", ...protectedPage("websiteContent.view"), page.websiteServices);
 router.get("/website-content/products", ...protectedPage("websiteContent.view"), page.websiteProducts);
 router.get("/website-content/media", ...protectedPage("websiteContent.view"), page.websiteMedia);
+router.get("/website-content/csv-import", ...protectedPage("websiteContent.view"), page.websiteCatalogImport);
 router.get("/follow-ups", ...protectedPage("followUps.view"), page.followUps);
 router.get("/follow-ups/new", ...protectedPage("followUps.create"), page.followUpCreate);
 router.get("/follow-ups/:followUpId/edit", ...protectedPage("followUps.edit"), page.followUpEdit);

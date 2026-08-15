@@ -716,6 +716,7 @@ module.exports = {
   deleteObject,
   putObject,
   normalizeObjectKey,
+  exists,
   presignedUrl,
   signedRequest,
   sessionTokenConfigurationError,
