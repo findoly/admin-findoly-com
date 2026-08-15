@@ -66,6 +66,24 @@ async function updateServiceType(req, res, next) {
   }
 }
 
+async function serviceTypeUsage(req, res, next) {
+  try {
+    return res.json({ success: true, data: await service.serviceTypeUsage(req.params.serviceTypeId) });
+  } catch (error) { return next(error); }
+}
+
+async function deleteServiceType(req, res, next) {
+  try {
+    return res.json({ success: true, data: await service.deleteServiceType(req.params.serviceTypeId) });
+  } catch (error) { return next(error); }
+}
+
+async function rejectCategoryDelete(req, res, next) {
+  try {
+    return res.json({ success: true, data: await service.rejectCategoryDelete(req.params.categoryId) });
+  } catch (error) { return next(error); }
+}
+
 module.exports = {
   categories,
   createCategory,
@@ -73,4 +91,7 @@ module.exports = {
   serviceTypes,
   createServiceType,
   updateServiceType,
+  serviceTypeUsage,
+  deleteServiceType,
+  rejectCategoryDelete,
 };

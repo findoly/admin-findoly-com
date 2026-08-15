@@ -37,7 +37,31 @@ test('website content API and pages use dedicated permissions', () => {
   assert.match(apiRoutes, /requirePermission\("websiteContent\.view"\)/);
   assert.match(apiRoutes, /requirePermission\("websiteContent\.manage"\)/);
   assert.match(apiRoutes, /homepage\/publish", requirePermission\("websiteContent\.publish"\)/);
-  assert.doesNotMatch(apiRoutes, /categories\.(?:view|manage)/);
+
+  // Regular Website Content mutations keep their dedicated permission boundary.
+  for (const routePrefix of [
+    'router.put("/homepage",',
+    'router.put("/items/:itemId",',
+    'router.post("/media",',
+  ]) {
+    const line = apiRoutes.split('\n').find((entry) => entry.includes(routePrefix));
+    assert.ok(line, `Expected protected route: ${routePrefix}`);
+    assert.match(line, /websiteContent\.manage/);
+    assert.doesNotMatch(line, /categories\.(?:view|manage)/);
+  }
+
+  // CSV catalog imports can create Categories/Subcategories, so mutation routes
+  // intentionally require both Website Content and Catalog management rights.
+  for (const routeFragment of [
+    'catalog-import/preview",',
+    'catalog-import/prepare",',
+    'catalog-import/:importId/execute",',
+  ]) {
+    const line = apiRoutes.split('\n').find((entry) => entry.includes(routeFragment));
+    assert.ok(line, `Expected catalog import route: ${routeFragment}`);
+    assert.match(line, /websiteContent\.manage/);
+    assert.match(line, /categories\.manage/);
+  }
 
   const frontendRoutes = source('routes/frontend.js');
   for (const route of ['homepage', 'services', 'products', 'media']) {

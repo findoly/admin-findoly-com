@@ -355,6 +355,19 @@ async function updateItem(itemId, input = {}, actor) {
   return (await listItems({ kind: row.kind, includeInactive: true })).find((item) => item.itemId === row.itemId);
 }
 
+async function deleteItem(itemId) {
+  const id = identifierValue(itemId, { label: "Website item ID" });
+  const row = await WebsiteCatalogItem.findOne({ itemId: id }).lean();
+  if (!row) throw Object.assign(new Error("Website item not found"), { status: 404 });
+  await WebsiteCatalogItem.deleteOne({ itemId: id });
+  return {
+    itemId: row.itemId,
+    kind: row.kind,
+    name: row.name,
+    deleted: true,
+  };
+}
+
 function text(value, max = 300) {
   return humanTextValue(value, { label: "Homepage content", maxLength: max });
 }
@@ -588,6 +601,7 @@ module.exports = {
   listItems,
   createItem,
   updateItem,
+  deleteItem,
   homepageAdmin,
   saveHomepageDraft,
   publishHomepage,

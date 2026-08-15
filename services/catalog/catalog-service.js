@@ -3,6 +3,7 @@ const ServiceType = require("../../models/ServiceType");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const WebsiteMedia = require("../../models/WebsiteMedia");
+const WebsiteCatalogItem = require("../../models/WebsiteCatalogItem");
 const { getPagination, cursorPaginate } = require("../../utils/pagination");
 const { applyDateRange, dateSort } = require("../../utils/date-query");
 const { prefixRegex } = require("../../utils/search-query");
@@ -365,14 +366,75 @@ async function listServiceTypes(options = {}) {
       limit,
       cursor,
     });
-    return { ...result, data: result.data.map(presentServiceType) };
+    const counts = await websiteItemCountsByServiceType(result.data.map((row) => row.serviceTypeId || row.id));
+    return {
+      ...result,
+      data: result.data.map((row) => ({
+        ...presentServiceType(row),
+        ...(counts.get(row.serviceTypeId || row.id) || { serviceCount: 0, productCount: 0 }),
+      })),
+    };
   }
 
   const rows = await ServiceType.find(query)
     .sort({ displayOrder: 1, name: 1, _id: 1 })
     .limit(500)
     .lean();
-  return rows.map(presentServiceType);
+  const counts = await websiteItemCountsByServiceType(rows.map((row) => row.serviceTypeId || row.id));
+  return rows.map((row) => ({
+    ...presentServiceType(row),
+    ...(counts.get(row.serviceTypeId || row.id) || { serviceCount: 0, productCount: 0 }),
+  }));
+}
+
+async function websiteItemCountsByServiceType(ids = []) {
+  const values = [...new Set(ids.filter(Boolean))];
+  if (!values.length) return new Map();
+  const rows = await WebsiteCatalogItem.aggregate([
+    { $match: { serviceTypeId: { $in: values } } },
+    { $group: { _id: { serviceTypeId: "$serviceTypeId", kind: "$kind" }, count: { $sum: 1 } } },
+  ]);
+  const result = new Map();
+  for (const row of rows) {
+    const key = row._id.serviceTypeId;
+    const current = result.get(key) || { serviceCount: 0, productCount: 0 };
+    if (row._id.kind === "service") current.serviceCount = Number(row.count || 0);
+    if (row._id.kind === "product") current.productCount = Number(row.count || 0);
+    result.set(key, current);
+  }
+  return result;
+}
+
+async function serviceTypeUsage(serviceTypeId) {
+  const query = serviceTypeQuery(serviceTypeId);
+  const row = await ServiceType.findOne(query).lean();
+  if (!row) throw Object.assign(new Error("Subcategory not found"), { status: 404 });
+  const counts = await websiteItemCountsByServiceType([row.serviceTypeId]);
+  return {
+    serviceTypeId: row.serviceTypeId,
+    name: row.name,
+    ...(counts.get(row.serviceTypeId) || { serviceCount: 0, productCount: 0 }),
+  };
+}
+
+async function deleteServiceType(serviceTypeId) {
+  const query = serviceTypeQuery(serviceTypeId);
+  const row = await ServiceType.findOne(query).lean();
+  if (!row) throw Object.assign(new Error("Subcategory not found"), { status: 404 });
+  const usage = await serviceTypeUsage(row.serviceTypeId);
+  if (usage.serviceCount || usage.productCount) {
+    throw Object.assign(
+      new Error(`Cannot delete this subcategory. Delete all Services and Products under it first. Services remaining: ${usage.serviceCount}. Products remaining: ${usage.productCount}.`),
+      { status: 409, expose: true, data: usage },
+    );
+  }
+  await ServiceType.deleteOne({ serviceTypeId: row.serviceTypeId });
+  return { serviceTypeId: row.serviceTypeId, name: row.name, deleted: true };
+}
+
+async function rejectCategoryDelete(categoryId) {
+  await getCategory(categoryId);
+  throw Object.assign(new Error("Categories cannot be deleted. You can edit or deactivate a Category instead."), { status: 405, expose: true });
 }
 
 async function createServiceType(categoryId, input = {}) {
@@ -460,6 +522,9 @@ module.exports = {
   listServiceTypes,
   createServiceType,
   updateServiceType,
+  serviceTypeUsage,
+  deleteServiceType,
+  rejectCategoryDelete,
   resolveLeadServiceTypes,
   slugify,
   normalizeCategoryInput,

@@ -25,6 +25,7 @@ const frontendController = {
   websiteServices: (req, res) => res.render("website-content/items", { title: "Website Services", kind: "service" }),
   websiteProducts: (req, res) => res.render("website-content/items", { title: "Website Products", kind: "product" }),
   websiteMedia: render("website-content/media", "Media Library"),
+  websiteCatalogImport: render("website-content/csv-import", "Catalog CSV Import"),
   websiteHomepage: render("website-content/homepage", "Homepage Manager"),
   providerCreate: render("provider/form", "Create provider"),
   providerEdit: render("provider/form", "Edit provider"),

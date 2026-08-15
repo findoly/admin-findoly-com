@@ -91,21 +91,22 @@
 
                     <div class="table-responsive">
                       <table class="table crm-table mb-0">
-                        <thead><tr><th>Category</th><th>Subcategory</th><th>Slug</th><th>Order</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
+                        <thead><tr><th>Category</th><th>Subcategory</th><th>Slug</th><th>Content</th><th>Order</th><th>Status</th><th>Updated</th><th class="text-end">Action</th></tr></thead>
                         <tbody>
-                          <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="item in serviceTypes" :key="item.serviceTypeId">
                             <tr>
                               <td><span class="badge bg-primary bg-opacity-10 text-primary" x-text="categoryName(item)"></span></td>
                               <td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.description || 'No description added'"></small></td>
                               <td><code x-text="item.slug"></code></td>
+                              <td><span class="small"><strong x-text="Number(item.serviceCount || 0)"></strong> Services · <strong x-text="Number(item.productCount || 0)"></strong> Products</span></td>
                               <td x-text="Number(item.displayOrder || 0)"></td>
                               <td><span class="badge" :class="item.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false ? 'Active' : 'Inactive'"></span></td>
                               <td x-text="formatDate(item.updatedAt || item.createdAt)"></td>
-                              <td class="text-end"><% if (canManageCatalog) { %><button type="button" class="btn btn-light btn-sm" @click="editServiceType(item)">Edit</button><% } else { %><span class="text-muted">View only</span><% } %></td>
+                              <td class="text-end"><% if (canManageCatalog) { %><div class="d-inline-flex gap-1"><button type="button" class="btn btn-light btn-sm" @click="editServiceType(item)">Edit</button><button type="button" class="btn btn-outline-danger btn-sm" :disabled="Number(item.serviceCount || 0) > 0 || Number(item.productCount || 0) > 0" :title="Number(item.serviceCount || 0) > 0 || Number(item.productCount || 0) > 0 ? 'Delete all Services and Products under this Subcategory first.' : 'Delete Subcategory'" @click="deleteServiceType(item)">Delete</button></div><div class="small text-muted mt-1" x-show="Number(item.serviceCount || 0) > 0 || Number(item.productCount || 0) > 0">Delete Services/Products first</div><% } else { %><span class="text-muted">View only</span><% } %></td>
                             </tr>
                           </template>
-                          <tr x-show="!loading && !serviceTypes.length"><td colspan="7" class="text-center py-5"><strong>No Subcategories found</strong><div class="text-muted mt-1" x-text="categorySlug ? 'No Subcategories are configured for the selected Category.' : (q || status ? 'Clear the filters and try again.' : 'Add your first Subcategory after creating a Category.')"></div></td></tr>
+                          <tr x-show="!loading && !serviceTypes.length"><td colspan="8" class="text-center py-5"><strong>No Subcategories found</strong><div class="text-muted mt-1" x-text="categorySlug ? 'No Subcategories are configured for the selected Category.' : (q || status ? 'Clear the filters and try again.' : 'Add your first Subcategory after creating a Category.')"></div></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -179,6 +180,18 @@
                       this.success = this.editingId ? 'Subcategory updated successfully.' : 'Subcategory created successfully.';
                       this.resetForm(selectedCategoryId); this.search();
                     } catch (error) { this.error = error.message; } finally { this.saving = false; }
+                  },
+                  async deleteServiceType(item) {
+                    const services = Number(item?.serviceCount || 0), products = Number(item?.productCount || 0);
+                    if (services || products) { this.error = 'Cannot delete this subcategory. Delete all Services and Products under it first.'; return; }
+                    if (!item?.serviceTypeId || !confirm('Delete Subcategory "' + (item.name || '') + '"? This is allowed only because it contains no Services or Products.')) return;
+                    this.error=''; this.success='';
+                    try {
+                      await apiFetch('/api/catalog/service-types/' + encodeURIComponent(item.serviceTypeId), { method:'DELETE' });
+                      if (this.editingId === item.serviceTypeId) this.resetForm();
+                      this.success = 'Subcategory deleted successfully.';
+                      this.search();
+                    } catch (error) { this.error = error.message; }
                   }
                 };
               }

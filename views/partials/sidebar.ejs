@@ -41,6 +41,7 @@
               <% if (canAccess('websiteContent.view')) { %><li class="nav-item"><a href="/website-content/services" class="nav-link" :class="{active:pathIs('/website-content/services')}" @click="sidebarOpen=false"><span>Services</span></a></li><% } %>
               <% if (canAccess('websiteContent.view')) { %><li class="nav-item"><a href="/website-content/products" class="nav-link" :class="{active:pathIs('/website-content/products')}" @click="sidebarOpen=false"><span>Products</span></a></li><% } %>
               <% if (canAccess('websiteContent.view')) { %><li class="nav-item"><a href="/website-content/media" class="nav-link" :class="{active:pathIs('/website-content/media')}" @click="sidebarOpen=false"><span>Media Library</span></a></li><% } %>
+              <% if (canAccess('websiteContent.view')) { %><li class="nav-item"><a href="/website-content/csv-import" class="nav-link" :class="{active:pathIs('/website-content/csv-import')}" @click="sidebarOpen=false"><span>CSV Import</span></a></li><% } %>
             </ul>
           </li>
         <% } %>

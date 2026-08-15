@@ -59,7 +59,7 @@
                   <td><div class="fw-semibold" x-text="item.name"></div><small class="text-muted" x-text="item.shortDescription || item.slug"></small></td>
                   <td x-text="categoryName(item.categoryId)"></td><td x-text="subcategoryName(item.serviceTypeId)"></td><td x-text="Number(item.displayOrder || 0)"></td>
                   <td><span class="badge" :class="item.active !== false && item.websiteVisible !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="item.active !== false && item.websiteVisible !== false ? 'Visible' : 'Hidden'"></span></td>
-                  <td class="text-end"><% if (canManage) { %><button type="button" class="btn btn-light btn-sm" @click="edit(item)">Edit</button><% } else { %><span class="text-muted">View only</span><% } %></td>
+                  <td class="text-end"><% if (canManage) { %><div class="d-inline-flex gap-1"><button type="button" class="btn btn-light btn-sm" @click="edit(item)">Edit</button><button type="button" class="btn btn-outline-danger btn-sm" @click="removeItem(item)">Delete</button></div><% } else { %><span class="text-muted">View only</span><% } %></td>
                 </tr></template>
                 <tr x-show="!loading && !items.length"><td colspan="7" class="text-center py-5"><strong>No <%= contentKind %> content yet</strong><div class="text-muted mt-1">Create the first <%= contentKind %> when you are ready to manage it from CRM.</div></td></tr>
               </tbody></table></div>
@@ -89,7 +89,17 @@
           async load() { this.loading = true; try { this.items = (await apiFetch('/api/website-content/items?kind='+encodeURIComponent(this.kind)+'&includeInactive=true')).data || []; } catch (error) { this.error = error.message; } finally { this.loading = false; } },
           reset() { this.editingId=''; this.slugTouched=false; this.form={categoryId:'',serviceTypeId:'',name:'',slug:'',shortDescription:'',description:'',coverMediaId:'',galleryMediaIds:[],displayOrder:0,websiteVisible:true,active:true}; },
           edit(item) { this.editingId=item.itemId; this.slugTouched=true; this.form={categoryId:item.categoryId,serviceTypeId:item.serviceTypeId,name:item.name||'',slug:item.slug||'',shortDescription:item.shortDescription||'',description:item.description||'',coverMediaId:item.coverMediaId||'',galleryMediaIds:[...(item.galleryMediaIds||[])],displayOrder:Number(item.displayOrder||0),websiteVisible:item.websiteVisible!==false,active:item.active!==false}; window.scrollTo({top:0,behavior:'smooth'}); },
-          async save() { if(this.saving)return; this.saving=true; this.error=''; this.success=''; try { const payload={...this.form,kind:this.kind}; const url=this.editingId?'/api/website-content/items/'+encodeURIComponent(this.editingId):'/api/website-content/items'; await apiFetch(url,{method:this.editingId?'PUT':'POST',body:JSON.stringify(payload)}); this.success=this.editingId?'Content updated successfully.':'Content created successfully.'; this.reset(); await this.load(); } catch(error){this.error=error.message;} finally{this.saving=false;} }
+          async save() { if(this.saving)return; this.saving=true; this.error=''; this.success=''; try { const payload={...this.form,kind:this.kind}; const url=this.editingId?'/api/website-content/items/'+encodeURIComponent(this.editingId):'/api/website-content/items'; await apiFetch(url,{method:this.editingId?'PUT':'POST',body:JSON.stringify(payload)}); this.success=this.editingId?'Content updated successfully.':'Content created successfully.'; this.reset(); await this.load(); } catch(error){this.error=error.message;} finally{this.saving=false;} },
+          async removeItem(item) {
+            if (!item?.itemId || !confirm('Delete "' + (item.name || 'this item') + '"? This removes only this ' + this.kind + ' record and cannot be undone.')) return;
+            this.error=''; this.success='';
+            try {
+              await apiFetch('/api/website-content/items/' + encodeURIComponent(item.itemId), { method:'DELETE' });
+              if (this.editingId === item.itemId) this.reset();
+              this.success = (this.kind === 'product' ? 'Product' : 'Service') + ' deleted successfully.';
+              await this.load();
+            } catch (error) { this.error = error.message; }
+          }
         };
       }
     </script>

@@ -1,0 +1,185 @@
+<%
+  const canAccess = typeof can === 'function' ? can : () => true;
+  const canManage = canAccess('websiteContent.manage') && canAccess('categories.manage');
+%>
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content"><%- include('../partials/sidebar') %><div class="content-wrapper"><div class="content-inner">
+      <div class="page-header page-header-light crm-page-header">
+        <div class="page-header-content crm-page-heading">
+          <div>
+            <div class="crm-page-eyebrow">Website Content / CSV Import</div>
+            <h1 class="page-title mb-1">Catalog CSV Import</h1>
+            <p class="crm-page-subtitle mb-0">Create catalog content in bulk or update existing Services and Products with a verified S3 backup before any database write.</p>
+          </div>
+          <div class="crm-page-actions"><a href="/api/website-content/catalog-import/template" class="btn btn-light">Download CSV template</a></div>
+        </div>
+      </div>
+
+      <div class="content" x-data="catalogCsvImport()" x-init="init()">
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+        <div x-show="success" x-cloak class="alert alert-success" x-text="success"></div>
+
+        <div class="row g-3">
+          <div class="col-xl-8">
+            <div class="card">
+              <div class="card-header"><div><h5 class="mb-1">Upload catalog CSV</h5><p class="text-muted mb-0">Upload → validate → create S3 backup → import. The Import button stays locked until the backup is verified.</p></div></div>
+              <div class="card-body">
+                <% if (canManage) { %>
+                  <label class="form-label" for="catalog-csv-file">CSV file</label>
+                  <input id="catalog-csv-file" class="form-control" type="file" accept=".csv,text/csv" @change="selectFile($event)" :disabled="busy">
+                  <div class="form-text">Maximum 1 MB and 5,000 rows. CREATE may create missing Categories/Subcategories. UPDATE only modifies existing Services/Products.</div>
+                  <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button type="button" class="btn btn-primary" @click="previewFile()" :disabled="!fileBase64 || busy" x-text="validating ? 'Validating…' : 'Upload & validate'"></button>
+                    <button type="button" class="btn btn-light" @click="prepareBackup()" :disabled="!preview?.valid || busy || prepared" x-text="backingUp ? 'Backing up…' : (prepared ? 'Backup verified' : 'Create & verify S3 backup')"></button>
+                    <button type="button" class="btn btn-success" @click="runImport()" :disabled="!prepared || busy || imported" x-text="importing ? 'Importing…' : (imported ? 'Import complete' : 'Import catalog')"></button>
+                  </div>
+                <% } else { %>
+                  <div class="alert alert-info mb-0">You have view-only access. Website Content manage and Categories manage permissions are required to upload or import catalog CSV files.</div>
+                <% } %>
+              </div>
+            </div>
+
+            <template x-if="preview">
+              <div class="card mt-3">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <div><h5 class="mb-1">Import preview</h5><p class="text-muted mb-0"><span x-text="preview.fileName"></span> · <span x-text="preview.summary.totalRows"></span> rows</p></div>
+                  <span class="badge" :class="preview.valid ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'" x-text="preview.valid ? 'Ready for backup' : 'Fix errors before import'"></span>
+                </div>
+                <div class="card-body border-bottom">
+                  <div class="row g-2">
+                    <div class="col-6 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Categories to create</div><strong x-text="preview.summary.categoriesToCreate"></strong></div></div>
+                    <div class="col-6 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Subcategories to create</div><strong x-text="preview.summary.subcategoriesToCreate"></strong></div></div>
+                    <div class="col-6 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Services create / update</div><strong><span x-text="preview.summary.servicesToCreate"></span> / <span x-text="preview.summary.servicesToUpdate"></span></strong></div></div>
+                    <div class="col-6 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Products create / update</div><strong><span x-text="preview.summary.productsToCreate"></span> / <span x-text="preview.summary.productsToUpdate"></span></strong></div></div>
+                  </div>
+                  <template x-if="prepared"><div class="alert alert-success mt-3 mb-0"><strong>S3 backup verified.</strong> Import ID: <code x-text="prepared.importId"></code></div></template>
+                </div>
+                <div class="table-responsive">
+                  <table class="table crm-table mb-0">
+                    <thead><tr><th>Row</th><th>Action</th><th>Type</th><th>Category</th><th>Subcategory</th><th>Name</th><th>Result</th></tr></thead>
+                    <tbody>
+                      <template x-for="row in preview.rows" :key="row.row">
+                        <tr>
+                          <td x-text="row.row"></td><td><code x-text="row.action || '—'"></code></td><td x-text="row.type || '—'"></td>
+                          <td x-text="row.category || '—'"></td><td x-text="row.subcategory || '—'"></td><td><div class="fw-semibold" x-text="row.name || '—'"></div><small class="text-muted" x-text="row.slug || ''"></small></td>
+                          <td><span class="badge" :class="row.status === 'ERROR' ? 'bg-danger bg-opacity-10 text-danger' : 'bg-success bg-opacity-10 text-success'" x-text="row.status"></span><div class="small text-danger mt-1" x-show="row.message" x-text="row.message"></div></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="col-xl-4">
+            <div class="card mb-3">
+              <div class="card-header"><h5 class="mb-0">Import rules</h5></div>
+              <div class="card-body">
+                <ul class="mb-0 ps-3">
+                  <li class="mb-2"><strong>CREATE</strong> creates a new Service/Product and may create missing Category/Subcategory parents.</li>
+                  <li class="mb-2"><strong>UPDATE</strong> works only for existing Services/Products. It never creates, updates, moves, or renames Category/Subcategory parents.</li>
+                  <li class="mb-2">Existing CREATE targets are rejected instead of overwritten.</li>
+                  <li class="mb-2">A full Category/Subcategory/Service/Product snapshot is stored in private S3 before Import unlocks.</li>
+                  <li>Categories cannot be deleted. A Subcategory can be deleted only after every Service and Product under it is manually deleted.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><div><h5 class="mb-1">Recent imports</h5><p class="text-muted mb-0">Audit history is read from the private S3 import log.</p></div></div>
+              <div class="card-body p-0">
+                <template x-if="historyLoading"><div class="p-3 text-muted">Loading history…</div></template>
+                <template x-for="entry in history" :key="entry.importId">
+                  <div class="p-3 border-bottom">
+                    <div class="d-flex justify-content-between gap-2"><code class="text-break" x-text="entry.importId"></code><span class="badge bg-light text-body" x-text="entry.status"></span></div>
+                    <div class="small text-muted mt-1" x-text="entry.originalFileName || 'CSV import'"></div>
+                    <div class="small mt-2" x-show="entry.summary"><span x-text="summaryText(entry.summary)"></span></div>
+                  </div>
+                </template>
+                <div class="p-3 text-muted" x-show="!historyLoading && !history.length">No catalog CSV imports logged yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <%- include('../partials/footer') %>
+    </div></div></div>
+
+    <script>
+      function catalogCsvImport() {
+        return {
+          fileName: '', fileBase64: '', preview: null, prepared: null, imported: null,
+          validating: false, backingUp: false, importing: false, error: '', success: '', history: [], historyLoading: false,
+          get busy() { return this.validating || this.backingUp || this.importing; },
+          async init() { await this.loadHistory(); },
+          resetPrepared() { this.prepared = null; this.imported = null; this.success = ''; },
+          async selectFile(event) {
+            this.error = ''; this.preview = null; this.resetPrepared(); this.fileBase64 = ''; this.fileName = '';
+            const file = event.target.files?.[0]; if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.csv')) { this.error = 'Choose a CSV file.'; event.target.value = ''; return; }
+            if (file.size > 1024 * 1024) { this.error = 'CSV file must not exceed 1 MB.'; event.target.value = ''; return; }
+            this.fileName = file.name;
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            let binary = ''; const chunk = 0x8000;
+            for (let offset = 0; offset < bytes.length; offset += chunk) binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+            this.fileBase64 = btoa(binary);
+          },
+          async previewFile() {
+            if (!this.fileBase64 || this.validating) return;
+            this.validating = true; this.error = ''; this.success = ''; this.resetPrepared();
+            try {
+              const body = await apiFetch('/api/website-content/catalog-import/preview', { method: 'POST', body: JSON.stringify({ fileName: this.fileName, base64: this.fileBase64 }) });
+              this.preview = body.data;
+              if (!this.preview.valid) this.error = 'CSV contains validation errors. Fix the highlighted rows before creating a backup.';
+            } catch (error) { this.error = error.message; }
+            finally { this.validating = false; }
+          },
+          async prepareBackup() {
+            if (!this.preview?.valid || this.backingUp) return;
+            this.backingUp = true; this.error = ''; this.success = '';
+            try {
+              const body = await apiFetch('/api/website-content/catalog-import/prepare', { method: 'POST', body: JSON.stringify({ fileName: this.fileName, base64: this.fileBase64 }) });
+              this.prepared = body.data;
+              this.preview = body.data.preview;
+              this.success = 'Pre-import catalog backup was created and verified in S3. Import is now unlocked.';
+              await this.loadHistory();
+            } catch (error) { this.error = error.message; this.prepared = null; }
+            finally { this.backingUp = false; }
+          },
+          async runImport() {
+            if (!this.prepared?.importId || this.importing) return;
+            if (!confirm('Import this CSV now? The verified S3 backup will be kept under import ID ' + this.prepared.importId + '.')) return;
+            this.importing = true; this.error = ''; this.success = '';
+            try {
+              const body = await apiFetch('/api/website-content/catalog-import/' + encodeURIComponent(this.prepared.importId) + '/execute', { method: 'POST', body: '{}' });
+              this.imported = body.data;
+              const failed = Number(body.data.summary?.failed || 0);
+              this.success = failed ? 'Import finished with ' + failed + ' failed row(s). Check the S3 audit log for details.' : 'Catalog import completed successfully.';
+              await this.loadHistory();
+            } catch (error) { this.error = error.message; }
+            finally { this.importing = false; }
+          },
+          async loadHistory() {
+            this.historyLoading = true;
+            try { this.history = (await apiFetch('/api/website-content/catalog-import/history?limit=20')).data || []; }
+            catch (error) { if (!this.error) this.error = error.message; }
+            finally { this.historyLoading = false; }
+          },
+          summaryText(summary = {}) {
+            const created = Number(summary.servicesCreated || 0) + Number(summary.productsCreated || 0);
+            const updated = Number(summary.servicesUpdated || 0) + Number(summary.productsUpdated || 0);
+            const failed = Number(summary.failed || 0);
+            if (!created && !updated && !failed) return 'Backup prepared; import not executed yet.';
+            return 'Created ' + created + ' · Updated ' + updated + ' · Failed ' + failed;
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>
