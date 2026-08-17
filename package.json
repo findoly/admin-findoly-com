@@ -31,9 +31,6 @@
     "migrate:remove-slack-rules": "node scripts/run-with-runtime.js scripts/remove-slack-rules.js",
     "migrate:website-media-variants": "node scripts/run-with-runtime.js scripts/backfill-website-media-variants.js"
   },
-  "engines": {
-    "node": ">=20.9.0"
-  },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1086.0",
     "bootstrap": "5.3.8",
