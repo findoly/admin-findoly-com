@@ -308,7 +308,7 @@ async function listItems(options = {}) {
   if (options.categorySlug) query.categorySlug = String(options.categorySlug).trim();
   if (options.serviceTypeSlug) query.serviceTypeSlug = String(options.serviceTypeSlug).trim();
   if (String(options.includeInactive || "") !== "true") query.active = { $ne: false };
-  const rows = await WebsiteCatalogItem.find(query).sort({ kind: 1, displayOrder: 1, name: 1, _id: 1 }).limit(1000).lean();
+  const rows = await WebsiteCatalogItem.find(query).sort({ kind: 1, displayOrder: 1, name: 1, _id: 1 }).limit(5000).lean();
   const ids = rows.flatMap((row) => [row.coverMediaId, ...(row.galleryMediaIds || [])]).filter(Boolean);
   const media = await mediaMap(ids);
   return rows.map((row) => ({
@@ -385,17 +385,97 @@ function section(input = {}, defaults = {}) {
   };
 }
 
-const HOMEPAGE_SECTION_KEYS = ["popular", "featuredCategories", "homeCare", "repairs", "events"];
+const DEFAULT_MARKETPLACE_GROUPS = [
+  { id: "for-you", label: "For You", enabled: true, categorySlugs: [] },
+  { id: "home", label: "Home", enabled: true, categorySlugs: [] },
+  { id: "events", label: "Events", enabled: true, categorySlugs: [] },
+  { id: "business", label: "Business", enabled: true, categorySlugs: [] },
+  { id: "auto", label: "Auto", enabled: true, categorySlugs: [] },
+  { id: "technology", label: "Technology", enabled: true, categorySlugs: [] },
+  { id: "education", label: "Education", enabled: true, categorySlugs: [] },
+  { id: "personal", label: "Personal", enabled: true, categorySlugs: [] },
+  { id: "more", label: "More", enabled: true, categorySlugs: [] },
+];
+
+function normalizeGroupId(value, fallback) {
+  const candidate = slugify(String(value || fallback || ""));
+  return candidate || fallback || "group";
+}
+
+function normalizeMarketplaceGroups(input) {
+  const source = Array.isArray(input) && input.length ? input : DEFAULT_MARKETPLACE_GROUPS;
+  const result = [];
+  const used = new Set();
+  for (let index = 0; index < source.length && result.length < 12; index += 1) {
+    const raw = source[index] || {};
+    const fallbackId = index === 0 ? "for-you" : `group-${index + 1}`;
+    let id = normalizeGroupId(raw.id, fallbackId);
+    if (used.has(id)) continue;
+    used.add(id);
+    result.push({
+      id,
+      label: text(raw.label || (id === "for-you" ? "For You" : id.replace(/-/g, " ")), 60),
+      enabled: booleanValue(raw.enabled, { label: "Marketplace group visibility", fallback: true }),
+      categorySlugs: [...new Set((Array.isArray(raw.categorySlugs) ? raw.categorySlugs : []).map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 80),
+    });
+  }
+  if (!result.some((row) => row.id === "for-you")) result.unshift({ id: "for-you", label: "For You", enabled: true, categorySlugs: [] });
+  return result;
+}
+
+function normalizeDynamicSection(raw = {}, index = 0) {
+  const contentType = ["categories", "items", "promotion"].includes(String(raw.contentType || "").toLowerCase())
+    ? String(raw.contentType).toLowerCase()
+    : "items";
+  const layout = ["rail", "grid", "list", "callout"].includes(String(raw.layout || "").toLowerCase())
+    ? String(raw.layout).toLowerCase()
+    : contentType === "promotion" ? "callout" : "rail";
+  return {
+    id: normalizeGroupId(raw.id, `section-${index + 1}`),
+    enabled: booleanValue(raw.enabled, { label: "Homepage section visibility", fallback: true }),
+    groupId: normalizeGroupId(raw.groupId, "for-you"),
+    contentType,
+    layout,
+    heading: text(raw.heading || "", 160),
+    subheading: text(raw.subheading || "", 300),
+    categorySlugs: [...new Set((Array.isArray(raw.categorySlugs) ? raw.categorySlugs : []).map(String).filter(Boolean))].slice(0, 24),
+    itemIds: [...new Set((Array.isArray(raw.itemIds) ? raw.itemIds : []).map(String).filter(Boolean))].slice(0, 24),
+    cardLimit: numberValue(raw.cardLimit, { label: "Homepage card limit", fallback: 6, min: 1, max: 24, integer: true }),
+    seeAllHref: String(raw.seeAllHref || "/explore").trim().slice(0, 500),
+    buttonText: text(raw.buttonText || "", 100),
+    buttonHref: String(raw.buttonHref || "").trim().slice(0, 500),
+    mediaId: String(raw.mediaId || "").trim(),
+  };
+}
+
+function legacyDynamicSections(input = {}, defaults = {}) {
+  const definitions = [
+    ["popular", "popular", "for-you", "items", "rail"],
+    ["featured-categories", "featuredCategories", "for-you", "categories", "grid"],
+    ["home-care", "homeCare", "home", "items", "rail"],
+    ["repairs", "repairs", "home", "items", "rail"],
+    ["events", "events", "events", "items", "rail"],
+  ];
+  return definitions.map(([id, key, groupId, contentType, layout], index) => {
+    const value = section(input[key], defaults[key]);
+    return normalizeDynamicSection({ id, groupId, contentType, layout, ...value, seeAllHref: "/explore" }, index);
+  });
+}
 
 function defaultHomepage() {
+  const legacy = {
+    featuredCategories: section({}, { heading: "What do you need help with?", subheading: "Browse popular categories", enabled: false }),
+    popular: section({}, { heading: "Popular requests", subheading: "Frequently requested on Findoly", enabled: false }),
+    homeCare: section({}, { heading: "For your home", subheading: "Popular home services", enabled: false }),
+    repairs: section({}, { heading: "Home repairs", subheading: "Quick help for common repair needs", enabled: false }),
+    events: section({}, { heading: "Events & occasions", subheading: "Find help for your next occasion", enabled: false }),
+  };
   return {
-    sectionOrder: [...HOMEPAGE_SECTION_KEYS],
     hero: { enabled: true, eyebrow: "Find services around you", heading: "What do you need today?" },
-    featuredCategories: section({}, { heading: "What do you need help with?", subheading: "Browse popular categories", enabled: true }),
-    popular: section({}, { heading: "Popular near you", subheading: "Services people commonly request", enabled: true }),
-    homeCare: section({}, { heading: "For your home", subheading: "Popular home services", enabled: true }),
-    repairs: section({}, { heading: "Home repairs", subheading: "Quick help for common repair needs", enabled: true }),
-    events: section({}, { heading: "Events & occasions", subheading: "Find help for your next occasion", enabled: true }),
+    marketplaceGroups: normalizeMarketplaceGroups(DEFAULT_MARKETPLACE_GROUPS),
+    sections: legacyDynamicSections(legacy, legacy),
+    ...legacy,
+    sectionOrder: ["popular", "featuredCategories", "homeCare", "repairs", "events"],
     howItWorks: {
       enabled: true,
       heading: "How Findoly works",
@@ -411,7 +491,7 @@ function defaultHomepage() {
       heading: "Need something for your office or business?",
       text: "Explore sourcing, office support, marketing and operational requirements.",
       buttonText: "Explore business services",
-      buttonHref: "/business",
+      buttonHref: "/explore?group=business",
       mediaId: "",
     },
   };
@@ -420,16 +500,28 @@ function defaultHomepage() {
 function normalizeHomepage(input = {}) {
   const defaults = defaultHomepage();
   const steps = Array.isArray(input.howItWorks?.steps) ? input.howItWorks.steps.slice(0, 3) : defaults.howItWorks.steps;
-  const requestedOrder = Array.isArray(input.sectionOrder) ? input.sectionOrder.map(String) : defaults.sectionOrder;
-  const sectionOrder = [...new Set(requestedOrder.filter((key) => HOMEPAGE_SECTION_KEYS.includes(key)))];
-  for (const key of HOMEPAGE_SECTION_KEYS) if (!sectionOrder.includes(key)) sectionOrder.push(key);
+  const marketplaceGroups = normalizeMarketplaceGroups(input.marketplaceGroups);
+  const groupIds = new Set(marketplaceGroups.map((row) => row.id));
+  const rawSections = Array.isArray(input.sections) ? input.sections : legacyDynamicSections(input, defaults);
+  const sections = [];
+  const sectionIds = new Set();
+  for (let index = 0; index < rawSections.length && sections.length < 40; index += 1) {
+    const row = normalizeDynamicSection(rawSections[index], index);
+    if (sectionIds.has(row.id)) continue;
+    sectionIds.add(row.id);
+    if (!groupIds.has(row.groupId)) row.groupId = "for-you";
+    sections.push(row);
+  }
   return {
-    sectionOrder,
     hero: {
       enabled: booleanValue(input.hero?.enabled, { label: "Hero visibility", fallback: defaults.hero.enabled }),
       eyebrow: text(input.hero?.eyebrow ?? defaults.hero.eyebrow, 120),
       heading: text(input.hero?.heading ?? defaults.hero.heading, 180),
     },
+    marketplaceGroups,
+    sections,
+    // Keep legacy keys so older customer builds and saved drafts remain readable during rollout.
+    sectionOrder: Array.isArray(input.sectionOrder) ? input.sectionOrder.map(String).slice(0, 10) : defaults.sectionOrder,
     featuredCategories: section(input.featuredCategories, defaults.featuredCategories),
     popular: section(input.popular, defaults.popular),
     homeCare: section(input.homeCare, defaults.homeCare),
@@ -455,6 +547,42 @@ function normalizeHomepage(input = {}) {
   };
 }
 
+async function validateHomepageSelections(homepage, { forPublish = false } = {}) {
+  const groupIds = new Set(homepage.marketplaceGroups.map((row) => row.id));
+  const categorySlugs = [...new Set([
+    ...homepage.marketplaceGroups.flatMap((row) => row.categorySlugs || []),
+    ...homepage.sections.flatMap((row) => row.categorySlugs || []),
+  ].filter(Boolean))];
+  const itemIds = [...new Set(homepage.sections.flatMap((row) => row.itemIds || []).filter(Boolean))];
+
+  if (categorySlugs.length) {
+    const query = { slug: { $in: categorySlugs } };
+    if (forPublish) Object.assign(query, { active: { $ne: false }, websiteVisible: { $ne: false } });
+    const count = await Category.countDocuments(query);
+    if (count !== categorySlugs.length) throw validationError(forPublish
+      ? "One or more homepage Categories are missing, inactive, or hidden from Findoly.com"
+      : "One or more homepage Categories no longer exist");
+  }
+  if (itemIds.length) {
+    const query = { itemId: { $in: itemIds } };
+    if (forPublish) Object.assign(query, { active: { $ne: false }, websiteVisible: { $ne: false } });
+    const count = await WebsiteCatalogItem.countDocuments(query);
+    if (count !== itemIds.length) throw validationError(forPublish
+      ? "One or more homepage Services or Products are missing, inactive, or hidden from Findoly.com"
+      : "One or more homepage Services or Products no longer exist");
+  }
+  for (const row of homepage.sections) {
+    if (!groupIds.has(row.groupId)) throw validationError(`Homepage section \"${row.heading || row.id}\" uses an invalid marketplace group`);
+    if (!forPublish || row.enabled === false) continue;
+    if (row.contentType === "categories" && !row.categorySlugs.length) {
+      throw validationError(`Homepage section \"${row.heading || row.id}\" is enabled but has no Categories`);
+    }
+    if (row.contentType === "items" && !row.itemIds.length) {
+      throw validationError(`Homepage section \"${row.heading || row.id}\" is enabled but has no Services or Products`);
+    }
+  }
+}
+
 async function homepageAdmin() {
   const row = await HomepageContent.findOne({ homepageKey: "main" }).lean();
   return {
@@ -467,7 +595,8 @@ async function homepageAdmin() {
 
 async function saveHomepageDraft(input = {}, actor) {
   const draft = normalizeHomepage(input);
-  const mediaIds = [draft.businessCta.mediaId, draft.featuredCategories.mediaId, draft.popular.mediaId, draft.homeCare.mediaId, draft.repairs.mediaId, draft.events.mediaId].filter(Boolean);
+  await validateHomepageSelections(draft);
+  const mediaIds = [draft.businessCta.mediaId, ...draft.sections.map((row) => row.mediaId)].filter(Boolean);
   await validateMediaIds(mediaIds);
   const row = await HomepageContent.findOneAndUpdate(
     { homepageKey: "main" },
@@ -480,6 +609,7 @@ async function saveHomepageDraft(input = {}, actor) {
 async function publishHomepage(actor) {
   const row = await HomepageContent.findOne({ homepageKey: "main" });
   const draft = normalizeHomepage(row?.draft || defaultHomepage());
+  await validateHomepageSelections(draft, { forPublish: true });
   if (!row) {
     const created = await HomepageContent.create({ homepageKey: "main", draft, published: draft, publishedAt: new Date(), publishedBy: actorName(actor), updatedBy: actorName(actor) });
     return { published: normalizeHomepage(created.published), publishedAt: created.publishedAt };
@@ -504,11 +634,7 @@ async function publicWebsite() {
     : defaultHomepage();
   const homepageMediaIds = [
     homepage.businessCta?.mediaId,
-    homepage.featuredCategories?.mediaId,
-    homepage.popular?.mediaId,
-    homepage.homeCare?.mediaId,
-    homepage.repairs?.mediaId,
-    homepage.events?.mediaId,
+    ...homepage.sections.map((row) => row.mediaId),
   ];
   const mediaIds = [
     ...categories.flatMap((row) => [row.imageMediaId, row.bannerMediaId]),
@@ -575,6 +701,14 @@ async function publicWebsite() {
     };
   });
   const businessMedia = media.get(homepage.businessCta?.mediaId);
+  const homepageSections = homepage.sections.map((row) => {
+    const sectionMedia = media.get(row.mediaId);
+    return {
+      ...row,
+      mediaUrl: mediaPublicUrl(sectionMedia, "banner"),
+      mediaVariants: mediaPublicVariants(sectionMedia),
+    };
+  });
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
@@ -582,6 +716,7 @@ async function publicWebsite() {
     items: itemRows,
     homepage: {
       ...homepage,
+      sections: homepageSections,
       businessCta: {
         ...homepage.businessCta,
         mediaUrl: mediaPublicUrl(businessMedia, "banner"),
