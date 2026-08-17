@@ -9,15 +9,20 @@ const root = path.resolve(__dirname, "..");
 const service = fs.readFileSync(path.join(root, "services/website-content/website-content-service.js"), "utf8");
 const view = fs.readFileSync(path.join(root, "views/website-content/homepage.ejs"), "utf8");
 
-test("Homepage manager supports marketplace groups and dynamic sections", () => {
+test("Homepage manager mirrors current Findoly homepage structure", () => {
   assert.match(service, /DEFAULT_MARKETPLACE_GROUPS/);
+  assert.match(service, /id: "home-services", label: "Home"/);
+  assert.match(service, /id: "repairs", label: "Repairs"/);
   assert.match(service, /marketplaceGroups/);
   assert.match(service, /contentType.*categories/);
   assert.match(service, /contentType.*promotion/);
-  assert.match(view, /Marketplace navigation groups/);
+  assert.match(view, /Findoly Homepage Manager/);
+  assert.match(view, /Homepage navigation tabs/);
+  assert.match(view, /Live homepage structure/);
   assert.match(view, /\+ Add homepage section/);
   assert.match(view, /Services \/ Products/);
   assert.match(view, /Promotion \/ CTA/);
+  assert.doesNotMatch(view, /Categories in this group/);
 });
 
 test("Publishing blocks enabled empty Category and Service Product sections", () => {

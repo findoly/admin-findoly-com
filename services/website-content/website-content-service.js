@@ -387,14 +387,10 @@ function section(input = {}, defaults = {}) {
 
 const DEFAULT_MARKETPLACE_GROUPS = [
   { id: "for-you", label: "For You", enabled: true, categorySlugs: [] },
-  { id: "home", label: "Home", enabled: true, categorySlugs: [] },
+  { id: "home-services", label: "Home", enabled: true, categorySlugs: [] },
+  { id: "repairs", label: "Repairs", enabled: true, categorySlugs: [] },
   { id: "events", label: "Events", enabled: true, categorySlugs: [] },
   { id: "business", label: "Business", enabled: true, categorySlugs: [] },
-  { id: "auto", label: "Auto", enabled: true, categorySlugs: [] },
-  { id: "technology", label: "Technology", enabled: true, categorySlugs: [] },
-  { id: "education", label: "Education", enabled: true, categorySlugs: [] },
-  { id: "personal", label: "Personal", enabled: true, categorySlugs: [] },
-  { id: "more", label: "More", enabled: true, categorySlugs: [] },
 ];
 
 function normalizeGroupId(value, fallback) {
@@ -416,7 +412,8 @@ function normalizeMarketplaceGroups(input) {
       id,
       label: text(raw.label || (id === "for-you" ? "For You" : id.replace(/-/g, " ")), 60),
       enabled: booleanValue(raw.enabled, { label: "Marketplace group visibility", fallback: true }),
-      categorySlugs: [...new Set((Array.isArray(raw.categorySlugs) ? raw.categorySlugs : []).map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 80),
+      // Navigation tabs are presentation-only. Category curation belongs to homepage sections.
+      categorySlugs: [],
     });
   }
   if (!result.some((row) => row.id === "for-you")) result.unshift({ id: "for-you", label: "For You", enabled: true, categorySlugs: [] });
@@ -452,8 +449,8 @@ function legacyDynamicSections(input = {}, defaults = {}) {
   const definitions = [
     ["popular", "popular", "for-you", "items", "rail"],
     ["featured-categories", "featuredCategories", "for-you", "categories", "grid"],
-    ["home-care", "homeCare", "home", "items", "rail"],
-    ["repairs", "repairs", "home", "items", "rail"],
+    ["home-care", "homeCare", "home-services", "items", "rail"],
+    ["repairs", "repairs", "repairs", "items", "rail"],
     ["events", "events", "events", "items", "rail"],
   ];
   return definitions.map(([id, key, groupId, contentType, layout], index) => {
@@ -464,11 +461,11 @@ function legacyDynamicSections(input = {}, defaults = {}) {
 
 function defaultHomepage() {
   const legacy = {
-    featuredCategories: section({}, { heading: "What do you need help with?", subheading: "Browse popular categories", enabled: false }),
-    popular: section({}, { heading: "Popular requests", subheading: "Frequently requested on Findoly", enabled: false }),
-    homeCare: section({}, { heading: "For your home", subheading: "Popular home services", enabled: false }),
-    repairs: section({}, { heading: "Home repairs", subheading: "Quick help for common repair needs", enabled: false }),
-    events: section({}, { heading: "Events & occasions", subheading: "Find help for your next occasion", enabled: false }),
+    featuredCategories: section({}, { heading: "What do you need help with?", subheading: "Browse by service category", enabled: false }),
+    popular: section({}, { heading: "Popular near you", subheading: "Common requirements people look for every day", enabled: false }),
+    homeCare: section({}, { heading: "For your home", subheading: "Cleaning, painting and everyday home care", enabled: false }),
+    repairs: section({}, { heading: "Home repairs", subheading: "Quick access to common repair needs", enabled: false }),
+    events: section({}, { heading: "Events & occasions", subheading: "Find help for celebrations and important days", enabled: false }),
   };
   return {
     hero: { enabled: true, eyebrow: "Find services around you", heading: "What do you need today?" },
@@ -549,10 +546,9 @@ function normalizeHomepage(input = {}) {
 
 async function validateHomepageSelections(homepage, { forPublish = false } = {}) {
   const groupIds = new Set(homepage.marketplaceGroups.map((row) => row.id));
-  const categorySlugs = [...new Set([
-    ...homepage.marketplaceGroups.flatMap((row) => row.categorySlugs || []),
-    ...homepage.sections.flatMap((row) => row.categorySlugs || []),
-  ].filter(Boolean))];
+  const categorySlugs = [...new Set(
+    homepage.sections.flatMap((row) => row.categorySlugs || []).filter(Boolean),
+  )];
   const itemIds = [...new Set(homepage.sections.flatMap((row) => row.itemIds || []).filter(Boolean))];
 
   if (categorySlugs.length) {
