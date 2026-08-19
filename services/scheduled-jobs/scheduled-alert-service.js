@@ -5,7 +5,7 @@ const CommunicationRule = require("../../models/CommunicationRule");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("../communication/communication-service");
 
-const TERMINAL_FAILURE_STATUSES = new Set(["failed", "bounced", "complained", "rejected"]);
+const TERMINAL_FAILURE_STATUSES = Object.freeze(["failed", "bounced", "complained", "rejected"]);
 
 const DEFINITIONS = Object.freeze([
   {
@@ -240,6 +240,41 @@ async function isEventEnabled(event) {
   return Boolean(rule?.enabled === true && rule?.emailEnabled === true && rule?.emailTemplateId);
 }
 
+async function updateScheduledAlert(event, input = {}, actor = "crm") {
+  const { rule } = await ruleFor(event);
+  if (!rule) throw Object.assign(new Error("Scheduled internal email rule is missing"), { status: 404 });
+  const enabled = input.enabled === true;
+  const emailTemplateId = String(input.emailTemplateId ?? rule.emailTemplateId ?? "").trim();
+  if (enabled && !emailTemplateId) {
+    throw Object.assign(new Error("Select an active email template before enabling this alert"), { status: 400 });
+  }
+  if (emailTemplateId) {
+    const template = await CommunicationTemplate.findOne({
+      templateId: emailTemplateId,
+      channel: "email",
+      status: "active",
+      isActive: true,
+    }).lean();
+    if (!template) throw Object.assign(new Error("Selected email template is not active"), { status: 400 });
+  }
+  await CommunicationRule.updateOne(
+    { ruleId: rule.ruleId },
+    {
+      $set: {
+        enabled,
+        emailEnabled: true,
+        emailTemplateId,
+        whatsappEnabled: false,
+        whatsappTemplateId: "",
+        whatsappParameterMappings: [],
+        updatedBy: actor,
+        updatedAt: new Date(),
+      },
+    },
+  );
+  return CommunicationRule.findOne({ ruleId: rule.ruleId }).lean();
+}
+
 async function sendInternalEvent(event, variables = {}, options = {}) {
   const { definition, rule } = await ruleFor(event);
   if (!rule) return { skipped: true, reason: "Internal email rule is missing", event: definition.event };
@@ -247,15 +282,16 @@ async function sendInternalEvent(event, variables = {}, options = {}) {
   if (!rule.emailTemplateId) return { skipped: true, reason: "Internal email template is not selected", event: definition.event };
 
   const recipient = String(process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com").trim().toLowerCase();
-  const idempotencyKey = String(options.idempotencyKey || "").trim();
-  if (idempotencyKey) {
-    const existing = await Communication.findOne({ idempotencyKey }).lean();
-    if (existing) {
-      if (TERMINAL_FAILURE_STATUSES.has(String(existing.status || "").toLowerCase())) {
-        return communicationService.retry(existing.communicationId, options.actor || "scheduled-job");
-      }
-      return existing;
-    }
+  const scheduledJobKey = String(options.idempotencyKey || "").trim();
+  let deliveryIdempotencyKey = scheduledJobKey || `scheduled-email-test:${definition.event}:${Date.now()}`;
+  if (scheduledJobKey) {
+    const completed = await Communication.findOne({
+      "metadata.scheduledJobKey": scheduledJobKey,
+      status: { $nin: TERMINAL_FAILURE_STATUSES },
+    }).sort({ createdAt: -1, _id: -1 }).lean();
+    if (completed) return completed;
+    const attempts = await Communication.countDocuments({ "metadata.scheduledJobKey": scheduledJobKey });
+    deliveryIdempotencyKey = `${scheduledJobKey}:attempt:${attempts + 1}`;
   }
 
   return communicationService.send(
@@ -269,12 +305,13 @@ async function sendInternalEvent(event, variables = {}, options = {}) {
       trigger: definition.event,
       automatic: options.test !== true,
       variables,
-      idempotencyKey: idempotencyKey || `scheduled-email-test:${definition.event}:${Date.now()}`,
+      idempotencyKey: deliveryIdempotencyKey,
       metadata: {
         event: definition.event,
         source: options.source || "scheduled-job",
         internalAlert: true,
         scheduledJob: options.test !== true,
+        scheduledJobKey,
         test: options.test === true,
         ...(options.metadata || {}),
       },
@@ -299,6 +336,7 @@ module.exports = {
   definitionFor,
   ensureScheduledAlertTemplatesAndRules,
   isEventEnabled,
+  updateScheduledAlert,
   sendInternalEvent,
   testScheduledAlert,
 };
