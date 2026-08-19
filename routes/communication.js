@@ -23,6 +23,7 @@ router.patch("/rules/:ruleId", requirePermission("communications.manage"), c.upd
 router.post("/events/:event", requirePermission("communications.manage"), c.triggerEvent);
 router.post("/internal-alerts/:event/test", requirePermission("communications.send"), c.testInternalAlert);
 router.post("/scheduled-alerts/ensure", requirePermission("communications.view"), scheduledJobController.ensureScheduledAlerts);
+router.put("/scheduled-alerts/:event", requirePermission("communications.manage"), scheduledJobController.updateScheduledAlert);
 router.post("/scheduled-alerts/:event/test", requirePermission("communications.send"), scheduledJobController.testScheduledAlert);
 router.get("/otp", requirePermission("communications.view"), c.listOtp);
 router.post("/otp/send", requirePermission("communications.send"), c.sendOtp);
