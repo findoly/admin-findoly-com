@@ -1,6 +1,21 @@
 const mongoose = require("mongoose");
 const uuid = require("../utils/uuid");
 
+const whatsappLeadPreferenceSchema = new mongoose.Schema(
+  {
+    categorySlug: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 80,
+      match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/,
+    },
+    mode: { type: String, enum: ["all", "selected"], default: "all" },
+    serviceTypeIds: { type: [String], default: [] },
+  },
+  { _id: false, strict: true },
+);
+
 const providerSchema = new mongoose.Schema(
   {
     providerId: { type: String, default: uuid, unique: true, index: true, immutable: true },
@@ -15,6 +30,8 @@ const providerSchema = new mongoose.Schema(
     status: { type: String, default: "active", index: true },
     onboardingStage: { type: String, default: "new" },
     categorySlugs: { type: [String], default: [], index: true },
+    whatsappLeadAlertsEnabled: { type: Boolean, default: true, index: true },
+    whatsappLeadPreferences: { type: [whatsappLeadPreferenceSchema], default: [] },
     skills: { type: [String], default: [] },
     city: { type: String, default: "", index: true },
     state: { type: String, default: "" },
