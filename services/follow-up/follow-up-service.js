@@ -175,7 +175,7 @@ async function update(followUpId, input = {}) {
   const updateFields = {
     ...normalized,
     completedAt: normalized.status === "completed"
-      ? (current.status === "completed" && current.completedAt ? current.completedAt : new Date())
+      ? (current.status === "completed" ? (current.completedAt || null) : new Date())
       : null,
     updatedAt: new Date(),
   };
