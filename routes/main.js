@@ -17,6 +17,7 @@ router.post("/communications/otp/verify", communicationOtpAccess, communicationC
 router.post("/communication/events/:event", communicationEventAccess, communicationController.integrationEvent);
 router.post("/communications/events/:event", communicationEventAccess, communicationController.integrationEvent);
 router.use("/customer-portal", require("./customer-portal"));
+router.use("/internal/jobs", require("./scheduled-jobs"));
 router.use(apiAuth);
 router.use("/dashboard", require("./dashboard"));
 router.use("/employee", require("./employee"));
