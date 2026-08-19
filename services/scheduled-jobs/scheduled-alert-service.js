@@ -278,7 +278,7 @@ async function updateScheduledAlert(event, input = {}, actor = "crm") {
 async function sendInternalEvent(event, variables = {}, options = {}) {
   const { definition, rule } = await ruleFor(event);
   if (!rule) return { skipped: true, reason: "Internal email rule is missing", event: definition.event };
-  if (rule.enabled !== true || rule.emailEnabled !== true) return { skipped: true, reason: "Internal email alert is disabled", event: definition.event };
+  if (!options.test && (rule.enabled !== true || rule.emailEnabled !== true)) return { skipped: true, reason: "Internal email alert is disabled", event: definition.event };
   if (!rule.emailTemplateId) return { skipped: true, reason: "Internal email template is not selected", event: definition.event };
 
   const recipient = String(process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com").trim().toLowerCase();
