@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const c = require("../controllers/communicationController");
+const scheduledJobController = require("../controllers/scheduledJobController");
 const { requirePermission } = require("../middleware/auth");
 
 router.get("/dashboard", requirePermission("communications.view"), c.dashboard);
@@ -21,6 +22,8 @@ router.put("/rules/:ruleId", requirePermission("communications.manage"), c.updat
 router.patch("/rules/:ruleId", requirePermission("communications.manage"), c.updateRule);
 router.post("/events/:event", requirePermission("communications.manage"), c.triggerEvent);
 router.post("/internal-alerts/:event/test", requirePermission("communications.send"), c.testInternalAlert);
+router.post("/scheduled-alerts/ensure", requirePermission("communications.view"), scheduledJobController.ensureScheduledAlerts);
+router.post("/scheduled-alerts/:event/test", requirePermission("communications.send"), scheduledJobController.testScheduledAlert);
 router.get("/otp", requirePermission("communications.view"), c.listOtp);
 router.post("/otp/send", requirePermission("communications.send"), c.sendOtp);
 router.post("/otp/verify", requirePermission("communications.send"), c.verifyOtp);
