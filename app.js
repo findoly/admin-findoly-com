@@ -118,7 +118,7 @@ app.get("/api/health", (req, res) =>
 );
 app.get("/api/ready", (req, res) => {
   const ready = process.env.SKIP_DB === "true" || mongoose.connection.readyState === 1;
-  return res.status(ready ? 200 : 503).json({
+  return res.status(ready ? 200 : 202).json({
     success: ready,
     data: { service: "crm", status: ready ? "ready" : "not_ready", databaseState: mongoose.connection.readyState },
   });
