@@ -83,6 +83,17 @@ async function ensureScheduledAlerts(req, res, next) {
   }
 }
 
+async function updateScheduledAlert(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await scheduledAlertService.updateScheduledAlert(req.params.event, req.body || {}, actor(req)),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function testScheduledAlert(req, res, next) {
   try {
     res.status(201).json({ success: true, data: await scheduledAlertService.testScheduledAlert(req.params.event, actor(req)) });
@@ -100,5 +111,6 @@ module.exports = {
   dailyCrmHealth,
   testingProviders,
   ensureScheduledAlerts,
+  updateScheduledAlert,
   testScheduledAlert,
 };
