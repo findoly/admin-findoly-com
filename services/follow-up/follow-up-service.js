@@ -102,6 +102,22 @@ function assertFollowUpIdUnchanged(current, input = {}) {
   }
 }
 
+function sameInstant(left, right) {
+  const a = left ? new Date(left).getTime() : null;
+  const b = right ? new Date(right).getTime() : null;
+  return a === b;
+}
+
+function alertResetFields() {
+  return {
+    dueAlertStatus: "pending",
+    dueAlertSentAt: null,
+    dueAlertAttemptedAt: null,
+    dueAlertAttempts: 0,
+    dueAlertLastError: "",
+  };
+}
+
 async function list(filters = {}) {
   const { limit, cursor } = getPagination(filters);
   const query = {};
@@ -144,20 +160,33 @@ async function get(followUpId) {
 }
 
 async function create(input = {}) {
-  return FollowUp.create(normalizeFollowUpInput(input));
+  const normalized = normalizeFollowUpInput(input);
+  return FollowUp.create({
+    ...normalized,
+    completedAt: normalized.status === "completed" ? new Date() : null,
+    ...alertResetFields(),
+  });
 }
 
 async function update(followUpId, input = {}) {
   const current = await get(followUpId);
   assertFollowUpIdUnchanged(current, input);
+  const normalized = normalizeFollowUpInput(input, current);
+  const updateFields = {
+    ...normalized,
+    completedAt: normalized.status === "completed"
+      ? (current.status === "completed" && current.completedAt ? current.completedAt : new Date())
+      : null,
+    updatedAt: new Date(),
+  };
+  const dueChanged = !sameInstant(current.dueAt, normalized.dueAt);
+  const reopened = ["completed", "cancelled"].includes(String(current.status || ""))
+    && ["open", "pending"].includes(normalized.status);
+  if (dueChanged || reopened) Object.assign(updateFields, alertResetFields());
+
   const result = await FollowUp.updateOne(
     { followUpId: current.followUpId },
-    {
-      $set: {
-        ...normalizeFollowUpInput(input, current),
-        updatedAt: new Date(),
-      },
-    },
+    { $set: updateFields },
   );
   if (!result.matchedCount) {
     throw Object.assign(new Error("Follow-up not found"), { status: 404 });
@@ -175,4 +204,6 @@ module.exports = {
   FOLLOW_UP_STATUSES,
   FOLLOW_UP_CHANNELS,
   followUpDateValue,
+  sameInstant,
+  alertResetFields,
 };
