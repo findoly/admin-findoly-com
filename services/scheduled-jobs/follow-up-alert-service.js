@@ -1,7 +1,6 @@
 "use strict";
 
 const FollowUp = require("../../models/FollowUp");
-const { INDIA_OFFSET_MINUTES } = require("../../utils/india-datetime");
 const scheduledAlertService = require("./scheduled-alert-service");
 
 const DEFAULT_BATCH_SIZE = 100;
