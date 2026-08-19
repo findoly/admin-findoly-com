@@ -33,7 +33,7 @@ function resolvePort(env = process.env) {
 }
 
 function startupHandler(_req, res) {
-  res.statusCode = 503;
+  res.statusCode = 202;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Retry-After", "3");
