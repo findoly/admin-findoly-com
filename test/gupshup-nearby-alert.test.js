@@ -88,6 +88,7 @@ test("nearby lead alerts are WhatsApp-only and dispatched only at 20 km or less"
     enquiryId: "lead-1",
     categorySlug: "painting",
     category: "Painting",
+    serviceTypes: [{ serviceTypeId: "service-wall-painting", name: "Wall Painting", slug: "wall-painting" }],
     remainingUnlocks: 5,
     locationLatitude: 19.076,
     locationLongitude: 72.8777,
@@ -108,11 +109,108 @@ test("nearby lead alerts are WhatsApp-only and dispatched only at 20 km or less"
   assert.equal(notifications[0].context.idempotencyEntityId, "lead-1:provider-near");
   assert.equal(queryCapture.value.status, "active");
   assert.equal(queryCapture.value.portalAccessEnabled, true);
+  assert.deepEqual(queryCapture.value.whatsappLeadAlertsEnabled, { $ne: false });
   assert.equal(queryCapture.value.categorySlugs, "painting");
 
   const kmPerLatitudeDegree = 6371.0088 * Math.PI / 180;
   const exactBoundary = service.distanceKmExact(0, 0, 20 / kmPerLatitudeDegree, 0);
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
+});
+
+test("nearby lead alerts support all or selected subcategories and provider-level disable", async () => {
+  const notifications = [];
+  const queryCapture = { value: null };
+  const baseProvider = {
+    normalizedWhatsappNumber: "9876543210",
+    serviceLatitude: 19.076,
+    serviceLongitude: 72.8777,
+  };
+  const providers = [
+    {
+      ...baseProvider,
+      providerId: "provider-legacy-all",
+    },
+    {
+      ...baseProvider,
+      providerId: "provider-explicit-all",
+      whatsappLeadPreferences: [{ categorySlug: "painting", mode: "all", serviceTypeIds: [] }],
+    },
+    {
+      ...baseProvider,
+      providerId: "provider-selected-match",
+      whatsappLeadPreferences: [{
+        categorySlug: "painting",
+        mode: "selected",
+        serviceTypeIds: ["service-wall-painting", "service-interior-painting"],
+      }],
+    },
+    {
+      ...baseProvider,
+      providerId: "provider-selected-miss",
+      whatsappLeadPreferences: [{
+        categorySlug: "painting",
+        mode: "selected",
+        serviceTypeIds: ["service-exterior-painting"],
+      }],
+    },
+    {
+      ...baseProvider,
+      providerId: "provider-disabled",
+      whatsappLeadAlertsEnabled: false,
+      whatsappLeadPreferences: [{ categorySlug: "painting", mode: "all", serviceTypeIds: [] }],
+    },
+  ];
+  const service = loadNearbyService(providers, notifications, queryCapture);
+  const lead = {
+    enquiryId: "lead-preference-1",
+    categorySlug: "painting",
+    category: "Painting",
+    serviceTypes: [{ serviceTypeId: "service-wall-painting", name: "Wall Painting", slug: "wall-painting" }],
+    remainingUnlocks: 5,
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+    marketplacePublishedAt: new Date("2026-08-20T00:00:00.000Z"),
+  };
+
+  const result = await service.dispatchNearbyLeadAlerts(lead, "qa");
+  const alertedProviderIds = notifications.map((item) => item.context.provider.providerId).sort();
+
+  assert.deepEqual(alertedProviderIds, [
+    "provider-explicit-all",
+    "provider-legacy-all",
+    "provider-selected-match",
+  ]);
+  assert.equal(result.eligible, 3);
+  assert.equal(result.alertsDisabled, 1);
+  assert.equal(result.subcategoryMismatch, 1);
+  assert.equal(service.providerMatchesLeadPreference(providers[0], lead), true);
+  assert.equal(service.providerMatchesLeadPreference(providers[2], lead), true);
+  assert.equal(service.providerMatchesLeadPreference(providers[3], lead), false);
+  assert.equal(service.providerMatchesLeadPreference(providers[4], lead), false);
+  assert.deepEqual(service.leadServiceTypeIds({
+    categorySlug: "painting",
+    additionalDetails: { resolvedServiceTypeId: "service-fallback" },
+  }), ["service-fallback"]);
+});
+
+test("CRM provider form and model expose WhatsApp lead alert controls without changing portal access", () => {
+  const model = source("models/Provider.js");
+  const providerService = source("services/provider/provider-service.js");
+  const form = source("views/provider/form.ejs");
+  const nearbyAlerts = source("services/communication/nearby-lead-alert-service.js");
+
+  assert.match(model, /whatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: true/);
+  assert.match(model, /whatsappLeadPreferences/);
+  assert.match(providerService, /WHATSAPP_LEAD_PREFERENCE_MODES = Object\.freeze\(\["all", "selected"\]\)/);
+  assert.match(providerService, /assertAvailableWhatsappLeadPreferences/);
+  assert.match(form, /Enable WhatsApp lead alerts/);
+  assert.match(form, /All subcategories/);
+  assert.match(form, /Select specific subcategories/);
+  assert.match(form, /whatsappLeadPreferences/);
+  assert.match(form, /Provider Portal access and lead visibility remain unchanged/);
+  assert.match(nearbyAlerts, /portalAccessEnabled: true/);
+  assert.match(nearbyAlerts, /whatsappLeadAlertsEnabled: \{ \$ne: false \}/);
+  assert.match(nearbyAlerts, /provider_subcategory_mismatch/);
 });
 
 test("nearby lead template contains only safe marketplace details", () => {

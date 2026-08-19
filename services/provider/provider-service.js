@@ -46,6 +46,7 @@ const OUTCOME_VERIFICATION_STATUSES = Object.freeze([
   "under_review",
 ]);
 const PROVIDER_REVIEW_ACTIONS = Object.freeze(["none", "warning", "suspend", "ban"]);
+const WHATSAPP_LEAD_PREFERENCE_MODES = Object.freeze(["all", "selected"]);
 
 function categoryToken(value) {
   return tokenValue(value, {
@@ -53,6 +54,61 @@ function categoryToken(value) {
     required: true,
     maxLength: 80,
   });
+}
+
+function serviceTypeIdValue(value) {
+  return identifierValue(value, { label: "Service Type ID" });
+}
+
+function normalizeWhatsappLeadPreferences(input = {}, current = {}, categorySlugs = []) {
+  const supplied = Object.prototype.hasOwnProperty.call(input, "whatsappLeadPreferences");
+  const raw = supplied
+    ? input.whatsappLeadPreferences
+    : current.whatsappLeadPreferences || [];
+  if (!Array.isArray(raw)) {
+    throw validationError("WhatsApp lead alert preferences must be a list");
+  }
+  if (raw.length > 50) {
+    throw validationError("WhatsApp lead alert preferences cannot contain more than 50 categories");
+  }
+
+  const assigned = new Set(categorySlugs);
+  const seen = new Set();
+  const preferences = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw validationError("Each WhatsApp lead alert preference must be an object");
+    }
+    const categorySlug = categoryToken(item.categorySlug);
+    if (!assigned.has(categorySlug)) {
+      if (!supplied) continue;
+      throw validationError(`WhatsApp lead alert preference ${categorySlug} must be an assigned provider category`);
+    }
+    if (seen.has(categorySlug)) {
+      throw validationError(`WhatsApp lead alert preference ${categorySlug} is duplicated`);
+    }
+    seen.add(categorySlug);
+
+    const mode = enumValue(item.mode, WHATSAPP_LEAD_PREFERENCE_MODES, {
+      label: `WhatsApp lead alert mode for ${categorySlug}`,
+      fallback: "all",
+    });
+    const serviceTypeIds = stringArrayValue(item.serviceTypeIds, {
+      label: `WhatsApp lead alert subcategories for ${categorySlug}`,
+      maxItems: 100,
+      itemMaxLength: 128,
+      itemValidator: serviceTypeIdValue,
+    });
+    if (mode === "selected" && !serviceTypeIds.length) {
+      throw validationError(`Select at least one subcategory for ${categorySlug} or choose All subcategories`);
+    }
+    preferences.push({
+      categorySlug,
+      mode,
+      serviceTypeIds: mode === "selected" ? serviceTypeIds : [],
+    });
+  }
+  return preferences;
 }
 
 function normalizeProviderInput(input = {}, current = {}) {
@@ -66,6 +122,17 @@ function normalizeProviderInput(input = {}, current = {}) {
     label: "Provider email",
     required: false,
   });
+  const categorySlugs = stringArrayValue(
+    input.categorySlugs ?? current.categorySlugs,
+    {
+      label: "Provider categories",
+      required: true,
+      maxItems: 50,
+      itemMaxLength: 80,
+      itemValidator: categoryToken,
+    },
+  );
+  const whatsappLeadPreferences = normalizeWhatsappLeadPreferences(input, current, categorySlugs);
   return {
     name: textValue(input.name ?? current.name, {
       label: "Provider name",
@@ -94,16 +161,12 @@ function normalizeProviderInput(input = {}, current = {}) {
       label: "Onboarding stage",
       fallback: current.onboardingStage || "new",
     }),
-    categorySlugs: stringArrayValue(
-      input.categorySlugs ?? current.categorySlugs,
-      {
-        label: "Provider categories",
-        required: true,
-        maxItems: 50,
-        itemMaxLength: 80,
-        itemValidator: categoryToken,
-      },
-    ),
+    categorySlugs,
+    whatsappLeadAlertsEnabled: booleanValue(input.whatsappLeadAlertsEnabled, {
+      label: "WhatsApp lead alerts",
+      fallback: current.whatsappLeadAlertsEnabled !== false,
+    }),
+    whatsappLeadPreferences,
     skills: stringArrayValue(input.skills ?? current.skills, {
       label: "Provider skills",
       maxItems: 100,
@@ -423,9 +486,44 @@ async function assertAvailableProviderCategories(categorySlugs = []) {
   }
 }
 
+function currentSelectedServiceTypeIds(current = {}, categorySlug = "") {
+  const preference = (Array.isArray(current.whatsappLeadPreferences)
+    ? current.whatsappLeadPreferences
+    : []).find((item) => String(item?.categorySlug || "") === String(categorySlug || ""));
+  if (!preference || preference.mode !== "selected") return new Set();
+  return new Set(
+    (Array.isArray(preference.serviceTypeIds) ? preference.serviceTypeIds : [])
+      .map((value) => String(value || ""))
+      .filter(Boolean),
+  );
+}
+
+async function assertAvailableWhatsappLeadPreferences(preferences = [], current = {}) {
+  for (const preference of preferences) {
+    if (preference.mode !== "selected") continue;
+    const rows = await catalogService.listServiceTypes({
+      categorySlug: preference.categorySlug,
+      includeInactive: true,
+    });
+    const byId = new Map(rows.map((row) => [String(row.serviceTypeId || row.id || ""), row]));
+    const existingIds = currentSelectedServiceTypeIds(current, preference.categorySlug);
+    for (const serviceTypeId of preference.serviceTypeIds) {
+      const row = byId.get(String(serviceTypeId));
+      if (!row) {
+        if (existingIds.has(String(serviceTypeId))) continue;
+        throw validationError(`Selected subcategory ${serviceTypeId} does not belong to ${preference.categorySlug}`);
+      }
+      if (row.active === false && !existingIds.has(String(serviceTypeId))) {
+        throw validationError(`${row.name || "Selected subcategory"} is inactive and cannot be selected for WhatsApp alerts`);
+      }
+    }
+  }
+}
+
 async function create(input, actor = "crm-admin", options = {}) {
   const normalized = normalizeProviderInput(input);
   await assertAvailableProviderCategories(normalized.categorySlugs);
+  await assertAvailableWhatsappLeadPreferences(normalized.whatsappLeadPreferences);
   const data = await applyProviderLocation(normalized);
   const providerId = uuid();
   try {
@@ -473,6 +571,7 @@ async function update(providerId, input = {}, actor = "crm-admin") {
 
   const normalized = normalizeProviderInput(input, current);
   await assertAvailableProviderCategories(normalized.categorySlugs);
+  await assertAvailableWhatsappLeadPreferences(normalized.whatsappLeadPreferences, current);
   const data = await applyProviderLocation(normalized, current);
   try {
     await withTransaction(async (session) => {
@@ -584,12 +683,15 @@ module.exports = {
   update,
   presentProvider,
   normalizeProviderInput,
+  normalizeWhatsappLeadPreferences,
   assertProviderIdUnchanged,
   PROVIDER_STATUSES,
   ONBOARDING_STAGES,
   OUTCOME_VERIFICATION_STATUSES,
   PROVIDER_REVIEW_ACTIONS,
+  WHATSAPP_LEAD_PREFERENCE_MODES,
   reviewProviderOutcome,
   assertAvailableProviderCategories,
+  assertAvailableWhatsappLeadPreferences,
   assertUniqueProviderContacts,
 };

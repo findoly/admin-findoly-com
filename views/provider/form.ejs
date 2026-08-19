@@ -95,6 +95,7 @@
                       <select
                         class="form-select crm-multi-select"
                         x-model="form.categorySlugs"
+                        @change="syncWhatsappLeadPreferences()"
                         multiple
                         size="6"
                         required
@@ -108,6 +109,71 @@
                     <div class="col-md-6">
                       <label class="form-label">Service areas (comma separated)</label>
                       <input class="form-control" x-model="areaText" maxlength="5000" />
+                    </div>
+                    <div class="col-12">
+                      <div class="border rounded p-3">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" x-model="form.whatsappLeadAlertsEnabled" id="whatsappLeadAlertsEnabled" />
+                          <label class="form-check-label fw-semibold" for="whatsappLeadAlertsEnabled">Enable WhatsApp lead alerts</label>
+                        </div>
+                        <div class="form-text">Controls nearby lead WhatsApp alerts only. Provider Portal access and lead visibility remain unchanged.</div>
+
+                        <div class="mt-3" x-show="form.whatsappLeadAlertsEnabled" x-cloak>
+                          <div class="fw-semibold mb-2">WhatsApp lead alert services</div>
+                          <div class="text-muted small" x-show="!form.categorySlugs.length">Select at least one category to configure WhatsApp alert subcategories.</div>
+                          <template x-for="category in selectedCategories()" :key="category.slug">
+                            <div class="border rounded p-3 mb-2">
+                              <div class="fw-semibold" x-text="category.name"></div>
+                              <div class="d-flex flex-wrap gap-3 mt-2">
+                                <div class="form-check">
+                                  <input
+                                    class="form-check-input"
+                                    type="radio"
+                                    :id="'whatsapp-all-' + category.slug"
+                                    :name="'whatsapp-mode-' + category.slug"
+                                    value="all"
+                                    x-model="preferenceFor(category.slug).mode"
+                                    @change="preferenceFor(category.slug).serviceTypeIds = []"
+                                  />
+                                  <label class="form-check-label" :for="'whatsapp-all-' + category.slug">All subcategories</label>
+                                </div>
+                                <div class="form-check">
+                                  <input
+                                    class="form-check-input"
+                                    type="radio"
+                                    :id="'whatsapp-selected-' + category.slug"
+                                    :name="'whatsapp-mode-' + category.slug"
+                                    value="selected"
+                                    x-model="preferenceFor(category.slug).mode"
+                                  />
+                                  <label class="form-check-label" :for="'whatsapp-selected-' + category.slug">Select specific subcategories</label>
+                                </div>
+                              </div>
+
+                              <div class="mt-2" x-show="preferenceFor(category.slug).mode === 'selected'" x-cloak>
+                                <div class="text-muted small" x-show="serviceTypeLoading[category.slug]">Loading subcategories…</div>
+                                <div class="text-muted small" x-show="!serviceTypeLoading[category.slug] && !(serviceTypesByCategory[category.slug] || []).length">No active subcategories are configured for this category.</div>
+                                <div class="row g-2" x-show="!serviceTypeLoading[category.slug] && (serviceTypesByCategory[category.slug] || []).length">
+                                  <template x-for="serviceType in (serviceTypesByCategory[category.slug] || [])" :key="serviceType.serviceTypeId">
+                                    <div class="col-md-4 col-sm-6">
+                                      <div class="form-check">
+                                        <input
+                                          class="form-check-input"
+                                          type="checkbox"
+                                          :id="'whatsapp-service-' + serviceType.serviceTypeId"
+                                          :value="serviceType.serviceTypeId"
+                                          x-model="preferenceFor(category.slug).serviceTypeIds"
+                                        />
+                                        <label class="form-check-label" :for="'whatsapp-service-' + serviceType.serviceTypeId" x-text="serviceType.name"></label>
+                                      </div>
+                                    </div>
+                                  </template>
+                                </div>
+                              </div>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Status</label>
@@ -170,6 +236,8 @@
                   requestReopenNote: "",
                   prefillWarning: "",
                   categories: [],
+                  serviceTypesByCategory: {},
+                  serviceTypeLoading: {},
                   form: {
                     name: "",
                     businessName: "",
@@ -183,6 +251,8 @@
                     status: "active",
                     onboardingStage: "new",
                     categorySlugs: [],
+                    whatsappLeadAlertsEnabled: true,
+                    whatsappLeadPreferences: [],
                     availability: "available_today",
                     rating: 0,
                     portalAccessEnabled: true,
@@ -201,6 +271,47 @@
                     if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
                     return digits.slice(0, 10);
                   },
+                  categoryLabel(categorySlug) {
+                    return this.categories.find((category) => category.slug === categorySlug)?.name || categorySlug;
+                  },
+                  selectedCategories() {
+                    const selected = new Set(Array.isArray(this.form.categorySlugs) ? this.form.categorySlugs : []);
+                    return this.categories.filter((category) => selected.has(category.slug));
+                  },
+                  preferenceFor(categorySlug) {
+                    let preference = this.form.whatsappLeadPreferences.find((item) => item.categorySlug === categorySlug);
+                    if (!preference) {
+                      preference = { categorySlug, mode: "all", serviceTypeIds: [] };
+                      this.form.whatsappLeadPreferences.push(preference);
+                    }
+                    if (preference.mode !== "selected") preference.mode = "all";
+                    if (!Array.isArray(preference.serviceTypeIds)) preference.serviceTypeIds = [];
+                    return preference;
+                  },
+                  async loadServiceTypes(categorySlug) {
+                    if (Array.isArray(this.serviceTypesByCategory[categorySlug])) return;
+                    this.serviceTypeLoading[categorySlug] = true;
+                    try {
+                      const response = await apiFetch('/api/catalog/service-types?categorySlug=' + encodeURIComponent(categorySlug));
+                      this.serviceTypesByCategory[categorySlug] = response.data || [];
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.serviceTypeLoading[categorySlug] = false;
+                    }
+                  },
+                  async syncWhatsappLeadPreferences() {
+                    const selected = new Set(Array.isArray(this.form.categorySlugs) ? this.form.categorySlugs : []);
+                    this.form.whatsappLeadPreferences = (Array.isArray(this.form.whatsappLeadPreferences) ? this.form.whatsappLeadPreferences : [])
+                      .filter((preference) => selected.has(preference.categorySlug))
+                      .map((preference) => ({
+                        categorySlug: preference.categorySlug,
+                        mode: preference.mode === "selected" ? "selected" : "all",
+                        serviceTypeIds: Array.isArray(preference.serviceTypeIds) ? preference.serviceTypeIds : [],
+                      }));
+                    for (const categorySlug of selected) this.preferenceFor(categorySlug);
+                    await Promise.all([...selected].map((categorySlug) => this.loadServiceTypes(categorySlug)));
+                  },
                   async init() {
                     try {
                       this.categories = (await apiFetch("/api/catalog/categories")).data || [];
@@ -212,6 +323,14 @@
                           mobile: this.digitsOnly(d.mobile),
                           whatsappNumber: this.digitsOnly(d.whatsappNumber || d.mobile),
                           categorySlugs: Array.isArray(d.categorySlugs) ? d.categorySlugs : [],
+                          whatsappLeadAlertsEnabled: d.whatsappLeadAlertsEnabled !== false,
+                          whatsappLeadPreferences: Array.isArray(d.whatsappLeadPreferences)
+                            ? d.whatsappLeadPreferences.map((preference) => ({
+                                categorySlug: preference.categorySlug,
+                                mode: preference.mode === 'selected' ? 'selected' : 'all',
+                                serviceTypeIds: Array.isArray(preference.serviceTypeIds) ? preference.serviceTypeIds : [],
+                              }))
+                            : [],
                         };
                         this.areaText = (d.serviceAreas || []).join(", ");
                       } else if (this.requestId) {
@@ -235,6 +354,7 @@
                         }
                         this.areaText = [request.city, request.servicePincode].filter(Boolean).join(', ');
                       }
+                      await this.syncWhatsappLeadPreferences();
                     } catch (e) {
                       this.error = e.message;
                     } finally {
@@ -271,6 +391,21 @@
                       if (!this.form.categorySlugs.length) {
                         throw new Error("Select at least one category");
                       }
+                      await this.syncWhatsappLeadPreferences();
+                      const whatsappLeadPreferences = this.form.categorySlugs.map((categorySlug) => {
+                        const preference = this.preferenceFor(categorySlug);
+                        const serviceTypeIds = [...new Set((preference.serviceTypeIds || [])
+                          .map((value) => String(value || '').trim())
+                          .filter(Boolean))];
+                        if (preference.mode === 'selected' && !serviceTypeIds.length) {
+                          throw new Error(`Select at least one subcategory for ${this.categoryLabel(categorySlug)} or choose All subcategories`);
+                        }
+                        return {
+                          categorySlug,
+                          mode: preference.mode === 'selected' ? 'selected' : 'all',
+                          serviceTypeIds: preference.mode === 'selected' ? serviceTypeIds : [],
+                        };
+                      });
                       if (!/^[1-9]\d{5}$/.test(String(this.form.servicePincode || ''))) {
                         throw new Error("Provider service PIN code must contain exactly 6 digits");
                       }
@@ -298,6 +433,7 @@
                       }
                       const payload = {
                         ...this.form,
+                        whatsappLeadPreferences,
                         skills: [...this.form.categorySlugs],
                         serviceAreas,
                         reopenNote: this.requestReopenNote,
