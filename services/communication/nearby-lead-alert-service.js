@@ -22,6 +22,13 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
   return [record[latitudeField], record[longitudeField]].every((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
 }
 
+function alertDistanceKmForLead(lead = {}) {
+  const value = Number(lead.alertDistanceKm);
+  return Number.isInteger(value) && value >= 1 && value <= 100
+    ? value
+    : MAX_ALERT_DISTANCE_KM;
+}
+
 function leadServiceTypeIds(lead = {}) {
   const values = [];
   for (const item of Array.isArray(lead.serviceTypes) ? lead.serviceTypes : []) {
@@ -90,13 +97,14 @@ function whatsappContact(provider = {}) {
 async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   const startedAt = process.hrtime.bigint();
   const leadId = String(lead?.enquiryId || "");
+  const radiusKm = alertDistanceKmForLead(lead);
   console.info({
     event: "nearby_alert_dispatch_started",
     enquiryId: leadId,
     categorySlug: String(lead?.categorySlug || ""),
     serviceTypeIds: leadServiceTypeIds(lead || {}),
     remainingUnlocks: Number(lead?.remainingUnlocks || 0),
-    radiusKm: MAX_ALERT_DISTANCE_KM,
+    radiusKm,
     coordinatesAvailable: hasCoordinates(lead || {}, "locationLatitude", "locationLongitude"),
   });
   if (!lead || !lead.enquiryId || !lead.categorySlug || Number(lead.remainingUnlocks || 0) <= 0) {
@@ -203,7 +211,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       invalidDistance += 1;
       continue;
     }
-    if (distanceKm > MAX_ALERT_DISTANCE_KM) {
+    if (distanceKm > radiusKm) {
       outsideRadius += 1;
       continue;
     }
@@ -226,7 +234,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   console.info({
     event: "nearby_alert_provider_scan_completed",
     enquiryId: lead.enquiryId,
-    radiusKm: MAX_ALERT_DISTANCE_KM,
+    radiusKm,
     ...result,
   });
   console.info({
@@ -241,6 +249,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 module.exports = {
   MAX_ALERT_DISTANCE_KM,
   distanceKmExact,
+  alertDistanceKmForLead,
   leadServiceTypeIds,
   providerMatchesLeadPreference,
   providerLeadUrl,

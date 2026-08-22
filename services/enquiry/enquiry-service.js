@@ -131,6 +131,12 @@ async function normalizeInput(input = {}, current = {}) {
     requestedServiceTypes,
     { allowInactiveCurrent: current.serviceTypes || [] },
   );
+  const currentAlertDistanceKm = Number(current.alertDistanceKm);
+  const alertDistanceFallback = Number.isInteger(currentAlertDistanceKm)
+    && currentAlertDistanceKm >= 1
+    && currentAlertDistanceKm <= 100
+    ? currentAlertDistanceKm
+    : await catalogService.getCategoryAlertDistanceKm(categorySlug);
 
   const name = humanTextValue(input.name ?? current.name, {
     label: "Customer name",
@@ -181,6 +187,13 @@ async function normalizeInput(input = {}, current = {}) {
       maxLength: 120,
     }),
     categorySlug,
+    alertDistanceKm: numberValue(input.alertDistanceKm, {
+      label: "Provider alert distance",
+      fallback: alertDistanceFallback,
+      min: 1,
+      max: 100,
+      integer: true,
+    }),
     serviceTypes,
     serviceType: serviceTypes[0]?.name || "",
     requirementTitle,
@@ -269,6 +282,7 @@ function presentEnquiry(row = {}) {
     && Number(row.maxProviderUnlocks) > 0
     ? Number(row.maxProviderUnlocks)
     : 5;
+  const alertDistanceKm = Number(row.alertDistanceKm);
   const unlockedCount = Math.max(0, Number(row.unlockedCount || 0));
   const reservedUnlockCount = Math.max(0, Number(row.reservedUnlockCount || 0));
   const remainingUnlocks = Number.isFinite(Number(row.remainingUnlocks))
@@ -300,6 +314,9 @@ function presentEnquiry(row = {}) {
     marketplaceExpiresAt: row.marketplaceExpiresAt || null,
     category: typeof row.category === "string" ? row.category : categoryObject.name || "",
     categorySlug: row.categorySlug || categoryObject.slug || "",
+    alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
+      ? alertDistanceKm
+      : 20,
     serviceTypes: Array.isArray(row.serviceTypes)
       ? row.serviceTypes.map((item) => ({
           serviceTypeId: item.serviceTypeId || item.id || "",

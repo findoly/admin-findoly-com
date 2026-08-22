@@ -67,7 +67,7 @@ test("CRM WhatsApp delivery uses Gupshup templates and has no Meta Cloud API pat
   assert.doesNotMatch(`${whatsapp}\n${webhook}\n${config}`, /graph\.facebook|META_WHATSAPP|x-hub-signature/i);
 });
 
-test("nearby lead alerts are WhatsApp-only and dispatched only at 20 km or less", async () => {
+test("nearby lead alerts use the requirement radius with a 20 km legacy fallback", async () => {
   const notifications = [];
   const queryCapture = { value: null };
   const providers = [
@@ -101,10 +101,11 @@ test("nearby lead alerts are WhatsApp-only and dispatched only at 20 km or less"
     marketplacePublishedAt: new Date("2026-08-02T10:00:00.000Z"),
   };
 
-  const result = await service.dispatchNearbyLeadAlerts(lead, "qa");
+  const legacyResult = await service.dispatchNearbyLeadAlerts(lead, "qa");
 
   assert.equal(service.MAX_ALERT_DISTANCE_KM, 20);
-  assert.equal(result.eligible, 1);
+  assert.equal(service.alertDistanceKmForLead(lead), 20);
+  assert.equal(legacyResult.eligible, 1);
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].event, "nearby_lead_available");
   assert.equal(notifications[0].context.provider.providerId, "provider-near");
@@ -115,9 +116,39 @@ test("nearby lead alerts are WhatsApp-only and dispatched only at 20 km or less"
   assert.deepEqual(queryCapture.value.whatsappLeadAlertsEnabled, { $ne: false });
   assert.equal(queryCapture.value.categorySlugs, "painting");
 
+  notifications.length = 0;
+  const expandedLead = { ...lead, enquiryId: "lead-2", alertDistanceKm: 40 };
+  const expandedResult = await service.dispatchNearbyLeadAlerts(expandedLead, "qa");
+  assert.equal(service.alertDistanceKmForLead(expandedLead), 40);
+  assert.equal(service.alertDistanceKmForLead({ alertDistanceKm: 101 }), 20);
+  assert.equal(expandedResult.eligible, 2);
+  assert.deepEqual(
+    notifications.map((item) => item.context.provider.providerId).sort(),
+    ["provider-far", "provider-near"],
+  );
+
   const kmPerLatitudeDegree = 6371.0088 * Math.PI / 180;
   const exactBoundary = service.distanceKmExact(0, 0, 20 / kmPerLatitudeDegree, 0);
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
+});
+
+test("category defaults and requirement overrides expose validated alert distances", () => {
+  const categoryModel = source("models/Category.js");
+  const enquiryModel = source("models/Enquiry.js");
+  const catalogService = source("services/catalog/catalog-service.js");
+  const enquiryService = source("services/enquiry/enquiry-service.js");
+  const categoryView = source("views/category/index.ejs");
+  const enquiryForm = source("views/enquiry/form.ejs");
+
+  assert.match(categoryModel, /alertDistanceKm:\s*\{ type: Number, default: 20, min: 1, max: 100 \}/);
+  assert.match(enquiryModel, /alertDistanceKm:\s*\{ type: Number, default: 20, min: 1, max: 100 \}/);
+  assert.match(catalogService, /label:\s*"Provider alert distance"[\s\S]*?max:\s*100/);
+  assert.match(catalogService, /getCategoryAlertDistanceKm/);
+  assert.match(enquiryService, /getCategoryAlertDistanceKm\(categorySlug\)/);
+  assert.match(enquiryService, /alertDistanceKm:\s*numberValue\(input\.alertDistanceKm/);
+  assert.match(categoryView, /Provider alert distance \(km\)/);
+  assert.match(enquiryForm, /Provider alert distance \(km\)/);
+  assert.match(enquiryForm, /this\.form\.alertDistanceKm = Number\(category\?\.alertDistanceKm \|\| 20\)/);
 });
 
 test("nearby lead alerts support all or selected subcategories and provider-level disable", async () => {

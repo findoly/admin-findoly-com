@@ -49,7 +49,7 @@ function normalizeInput(input = {}) {
   const amountCredits = numberValue(input.amountCredits, {
     label: "Credit amount",
     min: 0.01,
-    max: 100000,
+    max: 1000,
   });
 
   return {
