@@ -1,0 +1,169 @@
+/* Mobile-first enhancement for existing CRM filter bars.
+   Desktop keeps the current layout; phone/tablet users get a compact Search + Filters flow. */
+
+.crm-mobile-search-submit,
+.crm-mobile-filter-toggle {
+  display: none;
+}
+
+.crm-mobile-filter-count {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: .25rem;
+  padding: 0 .3rem;
+  border-radius: 999px;
+  background: var(--crm-user-accent, #2563eb);
+  color: #fff;
+  font-size: .64rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.crm-mobile-filter-count[hidden] {
+  display: none !important;
+}
+
+.crm-mobile-filter-panel {
+  display: contents;
+}
+
+@media (max-width: 991.98px) {
+  [data-crm-mobile-filter-bar="1"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: stretch !important;
+    gap: .5rem !important;
+    min-width: 0;
+  }
+
+  [data-crm-mobile-filter-bar="1"] > .crm-search-control,
+  [data-crm-mobile-filter-bar="1"] > .crm-filter-search {
+    flex: 1 0 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    order: 1;
+  }
+
+  .crm-mobile-search-submit,
+  .crm-mobile-filter-toggle {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 calc(50% - .25rem);
+    gap: .4rem;
+    order: 2;
+    white-space: nowrap;
+  }
+
+  .crm-mobile-filter-toggle {
+    order: 3;
+  }
+
+  .crm-mobile-filter-toggle svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .crm-mobile-filter-panel {
+    display: none;
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+    order: 4;
+    padding-top: .15rem;
+  }
+
+  [data-crm-mobile-filter-bar="1"].crm-mobile-filters-open > .crm-mobile-filter-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: .65rem;
+  }
+
+  .crm-mobile-filter-panel > *,
+  .crm-mobile-filter-panel > label,
+  .crm-mobile-filter-panel > .form-control,
+  .crm-mobile-filter-panel > .form-select {
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .crm-mobile-filter-panel label,
+  .crm-mobile-filter-panel .crm-filter-field,
+  .crm-mobile-filter-panel .crm-inline-select,
+  .crm-mobile-filter-panel .crm-compact-select {
+    width: 100% !important;
+  }
+
+  .crm-mobile-filter-panel input,
+  .crm-mobile-filter-panel select,
+  .crm-mobile-filter-panel .form-control,
+  .crm-mobile-filter-panel .form-select {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 42px;
+  }
+
+  .crm-mobile-filter-panel .crm-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+  }
+
+  .crm-mobile-filter-panel .crm-filter-actions .btn {
+    flex: 1 1 8rem;
+    min-height: 42px;
+  }
+
+  .crm-mobile-filter-panel .crm-page-size,
+  .crm-mobile-filter-panel .crm-filter-page-size {
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: flex-start !important;
+  }
+
+  .crm-mobile-filter-panel .crm-page-size select,
+  .crm-mobile-filter-panel .crm-filter-page-size select {
+    width: 5rem !important;
+  }
+
+  /* Existing drawer-based filters (Requirements and similar) keep their markup,
+     but use the same touch-friendly dimensions. */
+  .crm-filter-drawer select,
+  .crm-filter-drawer input,
+  .crm-filter-drawer .btn,
+  .crm-filter-advanced select,
+  .crm-filter-advanced input,
+  .crm-filter-advanced .btn {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  [data-crm-mobile-filter-bar="1"].crm-mobile-filters-open > .crm-mobile-filter-panel,
+  .crm-filter-drawer,
+  .crm-filter-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .crm-mobile-filter-panel .crm-filter-actions .btn,
+  .crm-mobile-filter-panel > .btn,
+  .crm-mobile-filter-panel > a.btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .crm-mobile-search-submit,
+  .crm-mobile-filter-toggle {
+    min-height: 44px;
+  }
+}
