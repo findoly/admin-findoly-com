@@ -14,7 +14,7 @@
     "migrate:agent-payouts": "node scripts/run-with-runtime.js scripts/migrate-agent-payouts.js",
     "migrate:marketplace-location": "node scripts/run-with-runtime.js scripts/backfill-marketplace-locations.js",
     "qa:static": "node scripts/qa-static.js",
-    "qa:critical": "node --test test/validation-utilities-expanded.test.js test/customer-portal-integration.test.js test/marketplace-publication-static.test.js test/provider-manual-credit-static.test.js test/registration-storage-static.test.js test/otp-proxy-routing.test.js test/production-readiness.test.js test/service-type-subscription-validation.test.js test/ui-responsive-static.test.js test/otp-fail-closed.test.js test/linked-outbox-contract.test.js test/empty-db-linked-contract.test.js",
+    "qa:critical": "node --test test/validation-utilities-expanded.test.js test/customer-portal-integration.test.js test/marketplace-publication-static.test.js test/provider-manual-credit-static.test.js test/registration-storage-static.test.js test/otp-proxy-routing.test.js test/production-readiness.test.js test/service-type-subscription-validation.test.js test/ui-responsive-static.test.js test/mobile-filter-lifecycle.test.js test/otp-fail-closed.test.js test/linked-outbox-contract.test.js test/empty-db-linked-contract.test.js",
     "qa:production": "npm run qa:static && npm run qa:critical && npm run qa:hardening",
     "ensure:indexes": "node scripts/run-with-runtime.js scripts/ensure-indexes.js",
     "cleanup:marketplace-leads": "node scripts/run-with-runtime.js scripts/expire-marketplace-leads.js",
