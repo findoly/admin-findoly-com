@@ -67,6 +67,11 @@
                           <textarea id="category-description" class="form-control" rows="4" x-model="form.description" maxlength="2000" placeholder="Describe the services grouped under this Category"></textarea>
                         </div>
                         <div class="mb-3">
+                          <label class="form-label" for="category-alert-distance">Provider alert distance (km)</label>
+                          <input id="category-alert-distance" type="number" class="form-control" min="1" max="100" step="1" x-model.number="form.alertDistanceKm" required>
+                          <div class="form-text">Default nearby WhatsApp alert radius copied to new requirements. It can be overridden per requirement.</div>
+                        </div>
+                        <div class="mb-3">
                           <label class="form-label" for="category-order">Website display order</label>
                           <input id="category-order" type="number" class="form-control" min="0" max="100000" step="1" x-model.number="form.displayOrder">
                         </div>
@@ -117,14 +122,15 @@
 
                     <div class="table-responsive">
                       <table class="table crm-table mb-0">
-                        <thead><tr><th>Category</th><th>Slug</th><th>Subcategories</th><th>Status</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
+                        <thead><tr><th>Category</th><th>Slug</th><th>Subcategories</th><th>Alert radius</th><th>Status</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
                         <tbody>
-                          <template x-if="loading"><tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="category in categories" :key="category.categoryId || category.slug">
                             <tr>
                               <td><div class="fw-semibold" x-text="category.name"></div><small class="text-muted" x-text="category.description || 'No description added'"></small></td>
                               <td><code x-text="category.slug"></code></td>
                               <td><a class="btn btn-light btn-sm" :href="subcategoriesUrl(category)"><span x-text="category.serviceTypeCount || 0"></span> managed</a></td>
+                              <td><span x-text="Number(category.alertDistanceKm || 20) + ' km'"></span></td>
                               <td><span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span></td>
                               <td x-text="formatDate(category.updatedAt || category.createdAt)"></td>
                               <td class="text-end crm-table-actions">
@@ -133,7 +139,7 @@
                               </td>
                             </tr>
                           </template>
-                          <tr x-show="!categories.length && !loading"><td colspan="6" class="text-center py-5"><strong>No Categories found</strong><div class="text-muted mt-1" x-text="q || status ? 'Clear the filters and try again.' : 'Create your first Category to start adding Subcategories.'"></div></td></tr>
+                          <tr x-show="!categories.length && !loading"><td colspan="7" class="text-center py-5"><strong>No Categories found</strong><div class="text-muted mt-1" x-text="q || status ? 'Clear the filters and try again.' : 'Create your first Category to start adding Subcategories.'"></div></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -149,7 +155,7 @@
                   categories: [], mediaItems: [], editingId: '', loading: true, saving: false,
                   error: '', success: '', q: '', status: '', sort: 'newest',
                   pagination: createCursorPagination(20),
-                  form: { name: '', slug: '', description: '', displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true },
+                  form: { name: '', slug: '', description: '', alertDistanceKm: 20, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true },
                   slugTouched: false,
                   slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); },
                   syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
@@ -174,15 +180,19 @@
                   subcategoriesUrl(category) { return '/service-types?categorySlug=' + encodeURIComponent(category.slug || ''); },
                   editCategory(category) {
                     this.editingId = category.categoryId;
-                    this.form = { name: category.name || '', slug: category.slug || '', description: category.description || '', displayOrder: Number(category.displayOrder || 0), websiteVisible: category.websiteVisible !== false, imageMediaId: category.imageMediaId || '', bannerMediaId: category.bannerMediaId || '', active: category.active !== false };
+                    this.form = { name: category.name || '', slug: category.slug || '', description: category.description || '', alertDistanceKm: Number(category.alertDistanceKm || 20), displayOrder: Number(category.displayOrder || 0), websiteVisible: category.websiteVisible !== false, imageMediaId: category.imageMediaId || '', bannerMediaId: category.bannerMediaId || '', active: category.active !== false };
                     this.slugTouched = true; this.error = ''; this.success = '';
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   },
-                  resetCategoryForm() { this.editingId = ''; this.form = { name: '', slug: '', description: '', displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true }; this.slugTouched = false; },
+                  resetCategoryForm() { this.editingId = ''; this.form = { name: '', slug: '', description: '', alertDistanceKm: 20, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true }; this.slugTouched = false; },
                   async saveCategory() {
                     if (this.saving) return;
                     this.saving = true; this.error = ''; this.success = '';
                     try {
+                      const alertDistanceKm = Number(this.form.alertDistanceKm);
+                      if (!Number.isInteger(alertDistanceKm) || alertDistanceKm < 1 || alertDistanceKm > 100) {
+                        throw new Error('Provider alert distance must be a whole number between 1 and 100 km');
+                      }
                       const url = this.editingId ? '/api/catalog/categories/' + encodeURIComponent(this.editingId) : '/api/catalog/categories';
                       await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(this.form) });
                       this.success = this.editingId ? 'Category updated successfully.' : 'Category created successfully. You can now add its Subcategories.';

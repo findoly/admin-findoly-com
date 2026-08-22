@@ -137,7 +137,13 @@
                             </div>
                             <div class="mb-3">
                               <label class="form-label" for="provider-credit-amount">Credits to add</label>
-                              <input id="provider-credit-amount" class="form-control" type="number" min="0.01" max="100000" step="0.01" x-model="creditForm.amountCredits" required>
+                              <input id="provider-credit-amount" class="form-control" type="number" min="0.01" max="1000" step="0.01" x-model="creditForm.amountCredits" required>
+                              <div class="d-flex flex-wrap gap-2 mt-2" aria-label="Quick credit amounts">
+                                <button type="button" class="btn btn-light btn-sm" @click="setCreditAmount(50)">+50</button>
+                                <button type="button" class="btn btn-light btn-sm" @click="setCreditAmount(100)">+100</button>
+                                <button type="button" class="btn btn-light btn-sm" @click="setCreditAmount(500)">+500</button>
+                              </div>
+                              <div class="form-text">Maximum 1,000 credits can be added in one operation.</div>
                             </div>
                             <div class="mb-3">
                               <label class="form-label" for="provider-credit-reason">Reason</label>
@@ -242,6 +248,9 @@
                   closeCreditModal() {
                     if (!this.addingCredits) this.creditModalOpen = false;
                   },
+                  setCreditAmount(amount) {
+                    this.creditForm.amountCredits = Number(amount);
+                  },
                   creditPreviewPaise() {
                     const current = Number(this.provider.walletBalancePaise || 0);
                     const amount = Math.max(0, Number(this.creditForm.amountCredits || 0));
@@ -258,6 +267,10 @@
                     const amount = Number(this.creditForm.amountCredits || 0);
                     if (!Number.isFinite(amount) || amount <= 0) {
                       this.error = 'Enter a valid credit amount';
+                      return;
+                    }
+                    if (amount > 1000) {
+                      this.error = 'You can add a maximum of 1,000 credits at a time';
                       return;
                     }
                     if (!this.creditForm.reason) {

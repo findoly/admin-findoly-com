@@ -36,6 +36,7 @@ const enquirySchema = new mongoose.Schema(
     marketplaceExpiresAt: { type: Date, default: null, index: true },
     category: { type: String, default: "", trim: true },
     categorySlug: { type: String, required: true, trim: true, index: true, maxlength: 80, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ },
+    alertDistanceKm: { type: Number, default: 20, min: 1, max: 100 },
     serviceType: { type: String, default: "", trim: true },
     serviceTypes: {
       type: [

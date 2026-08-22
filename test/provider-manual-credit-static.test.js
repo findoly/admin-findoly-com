@@ -31,6 +31,19 @@ test("manual credits are atomic, idempotent and allocation-backed", () => {
   assert.match(allocationModel, /collection:\s*"creditallocations"/);
 });
 
+test("manual provider credits are capped at 1000 and expose fixed quick amounts", () => {
+  const service = source("services/provider/provider-credit-service.js");
+  const view = source("views/provider/show.ejs");
+
+  assert.match(service, /label:\s*"Credit amount"[\s\S]*?max:\s*1000/);
+  assert.doesNotMatch(service, /label:\s*"Credit amount"[\s\S]*?max:\s*100000/);
+  assert.match(view, /max="1000"/);
+  assert.match(view, /setCreditAmount\(50\)/);
+  assert.match(view, /setCreditAmount\(100\)/);
+  assert.match(view, /setCreditAmount\(500\)/);
+  assert.match(view, /maximum of 1,000 credits at a time/i);
+});
+
 test("provider CRM page has the add-credit form and credit-based display", () => {
   const view = source("views/provider/show.ejs");
   const list = source("views/provider/index.ejs");
