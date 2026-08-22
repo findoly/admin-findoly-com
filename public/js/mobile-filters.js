@@ -5,7 +5,7 @@
   const FILTER_BAR_SELECTOR = '.crm-filter-bar, .crm-filter-toolbar';
   const FILTER_UI_BREAKPOINT = '(max-width: 991.98px)';
   const filterForms = [];
-  const filterKeys = new Set();
+  const filterMedia = window.matchMedia(FILTER_UI_BREAKPOINT);
 
   function modelName(control) {
     return control.getAttribute('x-model') || control.getAttribute('x-model.number') || '';
@@ -14,9 +14,12 @@
   function controlKey(control) {
     const name = String(control.name || '').trim();
     if (name && !name.startsWith('_')) return name;
-    const model = modelName(control);
+
+    const model = modelName(control).trim();
     if (model.startsWith('filters.')) return model.slice('filters.'.length);
+    if (model.startsWith('filter.')) return model.slice('filter.'.length);
     if (model === 'pagination.limit') return 'limit';
+    if (/^[A-Za-z_$][\w$]*$/.test(model)) return model;
     return '';
   }
 
@@ -53,16 +56,35 @@
     }, 0);
   }
 
+  function filterBar(form) {
+    return form.matches(FILTER_BAR_SELECTOR)
+      ? form
+      : form.querySelector(':scope > .crm-filter-bar, :scope > .crm-filter-toolbar');
+  }
+
   function updateMobileToggle(form) {
-    const toggle = form.querySelector('[data-crm-mobile-filter-toggle]');
-    if (!toggle) return;
     const count = activeFilterCount(form);
-    const badge = toggle.querySelector('[data-crm-mobile-filter-count]');
-    toggle.classList.toggle('is-active', count > 0 || form.classList.contains('crm-mobile-filters-open'));
-    toggle.setAttribute('aria-expanded', form.classList.contains('crm-mobile-filters-open') ? 'true' : 'false');
-    if (badge) {
-      badge.textContent = String(count);
-      badge.hidden = count === 0;
+    const bar = filterBar(form);
+    const toggle = form.querySelector('[data-crm-mobile-filter-toggle]');
+    if (toggle) {
+      const open = Boolean(bar?.classList.contains('crm-mobile-filters-open'));
+      const badge = toggle.querySelector('[data-crm-mobile-filter-count]');
+      toggle.classList.toggle('is-active', count > 0 || open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (badge) {
+        badge.textContent = String(count);
+        badge.hidden = count === 0;
+      }
+    }
+
+    if (form.dataset.crmNativeMobileFilter === '1') {
+      const nativeToggle = form.querySelector('.crm-filter-toggle');
+      const open = form.classList.contains('crm-mobile-native-open');
+      form.classList.toggle('crm-mobile-native-has-active', count > 0);
+      if (nativeToggle) {
+        nativeToggle.dataset.crmFilterCount = String(count);
+        if (filterMedia.matches) nativeToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
     }
   }
 
@@ -76,14 +98,34 @@
     return svg;
   }
 
+  function enhanceNativeFilter(form) {
+    const panel = form.querySelector('.crm-filter-drawer, .crm-filter-advanced');
+    const toggle = form.querySelector('.crm-filter-toggle');
+    if (!panel || !toggle) return false;
+
+    form.dataset.crmMobileFilterReady = 'native';
+    form.dataset.crmNativeMobileFilter = '1';
+    if (toggle.dataset.crmNativeMobileBound !== '1') {
+      toggle.dataset.crmNativeMobileBound = '1';
+      toggle.addEventListener('click', () => {
+        if (!filterMedia.matches) return;
+        form.classList.toggle('crm-mobile-native-open');
+        updateMobileToggle(form);
+      });
+    }
+    updateMobileToggle(form);
+    return true;
+  }
+
   function enhanceMobileFilterForm(form) {
-    if (form.dataset.crmMobileFilterReady === '1') return;
-
-    let bar = form.matches(FILTER_BAR_SELECTOR) ? form : form.querySelector(':scope > .crm-filter-bar, :scope > .crm-filter-toolbar');
+    if (form.dataset.crmMobileFilterReady) return;
+    const bar = filterBar(form);
     if (!bar) return;
+    if (enhanceNativeFilter(form)) return;
 
-    // Drawer/advanced implementations already have their own collapse control.
-    if (form.querySelector('.crm-filter-drawer, .crm-filter-advanced, .crm-filter-toggle')) {
+    // A custom toggle without a known drawer is already page-owned; do not
+    // restructure it and risk changing page-specific behavior.
+    if (form.querySelector('.crm-filter-toggle')) {
       form.dataset.crmMobileFilterReady = 'native';
       return;
     }
@@ -143,8 +185,7 @@
     for (const control of controls) {
       const key = controlKey(control);
       if (!key) continue;
-      const values = controlValues(control);
-      for (const value of values) {
+      for (const value of controlValues(control)) {
         if (defaultFilterValue(key, value)) continue;
         url.searchParams.append(key, value);
       }
@@ -154,101 +195,69 @@
     window.history.replaceState(window.history.state, '', next);
   }
 
+  function alpineData(control) {
+    const root = control.closest('[x-data]');
+    if (!root || !window.Alpine || typeof window.Alpine.$data !== 'function') return null;
+    try {
+      return window.Alpine.$data(root);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function setAlpineModel(control, value) {
+    const model = modelName(control).trim();
+    if (!model || !/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(model)) return false;
+    const data = alpineData(control);
+    if (!data) return false;
+
+    const parts = model.split('.');
+    let target = data;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      target = target?.[parts[index]];
+      if (!target || typeof target !== 'object') return false;
+    }
+
+    let nextValue = value;
+    if (control.hasAttribute('x-model.number') && value !== '' && !Array.isArray(value)) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) nextValue = parsed;
+    }
+    target[parts[parts.length - 1]] = nextValue;
+    return true;
+  }
+
   function restoreControl(control, params) {
     const key = controlKey(control);
     if (!key || !params.has(key)) return false;
     const values = params.getAll(key);
     let changed = false;
+    let modelValue;
 
     if (control.type === 'checkbox' || control.type === 'radio') {
       const checked = values.includes(String(control.value || '1'));
       changed = control.checked !== checked;
       control.checked = checked;
+      modelValue = checked;
     } else if (control instanceof HTMLSelectElement && control.multiple) {
       for (const option of control.options) {
         const selected = values.includes(String(option.value));
         if (option.selected !== selected) changed = true;
         option.selected = selected;
       }
+      modelValue = values;
     } else {
       const value = values[values.length - 1] || '';
       changed = String(control.value || '') !== value;
       if (changed) control.value = value;
+      modelValue = value;
     }
 
-    if (changed) {
+    if (changed && !setAlpineModel(control, modelValue)) {
       control.dispatchEvent(new Event('input', { bubbles: true }));
       control.dispatchEvent(new Event('change', { bubbles: true }));
     }
     return changed;
-  }
-
-  function restoreFormsFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    for (const form of filterForms) {
-      for (const control of formControls(form)) restoreControl(control, params);
-      updateMobileToggle(form);
-    }
-  }
-
-  function registerFilterForm(form) {
-    if (filterForms.includes(form)) return;
-    filterForms.push(form);
-    for (const control of formControls(form)) {
-      const key = controlKey(control);
-      if (key) filterKeys.add(key);
-    }
-    enhanceMobileFilterForm(form);
-  }
-
-  function scanFilterForms() {
-    document.querySelectorAll(FILTER_FORM_SELECTOR).forEach(registerFilterForm);
-  }
-
-  function mergePageFiltersIntoApiUrl(rawUrl, options) {
-    if (typeof rawUrl !== 'string') return rawUrl;
-    const method = String(options?.method || 'GET').toUpperCase();
-    if (method !== 'GET') return rawUrl;
-
-    let target;
-    try {
-      target = new URL(rawUrl, window.location.origin);
-    } catch (_error) {
-      return rawUrl;
-    }
-    if (target.origin !== window.location.origin || !target.pathname.startsWith('/api/')) return rawUrl;
-
-    // Paginated list requests carry limit/cursor. Avoid leaking list filters into
-    // auxiliary API calls (for example category dropdown loading).
-    if (!target.searchParams.has('limit') && !target.searchParams.has('cursor')) return rawUrl;
-
-    const pageParams = new URLSearchParams(window.location.search);
-    for (const key of filterKeys) {
-      if (!pageParams.has(key)) continue;
-      target.searchParams.delete(key);
-      for (const value of pageParams.getAll(key)) target.searchParams.append(key, value);
-    }
-    target.searchParams.delete('cursor');
-
-    return target.pathname + (target.searchParams.toString() ? '?' + target.searchParams.toString() : '') + target.hash;
-  }
-
-  function wrapApiFetch() {
-    if (typeof window.apiFetch !== 'function' || window.apiFetch.__crmFilterWrapped) return;
-    const original = window.apiFetch;
-    const wrapped = function (url, options) {
-      return original(mergePageFiltersIntoApiUrl(url, options), options);
-    };
-    wrapped.__crmFilterWrapped = true;
-    window.apiFetch = wrapped;
-  }
-
-  function clearTransientShellState() {
-    document.documentElement.classList.remove('crm-mobile-drawer-open');
-    document.body.classList.remove('crm-mobile-drawer-open', 'crm-appearance-open');
-    document.querySelectorAll('.crm-sidebar-overlay').forEach((overlay) => {
-      overlay.hidden = true;
-    });
   }
 
   function hasAlpineSubmit(form) {
@@ -258,22 +267,80 @@
     });
   }
 
-  function refreshRestoredLists() {
-    for (const form of filterForms) {
-      if (!hasAlpineSubmit(form)) continue;
-      try {
-        form.requestSubmit();
-      } catch (_error) {
-        // Older WebViews may not support requestSubmit; preserving the restored
-        // Alpine state is safer than forcing navigation.
-      }
+  function requestSubmitSafely(form) {
+    if (!hasAlpineSubmit(form)) return;
+    try {
+      form.requestSubmit();
+    } catch (_error) {
+      // Older WebViews may not support requestSubmit. Keeping restored controls
+      // is safer than turning the Alpine form into a normal navigation.
     }
+  }
+
+  function refreshWhenReady(form) {
+    if (!hasAlpineSubmit(form)) return;
+    const root = form.closest('[x-data]');
+    const startedAt = Date.now();
+    const attempt = () => {
+      let data = null;
+      if (root && window.Alpine && typeof window.Alpine.$data === 'function') {
+        try { data = window.Alpine.$data(root); } catch (_error) { data = null; }
+      }
+      if (data?.loading === true && Date.now() - startedAt < 4000) {
+        window.setTimeout(attempt, 60);
+        return;
+      }
+      requestSubmitSafely(form);
+    };
+    window.setTimeout(attempt, 0);
+  }
+
+  function restoreFormsFromUrl(refreshChanged = false) {
+    const params = new URLSearchParams(window.location.search);
+    const changedForms = new Set();
+    for (const form of filterForms) {
+      for (const control of formControls(form)) {
+        if (restoreControl(control, params)) changedForms.add(form);
+      }
+      updateMobileToggle(form);
+    }
+    if (refreshChanged) changedForms.forEach(refreshWhenReady);
+    return changedForms;
+  }
+
+  function registerFilterForm(form) {
+    if (filterForms.includes(form)) return;
+    filterForms.push(form);
+    enhanceMobileFilterForm(form);
+  }
+
+  function scanFilterForms() {
+    document.querySelectorAll(FILTER_FORM_SELECTOR).forEach(registerFilterForm);
+  }
+
+  function closeMobileFilters(form) {
+    const bar = filterBar(form);
+    bar?.classList.remove('crm-mobile-filters-open');
+    form.classList.remove('crm-mobile-native-open');
+    updateMobileToggle(form);
+  }
+
+  function clearTransientShellState() {
+    try {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    } catch (_error) {
+      // KeyboardEvent is unavailable only in very old embedded browsers.
+    }
+    document.documentElement.classList.remove('crm-mobile-drawer-open');
+    document.body.classList.remove('crm-mobile-drawer-open', 'crm-appearance-open');
+    document.querySelectorAll('.crm-sidebar-overlay').forEach((overlay) => {
+      overlay.hidden = true;
+    });
   }
 
   function handlePageShow(event) {
     if (!event.persisted) return;
     clearTransientShellState();
-    restoreFormsFromUrl();
     if (!window.Alpine) {
       const key = 'crm-bfcache-reload:' + window.location.pathname + window.location.search;
       try {
@@ -287,18 +354,18 @@
         return;
       }
     }
-    window.setTimeout(refreshRestoredLists, 0);
+    restoreFormsFromUrl(false);
+    filterForms.forEach(refreshWhenReady);
     document.dispatchEvent(new CustomEvent('crm:page-restored', { detail: { persisted: true } }));
   }
 
   scanFilterForms();
-  wrapApiFetch();
 
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !filterForms.includes(form)) return;
     syncFormUrl(form);
-    updateMobileToggle(form);
+    if (filterMedia.matches) closeMobileFilters(form);
   }, true);
 
   document.addEventListener('change', (event) => {
@@ -307,7 +374,7 @@
     const form = control.closest(FILTER_FORM_SELECTOR);
     if (!form || !filterForms.includes(form)) return;
     const key = controlKey(control);
-    if (key === 'limit' || key === 'status' || key === 'dateField' || key === 'sortOrder' || control.type === 'date') {
+    if (key === 'limit' || key === 'status' || key === 'enabled' || key === 'dateField' || key === 'sortOrder' || control.type === 'date') {
       syncFormUrl(form);
     }
     updateMobileToggle(form);
@@ -329,19 +396,29 @@
     if (label === 'clear' || label === 'reset') {
       window.setTimeout(() => {
         syncFormUrl(form);
-        updateMobileToggle(form);
+        if (filterMedia.matches) closeMobileFilters(form);
+        else updateMobileToggle(form);
       }, 0);
     }
   }, true);
 
   document.addEventListener('alpine:initialized', () => {
     scanFilterForms();
-    wrapApiFetch();
-    restoreFormsFromUrl();
+    restoreFormsFromUrl(true);
+    try {
+      window.sessionStorage.removeItem('crm-bfcache-reload:' + window.location.pathname + window.location.search);
+    } catch (_error) {
+      // Storage is optional.
+    }
   }, { once: true });
 
   window.addEventListener('pageshow', handlePageShow);
-  window.matchMedia(FILTER_UI_BREAKPOINT).addEventListener?.('change', () => {
-    for (const form of filterForms) updateMobileToggle(form);
+  filterMedia.addEventListener?.('change', (event) => {
+    if (event.matches) {
+      for (const form of filterForms) {
+        if (form.dataset.crmNativeMobileFilter === '1') form.classList.remove('crm-mobile-native-open');
+        updateMobileToggle(form);
+      }
+    }
   });
 })();
