@@ -14,6 +14,8 @@ const sharedFilterViews = [
   "views/category/index.ejs",
   "views/category/service-types.ejs",
   "views/communication/logs.ejs",
+  "views/communication/otp.ejs",
+  "views/communication/rules.ejs",
   "views/communication/templates.ejs",
   "views/provider-unlock/index.ejs",
   "views/provider-request/index.ejs",
