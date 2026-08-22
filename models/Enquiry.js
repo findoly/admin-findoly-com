@@ -99,7 +99,7 @@ const enquirySchema = new mongoose.Schema(
     agentBusinessName: { type: String, default: "" },
     agentType: { type: String, default: "" },
     agentMobile: { type: String, default: "" },
-    agentCategoryId: { type: String, default: "", index: true },
+    agentCategoryId: { type: String, default: "" },
     customerMobileVerified: { type: Boolean, default: false },
     customerMobileVerifiedAt: { type: Date, default: null },
     agentReferralValidation: { type: String, enum: ["", "pending", "valid", "invalid"], default: "pending", index: true },
