@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const FILTER_FORM_SELECTOR = '.crm-filter-card form, .crm-filter-shell form';
+  const FILTER_FORM_SELECTOR = '.crm-filter-card form, .crm-filter-shell form, form.crm-filter-bar, form.crm-filter-toolbar';
   const FILTER_BAR_SELECTOR = '.crm-filter-bar, .crm-filter-toolbar';
   const FILTER_UI_BREAKPOINT = '(max-width: 991.98px)';
   const filterForms = [];
