@@ -4,8 +4,8 @@
   if (window.Alpine) return;
 
   const sources = [
-    'https://cdn.jsdelivr.net/npm/alpinejs@3.16.2/dist/cdn.min.js',
-    'https://unpkg.com/alpinejs@3.16.2/dist/cdn.min.js'
+    'https://cdn.jsdelivr.net/npm/alpinejs@3.15.12/dist/cdn.min.js',
+    'https://unpkg.com/alpinejs@3.15.12/dist/cdn.min.js'
   ];
 
   function showRuntimeError() {
