@@ -18,6 +18,8 @@ const {
   validationError,
 } = require("../../utils/validation");
 
+const DEFAULT_ALERT_DISTANCE_KM = 20;
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -48,9 +50,13 @@ async function validateWebsiteMediaIds(values = []) {
 }
 
 function presentCategory(row = {}) {
+  const alertDistanceKm = Number(row.alertDistanceKm);
   return {
     ...row,
     categoryId: row.categoryId || row.id || "",
+    alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
+      ? alertDistanceKm
+      : DEFAULT_ALERT_DISTANCE_KM,
     serviceTypeCount: Number(row.serviceTypeCount || 0),
   };
 }
@@ -88,6 +94,13 @@ function normalizeCategoryInput(input = {}, current = null) {
     description: humanTextValue(input.description ?? existing.description, {
       label: "Category description",
       maxLength: 2000,
+    }),
+    alertDistanceKm: numberValue(input.alertDistanceKm, {
+      label: "Provider alert distance",
+      fallback: existing.alertDistanceKm ?? DEFAULT_ALERT_DISTANCE_KM,
+      min: 1,
+      max: 100,
+      integer: true,
     }),
     displayOrder: numberValue(input.displayOrder, {
       label: "Category display order",
@@ -194,6 +207,7 @@ async function listCategories(options = {}) {
             .replace(/[-_]/g, " ")
             .replace(/\b\w/g, (character) => character.toUpperCase()),
           description: "",
+          alertDistanceKm: DEFAULT_ALERT_DISTANCE_KM,
           active: true,
           legacy: true,
           serviceTypeCount: countMap.get(slug) || 0,
@@ -298,6 +312,7 @@ async function updateCategory(categoryId, input = {}) {
     $set: {
       name: data.name,
       description: data.description,
+      alertDistanceKm: data.alertDistanceKm,
       displayOrder: data.displayOrder,
       websiteVisible: data.websiteVisible,
       imageMediaId: data.imageMediaId,
@@ -315,6 +330,22 @@ async function getCategory(categoryId) {
   const category = await Category.findOne(categoryQuery(categoryId)).lean();
   if (!category) throw Object.assign(new Error("Category not found"), { status: 404 });
   return presentCategory(category);
+}
+
+async function getCategoryAlertDistanceKm(categorySlug) {
+  const slug = tokenValue(categorySlug, {
+    label: "Category",
+    required: true,
+    maxLength: 80,
+    lowercase: true,
+  });
+  const category = await Category.findOne({ slug })
+    .select({ alertDistanceKm: 1 })
+    .lean();
+  const value = Number(category?.alertDistanceKm);
+  return Number.isInteger(value) && value >= 1 && value <= 100
+    ? value
+    : DEFAULT_ALERT_DISTANCE_KM;
 }
 
 async function listServiceTypes(options = {}) {
@@ -526,6 +557,7 @@ module.exports = {
   deleteServiceType,
   rejectCategoryDelete,
   resolveLeadServiceTypes,
+  getCategoryAlertDistanceKm,
   slugify,
   normalizeCategoryInput,
   normalizeServiceTypeInput,
