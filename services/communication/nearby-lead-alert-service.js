@@ -22,6 +22,46 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
   return [record[latitudeField], record[longitudeField]].every((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
 }
 
+function leadServiceTypeIds(lead = {}) {
+  const values = [];
+  for (const item of Array.isArray(lead.serviceTypes) ? lead.serviceTypes : []) {
+    const value = item && typeof item === "object"
+      ? item.serviceTypeId || item.id
+      : item;
+    if (value) values.push(String(value));
+  }
+  for (const value of [
+    lead.serviceTypeId,
+    lead.additionalDetails?.resolvedServiceTypeId,
+    lead.additionalDetails?.serviceTypeId,
+  ]) {
+    if (value) values.push(String(value));
+  }
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function providerMatchesLeadPreference(provider = {}, lead = {}) {
+  if (provider.whatsappLeadAlertsEnabled === false) return false;
+  const categorySlug = String(lead.categorySlug || "");
+  const preference = (Array.isArray(provider.whatsappLeadPreferences)
+    ? provider.whatsappLeadPreferences
+    : []).find((item) => String(item?.categorySlug || "") === categorySlug);
+
+  // Backward compatibility: providers without an explicit preference for a
+  // category continue receiving all subcategories for that assigned category.
+  if (!preference || preference.mode !== "selected") return true;
+
+  const selected = new Set(
+    (Array.isArray(preference.serviceTypeIds) ? preference.serviceTypeIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+  if (!selected.size) return false;
+
+  const leadIds = leadServiceTypeIds(lead);
+  if (!leadIds.length) return false;
+  return leadIds.some((serviceTypeId) => selected.has(serviceTypeId));
+}
 
 function providerLeadUrl(enquiryId) {
   const rawBase = process.env.PROVIDER_PORTAL_BASE_URL
@@ -54,6 +94,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     event: "nearby_alert_dispatch_started",
     enquiryId: leadId,
     categorySlug: String(lead?.categorySlug || ""),
+    serviceTypeIds: leadServiceTypeIds(lead || {}),
     remainingUnlocks: Number(lead?.remainingUnlocks || 0),
     radiusKm: MAX_ALERT_DISTANCE_KM,
     coordinatesAvailable: hasCoordinates(lead || {}, "locationLatitude", "locationLongitude"),
@@ -79,6 +120,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   const query = {
     status: "active",
     portalAccessEnabled: true,
+    whatsappLeadAlertsEnabled: { $ne: false },
     categorySlugs: lead.categorySlug,
     serviceLatitude: { $ne: null },
     serviceLongitude: { $ne: null },
@@ -93,6 +135,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     .select({
       providerId: 1, name: 1, businessName: 1, mobile: 1, normalizedMobile: 1,
       whatsappNumber: 1, normalizedWhatsappNumber: 1, email: 1, categorySlugs: 1,
+      whatsappLeadAlertsEnabled: 1, whatsappLeadPreferences: 1,
       city: 1, state: 1, serviceLatitude: 1, serviceLongitude: 1,
     })
     .lean()
@@ -105,6 +148,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   let outsideRadius = 0;
   let invalidDistance = 0;
   let missingContactOrCoordinates = 0;
+  let subcategoryMismatch = 0;
   const pending = [];
   const flush = async () => {
     const rows = pending.splice(0, pending.length);
@@ -129,6 +173,16 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 
   for await (const provider of cursor) {
     databaseCandidates += 1;
+    if (!providerMatchesLeadPreference(provider, lead)) {
+      subcategoryMismatch += 1;
+      console.debug({
+        event: "nearby_alert_provider_skipped",
+        enquiryId: lead.enquiryId,
+        providerId: provider.providerId || "",
+        reason: "provider_subcategory_mismatch",
+      });
+      continue;
+    }
     if (!whatsappContact(provider) || !hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) {
       missingContactOrCoordinates += 1;
       console.debug({
@@ -167,6 +221,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     outsideRadius,
     invalidDistance,
     missingContactOrCoordinates,
+    subcategoryMismatch,
   };
   console.info({
     event: "nearby_alert_provider_scan_completed",
@@ -186,6 +241,8 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 module.exports = {
   MAX_ALERT_DISTANCE_KM,
   distanceKmExact,
+  leadServiceTypeIds,
+  providerMatchesLeadPreference,
   providerLeadUrl,
   whatsappContact,
   dispatchNearbyLeadAlerts,
