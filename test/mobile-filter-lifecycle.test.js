@@ -40,7 +40,9 @@ test("mobile filters collapse secondary controls and remain touch friendly", () 
   assert.match(css, /@media \(max-width: 991\.98px\)/);
   assert.match(css, /@media \(max-width: 575\.98px\)/);
   assert.match(css, /data-crm-mobile-filter-bar/);
+  assert.match(css, /data-crm-native-mobile-filter/);
   assert.match(css, /crm-mobile-filter-panel/);
+  assert.match(css, /crm-mobile-native-open/);
   assert.match(css, /grid-template-columns:\s*repeat\(2,/);
   assert.match(css, /grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/);
   assert.match(css, /min-height:\s*42px/);
@@ -51,12 +53,15 @@ test("shared filter lifecycle preserves URL state and recovers BFCache pages", (
   assert.match(source, /FILTER_FORM_SELECTOR/);
   assert.match(source, /history\.replaceState/);
   assert.match(source, /restoreFormsFromUrl/);
-  assert.match(source, /mergePageFiltersIntoApiUrl/);
+  assert.match(source, /setAlpineModel/);
+  assert.match(source, /refreshWhenReady/);
   assert.match(source, /window\.addEventListener\('pageshow'/);
   assert.match(source, /event\.persisted/);
   assert.match(source, /crm:page-restored/);
-  assert.match(source, /form\.requestSubmit\(\)/);
+  assert.match(source, /requestSubmitSafely/);
   assert.match(source, /crm-mobile-filters-open/);
+  assert.match(source, /crmNativeMobileFilter/);
+  assert.doesNotMatch(source, /mergePageFiltersIntoApiUrl/);
 });
 
 test("Alpine runtime is pinned and has a secondary network source plus visible failure state", () => {
