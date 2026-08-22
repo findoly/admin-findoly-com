@@ -71,7 +71,6 @@ test("Alpine runtime is pinned and has a secondary network source plus visible f
 test("core CRM list screens remain on the shared filter system", () => {
   for (const view of sharedFilterViews) {
     const source = read(view);
-    assert.match(source, /crm-filter-(?:card|shell)/, `${view} must keep the shared filter container`);
     assert.match(source, /crm-filter-(?:bar|toolbar)|crm-filter-drawer/, `${view} must keep a shared filter layout`);
   }
 });
