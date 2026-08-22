@@ -19,7 +19,10 @@ function loadNearbyService(providers, notifications, queryCapture) {
         cursor() {
           return {
             async *[Symbol.asyncIterator]() {
-              for (const provider of providers) yield provider;
+              for (const provider of providers) {
+                if (query.whatsappLeadAlertsEnabled?.$ne === false && provider.whatsappLeadAlertsEnabled === false) continue;
+                yield provider;
+              }
             },
           };
         },
@@ -181,7 +184,7 @@ test("nearby lead alerts support all or selected subcategories and provider-leve
     "provider-selected-match",
   ]);
   assert.equal(result.eligible, 3);
-  assert.equal(result.alertsDisabled, 1);
+  assert.equal(result.databaseCandidates, 4);
   assert.equal(result.subcategoryMismatch, 1);
   assert.equal(service.providerMatchesLeadPreference(providers[0], lead), true);
   assert.equal(service.providerMatchesLeadPreference(providers[2], lead), true);

@@ -148,7 +148,6 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   let outsideRadius = 0;
   let invalidDistance = 0;
   let missingContactOrCoordinates = 0;
-  let alertsDisabled = 0;
   let subcategoryMismatch = 0;
   const pending = [];
   const flush = async () => {
@@ -174,16 +173,6 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 
   for await (const provider of cursor) {
     databaseCandidates += 1;
-    if (provider.whatsappLeadAlertsEnabled === false) {
-      alertsDisabled += 1;
-      console.debug({
-        event: "nearby_alert_provider_skipped",
-        enquiryId: lead.enquiryId,
-        providerId: provider.providerId || "",
-        reason: "provider_whatsapp_alerts_disabled",
-      });
-      continue;
-    }
     if (!providerMatchesLeadPreference(provider, lead)) {
       subcategoryMismatch += 1;
       console.debug({
@@ -232,7 +221,6 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     outsideRadius,
     invalidDistance,
     missingContactOrCoordinates,
-    alertsDisabled,
     subcategoryMismatch,
   };
   console.info({
