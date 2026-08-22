@@ -134,8 +134,40 @@
     width: 5rem !important;
   }
 
-  /* Existing drawer-based filters (Requirements and similar) keep their markup,
-     but use the same touch-friendly dimensions. */
+  /* Existing drawer-based filters (Requirements and similar) use the same
+     mobile collapse contract even when their Alpine state defaults open. */
+  form[data-crm-native-mobile-filter="1"] .crm-filter-drawer,
+  form[data-crm-native-mobile-filter="1"] .crm-filter-advanced {
+    display: none !important;
+  }
+
+  form[data-crm-native-mobile-filter="1"].crm-mobile-native-open .crm-filter-drawer,
+  form[data-crm-native-mobile-filter="1"].crm-mobile-native-open .crm-filter-advanced {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  form[data-crm-native-mobile-filter="1"] .crm-filter-toggle > span {
+    display: none !important;
+  }
+
+  form[data-crm-native-mobile-filter="1"].crm-mobile-native-has-active .crm-filter-toggle::after {
+    content: attr(data-crm-filter-count);
+    min-width: 1.25rem;
+    height: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: .25rem;
+    padding: 0 .3rem;
+    border-radius: 999px;
+    background: var(--crm-user-accent, #2563eb);
+    color: #fff;
+    font-size: .64rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
   .crm-filter-drawer select,
   .crm-filter-drawer input,
   .crm-filter-drawer .btn,
@@ -148,6 +180,8 @@
 
 @media (max-width: 575.98px) {
   [data-crm-mobile-filter-bar="1"].crm-mobile-filters-open > .crm-mobile-filter-panel,
+  form[data-crm-native-mobile-filter="1"].crm-mobile-native-open .crm-filter-drawer,
+  form[data-crm-native-mobile-filter="1"].crm-mobile-native-open .crm-filter-advanced,
   .crm-filter-drawer,
   .crm-filter-grid {
     grid-template-columns: minmax(0, 1fr) !important;
