@@ -53,6 +53,8 @@ test("mobile filters collapse secondary controls and remain touch friendly", () 
 test("shared filter lifecycle preserves URL state and recovers BFCache pages", () => {
   const source = read("public/js/mobile-filters.js");
   assert.match(source, /FILTER_FORM_SELECTOR/);
+  assert.match(source, /form\.crm-filter-bar/);
+  assert.match(source, /form\.crm-filter-toolbar/);
   assert.match(source, /history\.replaceState/);
   assert.match(source, /restoreFormsFromUrl/);
   assert.match(source, /setAlpineModel/);
@@ -68,7 +70,7 @@ test("shared filter lifecycle preserves URL state and recovers BFCache pages", (
 
 test("Alpine runtime is pinned and has a secondary network source plus visible failure state", () => {
   const source = read("public/js/crm-ui-runtime.js");
-  assert.match(source, /alpinejs@3\.16\.2\/dist\/cdn\.min\.js/);
+  assert.match(source, /alpinejs@3\.15\.12\/dist\/cdn\.min\.js/);
   assert.match(source, /cdn\.jsdelivr\.net/);
   assert.match(source, /unpkg\.com/);
   assert.match(source, /crm-runtime-error/);
