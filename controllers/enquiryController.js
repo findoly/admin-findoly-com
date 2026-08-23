@@ -1,4 +1,5 @@
 const service = require("../services/enquiry/enquiry-service");
+const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
 
 async function list(req, res, next) {
   try {
@@ -140,6 +141,18 @@ async function providerStatuses(req, res, next) {
   }
 }
 
+async function nearbyProviders(req, res, next) {
+  try {
+    const result = await nearbyProviderService.listNearbyProviders(
+      req.params.enquiryId,
+      req.query,
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function providerStatus(req, res, next) {
   try {
     res.json({
@@ -167,5 +180,6 @@ module.exports = {
   deactivate,
   reactivate,
   providerStatuses,
+  nearbyProviders,
   providerStatus,
 };
