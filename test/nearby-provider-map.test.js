@@ -60,6 +60,7 @@ test("requirement details receives a nearby providers action without changing th
   assert.match(action, /Provider status/);
   assert.match(action, /Nearby providers/);
   assert.match(action, /nearby-providers/);
+  assert.match(head, /title === 'Requirement details'/);
   assert.match(head, /nearby-providers-action\.js/);
   assert.match(leadView, /Provider status/);
   assert.match(leadView, /Lead action centre/);
@@ -88,6 +89,19 @@ test("nearby provider service uses the existing Haversine implementation and saf
   assert.equal(service.defaultRadiusKmForLead({ alertDistanceKm: 101 }), 20);
   assert.equal(service.normalizeRadiusKm("50", 20), 50);
   assert.throws(() => service.normalizeRadiusKm("101", 20));
+});
+
+test("missing requirement coordinates remain absent instead of becoming a zero-zero map point", () => {
+  const service = loadNearbyProviderService();
+  const lead = service.presentLead({ enquiryId: "lead-no-location", alertDistanceKm: 20 });
+
+  assert.equal(Object.prototype.hasOwnProperty.call(lead, "latitude"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(lead, "longitude"), false);
+  assert.deepEqual(service.buildNearbyProviderRows({}, [{
+    providerId: "provider-1",
+    serviceLatitude: 19.1,
+    serviceLongitude: 72.8,
+  }], 20), []);
 });
 
 test("nearby provider rows exclude outside or invalid locations and sort nearest first", () => {
