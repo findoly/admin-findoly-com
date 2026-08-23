@@ -68,18 +68,17 @@ function requirementLocationLabel(lead = {}) {
 }
 
 function presentLead(lead = {}) {
+  const coordinatesAvailable = hasCoordinates(lead, "locationLatitude", "locationLongitude");
   return {
     enquiryId: lead.enquiryId || lead.id || "",
     requirementTitle: lead.requirementTitle || lead.serviceType || "Requirement",
     category: lead.category || "",
     categorySlug: lead.categorySlug || "",
     alertDistanceKm: defaultRadiusKmForLead(lead),
-    latitude: hasCoordinates(lead, "locationLatitude", "locationLongitude")
-      ? Number(lead.locationLatitude)
-      : null,
-    longitude: hasCoordinates(lead, "locationLatitude", "locationLongitude")
-      ? Number(lead.locationLongitude)
-      : null,
+    ...(coordinatesAvailable ? {
+      latitude: Number(lead.locationLatitude),
+      longitude: Number(lead.locationLongitude),
+    } : {}),
     locationLabel: requirementLocationLabel(lead),
     locationSource: lead.locationSource || "",
   };
@@ -143,7 +142,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
   const fallbackRadiusKm = defaultRadiusKmForLead(lead);
   const radiusKm = normalizeRadiusKm(options.radiusKm, fallbackRadiusKm);
   const presentedLead = presentLead(lead);
-  if (presentedLead.latitude === null || presentedLead.longitude === null) {
+  if (!hasCoordinates(lead, "locationLatitude", "locationLongitude")) {
     return {
       lead: presentedLead,
       radiusKm,
