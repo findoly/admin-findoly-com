@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const uuid = require("../utils/uuid");
+const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 const enquirySchema = new mongoose.Schema(
   {
@@ -145,6 +146,62 @@ enquirySchema.index({ partnerPayoutLockWithdrawalId: 1, partnerPayoutStatus: 1 }
 enquirySchema.index({ createdAt: -1, _id: -1 });
 enquirySchema.index({ isActive: 1, createdAt: -1, _id: -1 });
 enquirySchema.index({ status: 1, isActive: 1, createdAt: -1, _id: -1 });
+
+function applyResolvedLocationToDocument(document) {
+  const resolved = resolveRequirementLocation(document.toObject({ depopulate: true, virtuals: false }));
+  if (!resolved || resolved.source === "canonical") return;
+  document.locationLatitude = resolved.latitude;
+  document.locationLongitude = resolved.longitude;
+  if (!document.locationPincode) document.locationPincode = resolved.pincode || document.pincode || "";
+  if (!document.locationSource) document.locationSource = resolved.source;
+}
+
+enquirySchema.pre("validate", function canonicalizeRequirementLocation(next) {
+  applyResolvedLocationToDocument(this);
+  next();
+});
+
+function updateCarriesAlternateLocation(set = {}) {
+  return [
+    "additionalDetails",
+    "metadata",
+    "location",
+    "coordinates",
+    "latitude",
+    "longitude",
+    "lat",
+    "lng",
+    "lon",
+  ].some((field) => Object.prototype.hasOwnProperty.call(set, field));
+}
+
+enquirySchema.pre(
+  ["updateOne", "findOneAndUpdate"],
+  function canonicalizeUpdatedRequirementLocation(next) {
+    const update = this.getUpdate();
+    const set = update && !Array.isArray(update) && update.$set && typeof update.$set === "object"
+      ? update.$set
+      : null;
+    if (!set || !updateCarriesAlternateLocation(set)) return next();
+
+    const resolved = resolveRequirementLocation(set);
+    if (!resolved || resolved.source === "canonical") return next();
+
+    this.model.findOne(this.getQuery())
+      .select({ locationLatitude: 1, locationLongitude: 1, pincode: 1 })
+      .lean()
+      .then((existing) => {
+        const existingLocation = resolveRequirementLocation(existing || {});
+        if (existingLocation?.source === "canonical") return next();
+        set.locationLatitude = resolved.latitude;
+        set.locationLongitude = resolved.longitude;
+        if (!set.locationPincode) set.locationPincode = resolved.pincode || set.pincode || existing?.pincode || "";
+        if (!set.locationSource) set.locationSource = resolved.source;
+        next();
+      })
+      .catch(next);
+  },
+);
 
 function referenceIdUpdateError() {
   return Object.assign(
