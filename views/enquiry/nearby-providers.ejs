@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Lead management</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">View providers in the same category around this requirement location.</p>
+                <p class="crm-page-subtitle mb-0">View active providers in the same category within this requirement's saved alert radius.</p>
               </div>
               <a id="nearby-provider-back-link" href="/enquiries" class="btn btn-light crm-primary-action">
                 <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirement
@@ -23,7 +23,7 @@
           <div class="content">
             <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
-            <main x-data="nearbyProviderMap()" :class="loading && 'crm-loading'">
+            <main x-data="nearbyProviderList()" :class="loading && 'crm-loading'">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
 
               <section class="card mb-3">
@@ -43,7 +43,7 @@
                     </div>
                     <div class="col-md-2">
                       <div class="text-muted fs-sm">Saved alert radius</div>
-                      <div class="fw-semibold" x-text="(lead.alertDistanceKm || 20) + ' km'"></div>
+                      <div class="fw-semibold" x-text="radiusKm + ' km'"></div>
                     </div>
                   </div>
                 </div>
@@ -52,19 +52,11 @@
               <section class="card crm-filter-card mb-3">
                 <div class="card-body">
                   <div class="row g-3 align-items-end">
-                    <div class="col-lg-5">
-                      <label class="form-label d-flex justify-content-between" for="nearby-radius">
-                        <span>Map radius</span>
-                        <strong x-text="radiusKm + ' km'"></strong>
-                      </label>
-                      <input id="nearby-radius" class="form-range" type="range" min="1" max="100" step="1" x-model.number="radiusKm" @change="applyRadius()" :disabled="loading">
-                      <div class="form-text">1–100 km. View only — this does not change the requirement's saved WhatsApp alert distance.</div>
-                    </div>
-                    <div class="col-lg-4">
+                    <div class="col-lg-6">
                       <label class="form-label" for="nearby-provider-search">Find provider</label>
-                      <input id="nearby-provider-search" type="search" class="form-control" x-model="searchText" @input.debounce.250ms="renderMap()" placeholder="Provider or location">
+                      <input id="nearby-provider-search" type="search" class="form-control" x-model="searchText" placeholder="Provider or location">
                     </div>
-                    <div class="col-lg-3">
+                    <div class="col-lg-6">
                       <label class="form-label" for="nearby-provider-sort">List order</label>
                       <select id="nearby-provider-sort" class="form-select" x-model="sortOrder">
                         <option value="nearest">Nearest first</option>
@@ -80,26 +72,13 @@
                 This requirement does not have saved coordinates yet, so nearby-provider distance cannot be calculated.
               </div>
 
-              <section class="card mb-3" x-show="hasLocation" x-cloak>
-                <div class="card-header d-flex align-items-center flex-wrap gap-2">
-                  <div>
-                    <h2 class="card-title mb-1">Provider map</h2>
-                    <p class="text-muted mb-0">Requirement at the centre with active same-category providers inside the selected radius.</p>
-                  </div>
-                  <span class="badge bg-light text-dark ms-auto" x-text="resultCountLabel"></span>
-                </div>
-                <div class="card-body p-0">
-                  <div id="nearby-provider-map" x-ref="providerMap" class="crm-nearby-provider-map" aria-label="Nearby providers map"></div>
-                  <div x-show="mapError" x-cloak class="alert alert-warning m-3" x-text="mapError"></div>
-                </div>
-              </section>
-
               <section class="card crm-data-card">
                 <div class="card-header crm-card-heading">
                   <div>
                     <h2 class="card-title mb-1">Nearby provider list</h2>
-                    <p class="text-muted mb-0" x-text="resultCountLabel"></p>
+                    <p class="text-muted mb-0" x-text="providerCountLabel"></p>
                   </div>
+                  <span x-show="searchText" x-cloak class="badge bg-light text-dark" x-text="filteredProviders.length + ' matching'"></span>
                 </div>
                 <div class="table-responsive">
                   <table class="table crm-table mb-0">
@@ -131,7 +110,7 @@
                         <td colspan="5">
                           <div class="crm-empty-state">
                             <strong x-text="searchText ? 'No matching providers' : 'No nearby providers'"></strong>
-                            <span x-text="searchText ? 'Clear the provider search or increase the map radius.' : 'Increase the map radius to inspect a wider area.'"></span>
+                            <span x-text="searchText ? 'Clear the provider search to see all nearby providers.' : 'No active same-category providers are within the saved alert radius.'"></span>
                           </div>
                         </td>
                       </tr>
@@ -146,16 +125,8 @@
       </div>
     </div>
 
-    <style>
-      .crm-nearby-provider-map{height:440px;min-height:320px;width:100%;background:#f4f6f8}
-      .crm-nearby-map-popup strong{display:block;margin-bottom:4px}
-      .crm-nearby-map-popup span{display:block;margin-bottom:6px}
-      .crm-nearby-map-overlay{background:#fff;border:1px solid rgba(3,28,73,.12);border-radius:8px;box-shadow:0 4px 18px rgba(3,28,73,.18);max-width:280px;min-width:190px;padding:10px 12px;position:absolute}
-      @media (max-width:767.98px){.crm-nearby-provider-map{height:360px}}
-    </style>
-
     <script>
-      function nearbyProviderMap() {
+      function nearbyProviderList() {
         const parts = pathParts();
         const section = parts[0] === 'requirements' ? 'requirements' : 'enquiries';
         return {
@@ -163,31 +134,13 @@
           section,
           lead: {},
           providers: [],
+          providerCount: 0,
           radiusKm: 20,
           searchText: '',
           sortOrder: 'nearest',
           loading: false,
           error: '',
-          mapError: '',
           reason: '',
-          map: null,
-          mapLayers: [],
-          mapOverlay: null,
-          mapPopupElement: null,
-          mapClickHandler: null,
-          mapRenderToken: 0,
-          coordinatePoint(latitude, longitude) {
-            if (latitude === null || latitude === undefined || String(latitude).trim() === '') return null;
-            if (longitude === null || longitude === undefined || String(longitude).trim() === '') return null;
-            const lat = Number(latitude);
-            const lng = Number(longitude);
-            if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
-            if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
-            return [lat, lng];
-          },
-          get hasLocation() {
-            return Boolean(this.coordinatePoint(this.lead.latitude, this.lead.longitude));
-          },
           get filteredProviders() {
             const needle = String(this.searchText || '').trim().toLowerCase();
             const rows = this.providers.filter((provider) => {
@@ -201,202 +154,31 @@
               return left.distanceKm - right.distanceKm;
             });
           },
-          get resultCountLabel() {
-            const count = this.filteredProviders.length;
-            return count + ' provider' + (count === 1 ? '' : 's') + ' within ' + this.radiusKm + ' km';
+          get providerCountLabel() {
+            return this.providerCount + ' provider' + (this.providerCount === 1 ? '' : 's')
+              + ' within the saved ' + this.radiusKm + ' km radius';
           },
           async init() {
             const backLink = document.getElementById('nearby-provider-back-link');
             if (backLink) backLink.href = '/' + this.section + '/' + encodeURIComponent(this.leadId);
-            await this.load(false);
+            await this.load();
           },
-          async applyRadius() {
-            const value = Math.round(Number(this.radiusKm || 20));
-            this.radiusKm = Math.min(100, Math.max(1, Number.isFinite(value) ? value : 20));
-            await this.load(true);
-          },
-          async load(useSelectedRadius) {
+          async load() {
             if (this.loading) return;
             this.loading = true;
             this.error = '';
             try {
-              const suffix = useSelectedRadius ? '?radiusKm=' + encodeURIComponent(this.radiusKm) : '';
-              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers' + suffix);
+              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers');
               this.lead = body.lead || {};
               this.providers = Array.isArray(body.data) ? body.data : [];
+              const count = Number(body.count);
+              this.providerCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : this.providers.length;
               this.radiusKm = Number(body.radiusKm || this.lead.alertDistanceKm || 20);
               this.reason = body.reason || '';
-              await this.renderMap();
             } catch (error) {
               this.error = error.message;
             } finally {
               this.loading = false;
-            }
-          },
-          escapeHtml(value) {
-            return String(value || '')
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#039;');
-          },
-          destroyMap() {
-            if (this.map && this.mapClickHandler) {
-              this.map.un('singleclick', this.mapClickHandler);
-            }
-            if (this.map) {
-              this.map.setTarget(null);
-            }
-            if (this.mapPopupElement) {
-              this.mapPopupElement.remove();
-            }
-            this.map = null;
-            this.mapLayers = [];
-            this.mapOverlay = null;
-            this.mapPopupElement = null;
-            this.mapClickHandler = null;
-          },
-          async renderMap() {
-            const renderToken = ++this.mapRenderToken;
-            this.mapError = '';
-            if (!this.hasLocation) {
-              this.destroyMap();
-              return;
-            }
-            try {
-              const OpenLayers = window.ol;
-              if (!OpenLayers || !OpenLayers.Map) {
-                throw new Error('OpenLayers is unavailable on the Nearby Providers page');
-              }
-
-              await this.$nextTick();
-              const container = this.$refs.providerMap;
-              if (!container) throw new Error('Nearby provider map container was not found');
-              const rect = container.getBoundingClientRect();
-              if (rect.width <= 0 || rect.height <= 0) {
-                throw new Error('Nearby provider map container is not visible or has no size');
-              }
-              if (renderToken !== this.mapRenderToken) return;
-
-              const leadPoint = this.coordinatePoint(this.lead.latitude, this.lead.longitude);
-              if (!leadPoint) throw new Error('Requirement coordinates are invalid for the map');
-
-              this.destroyMap();
-              const leadCoordinate = OpenLayers.proj.fromLonLat([leadPoint[1], leadPoint[0]]);
-              const latitudeRadians = leadPoint[0] * Math.PI / 180;
-              const radiusMeters = Number(this.radiusKm) * 1000;
-              const projectedRadiusMeters = radiusMeters / Math.max(Math.cos(latitudeRadians), 0.01);
-              const radiusGeometry = new OpenLayers.geom.Circle(leadCoordinate, projectedRadiusMeters);
-
-              const radiusFeature = new OpenLayers.Feature({ geometry: radiusGeometry });
-              radiusFeature.setStyle(new OpenLayers.style.Style({
-                fill: new OpenLayers.style.Fill({ color: 'rgba(8,43,103,0.04)' }),
-                stroke: new OpenLayers.style.Stroke({ color: '#082B67', width: 2 })
-              }));
-
-              const requirementFeature = new OpenLayers.Feature({
-                geometry: new OpenLayers.geom.Point(leadCoordinate),
-                popupHtml: '<div class="crm-nearby-map-popup"><strong>Requirement</strong><span>' + this.escapeHtml(this.lead.locationLabel || '') + '</span></div>'
-              });
-              requirementFeature.setStyle(new OpenLayers.style.Style({
-                image: new OpenLayers.style.Circle({
-                  radius: 9,
-                  fill: new OpenLayers.style.Fill({ color: '#FF5A12' }),
-                  stroke: new OpenLayers.style.Stroke({ color: '#DF4300', width: 3 })
-                })
-              }));
-
-              const features = [radiusFeature, requirementFeature];
-              for (const provider of this.filteredProviders) {
-                const point = this.coordinatePoint(provider.latitude, provider.longitude);
-                if (!point) {
-                  console.warn('Nearby provider marker skipped because coordinates are invalid', provider.providerId || '');
-                  continue;
-                }
-                const name = provider.businessName || provider.name || 'Provider';
-                const popup = '<div class="crm-nearby-map-popup">'
-                  + '<strong>' + this.escapeHtml(name) + '</strong>'
-                  + '<span>' + Number(provider.distanceKm).toFixed(1) + ' km from requirement</span>'
-                  + '<span>' + this.escapeHtml(provider.locationLabel || '') + '</span>'
-                  + '<a href="/providers/' + encodeURIComponent(provider.providerId) + '">View provider</a>'
-                  + '</div>';
-                const providerFeature = new OpenLayers.Feature({
-                  geometry: new OpenLayers.geom.Point(OpenLayers.proj.fromLonLat([point[1], point[0]])),
-                  popupHtml: popup
-                });
-                providerFeature.setStyle(new OpenLayers.style.Style({
-                  image: new OpenLayers.style.Circle({
-                    radius: 7,
-                    fill: new OpenLayers.style.Fill({ color: '#082B67' }),
-                    stroke: new OpenLayers.style.Stroke({ color: '#031C49', width: 2 })
-                  })
-                }));
-                features.push(providerFeature);
-              }
-
-              const tileSource = new OpenLayers.source.OSM({
-                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                maxZoom: 19,
-                attributions: '&copy; OpenStreetMap contributors'
-              });
-              tileSource.on('tileloaderror', (event) => {
-                console.warn('Nearby provider map tile failed to load', event);
-              });
-              const tileLayer = new OpenLayers.layer.Tile({ source: tileSource });
-              const vectorSource = new OpenLayers.source.Vector({ features });
-              const vectorLayer = new OpenLayers.layer.Vector({ source: vectorSource });
-              this.mapLayers = [tileLayer, vectorLayer];
-
-              this.map = new OpenLayers.Map({
-                target: container,
-                layers: this.mapLayers,
-                view: new OpenLayers.View({ center: leadCoordinate, zoom: 12 })
-              });
-              const MouseWheelZoom = OpenLayers.interaction && OpenLayers.interaction.MouseWheelZoom;
-              if (MouseWheelZoom) {
-                this.map.getInteractions().forEach((interaction) => {
-                  if (interaction instanceof MouseWheelZoom) interaction.setActive(false);
-                });
-              }
-
-              const popupElement = document.createElement('div');
-              popupElement.className = 'crm-nearby-map-overlay';
-              popupElement.hidden = true;
-              container.appendChild(popupElement);
-              this.mapPopupElement = popupElement;
-              this.mapOverlay = new OpenLayers.Overlay({
-                element: popupElement,
-                positioning: 'bottom-center',
-                offset: [0, -10],
-                stopEvent: true
-              });
-              this.map.addOverlay(this.mapOverlay);
-              this.mapClickHandler = (event) => {
-                const feature = this.map.forEachFeatureAtPixel(event.pixel, (candidate) => {
-                  return candidate.get('popupHtml') ? candidate : null;
-                });
-                if (!feature) {
-                  popupElement.hidden = true;
-                  this.mapOverlay.setPosition(undefined);
-                  return;
-                }
-                popupElement.innerHTML = feature.get('popupHtml');
-                popupElement.hidden = false;
-                this.mapOverlay.setPosition(feature.getGeometry().getCoordinates());
-              };
-              this.map.on('singleclick', this.mapClickHandler);
-
-              this.map.updateSize();
-              this.map.getView().fit(radiusGeometry.getExtent(), {
-                padding: [20, 20, 20, 20],
-                maxZoom: 15,
-                size: this.map.getSize()
-              });
-            } catch (error) {
-              console.error('Nearby provider map failed', error);
-              this.destroyMap();
-              this.mapError = 'The visual map could not load. The nearby-provider list and distances are still available below.';
             }
           }
         };
