@@ -150,6 +150,7 @@
       .crm-nearby-provider-map{height:440px;min-height:320px;width:100%;background:#f4f6f8}
       .crm-nearby-map-popup strong{display:block;margin-bottom:4px}
       .crm-nearby-map-popup span{display:block;margin-bottom:6px}
+      .crm-nearby-map-overlay{background:#fff;border:1px solid rgba(3,28,73,.12);border-radius:8px;box-shadow:0 4px 18px rgba(3,28,73,.18);max-width:280px;min-width:190px;padding:10px 12px;position:absolute}
       @media (max-width:767.98px){.crm-nearby-provider-map{height:360px}}
     </style>
 
@@ -171,6 +172,9 @@
           reason: '',
           map: null,
           mapLayers: [],
+          mapOverlay: null,
+          mapPopupElement: null,
+          mapClickHandler: null,
           mapRenderToken: 0,
           coordinatePoint(latitude, longitude) {
             if (latitude === null || latitude === undefined || String(latitude).trim() === '') return null;
@@ -238,13 +242,20 @@
               .replace(/'/g, '&#039;');
           },
           destroyMap() {
-            if (!this.map) return;
-            try {
-              this.map.off();
-              this.map.remove();
-            } finally {
-              this.map = null;
+            if (this.map && this.mapClickHandler) {
+              this.map.un('singleclick', this.mapClickHandler);
             }
+            if (this.map) {
+              this.map.setTarget(null);
+            }
+            if (this.mapPopupElement) {
+              this.mapPopupElement.remove();
+            }
+            this.map = null;
+            this.mapLayers = [];
+            this.mapOverlay = null;
+            this.mapPopupElement = null;
+            this.mapClickHandler = null;
           },
           async renderMap() {
             const renderToken = ++this.mapRenderToken;
@@ -254,8 +265,10 @@
               return;
             }
             try {
-              const L = window.L;
-              if (!L) throw new Error('Leaflet is unavailable on the Nearby Providers page');
+              const OpenLayers = window.ol;
+              if (!OpenLayers || !OpenLayers.Map) {
+                throw new Error('OpenLayers is unavailable on the Nearby Providers page');
+              }
 
               await this.$nextTick();
               const container = this.$refs.providerMap;
@@ -270,34 +283,31 @@
               if (!leadPoint) throw new Error('Requirement coordinates are invalid for the map');
 
               this.destroyMap();
-              this.map = L.map(container, { scrollWheelZoom: false }).setView(leadPoint, 12);
-              const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap contributors'
+              const leadCoordinate = OpenLayers.proj.fromLonLat([leadPoint[1], leadPoint[0]]);
+              const latitudeRadians = leadPoint[0] * Math.PI / 180;
+              const radiusMeters = Number(this.radiusKm) * 1000;
+              const projectedRadiusMeters = radiusMeters / Math.max(Math.cos(latitudeRadians), 0.01);
+              const radiusGeometry = new OpenLayers.geom.Circle(leadCoordinate, projectedRadiusMeters);
+
+              const radiusFeature = new OpenLayers.Feature({ geometry: radiusGeometry });
+              radiusFeature.setStyle(new OpenLayers.style.Style({
+                fill: new OpenLayers.style.Fill({ color: 'rgba(8,43,103,0.04)' }),
+                stroke: new OpenLayers.style.Stroke({ color: '#082B67', width: 2 })
+              }));
+
+              const requirementFeature = new OpenLayers.Feature({
+                geometry: new OpenLayers.geom.Point(leadCoordinate),
+                popupHtml: '<div class="crm-nearby-map-popup"><strong>Requirement</strong><span>' + this.escapeHtml(this.lead.locationLabel || '') + '</span></div>'
               });
-              tileLayer.on('tileerror', (event) => {
-                console.warn('Nearby provider map tile failed to load', event?.tile?.src || event);
-              });
-              tileLayer.addTo(this.map);
+              requirementFeature.setStyle(new OpenLayers.style.Style({
+                image: new OpenLayers.style.Circle({
+                  radius: 9,
+                  fill: new OpenLayers.style.Fill({ color: '#FF5A12' }),
+                  stroke: new OpenLayers.style.Stroke({ color: '#DF4300', width: 3 })
+                })
+              }));
 
-              const radiusCircle = L.circle(leadPoint, {
-                radius: Number(this.radiusKm) * 1000,
-                color: '#082B67',
-                weight: 2,
-                fillColor: '#082B67',
-                fillOpacity: 0.04
-              }).addTo(this.map);
-
-              L.circleMarker(leadPoint, {
-                radius: 9,
-                color: '#DF4300',
-                weight: 3,
-                fillColor: '#FF5A12',
-                fillOpacity: 0.9
-              }).addTo(this.map).bindPopup(
-                '<div class="crm-nearby-map-popup"><strong>Requirement</strong><span>' + this.escapeHtml(this.lead.locationLabel || '') + '</span></div>'
-              );
-
+              const features = [radiusFeature, requirementFeature];
               for (const provider of this.filteredProviders) {
                 const point = this.coordinatePoint(provider.latitude, provider.longitude);
                 if (!point) {
@@ -311,17 +321,78 @@
                   + '<span>' + this.escapeHtml(provider.locationLabel || '') + '</span>'
                   + '<a href="/providers/' + encodeURIComponent(provider.providerId) + '">View provider</a>'
                   + '</div>';
-                L.circleMarker(point, {
-                  radius: 7,
-                  color: '#031C49',
-                  weight: 2,
-                  fillColor: '#082B67',
-                  fillOpacity: 0.82
-                }).addTo(this.map).bindPopup(popup);
+                const providerFeature = new OpenLayers.Feature({
+                  geometry: new OpenLayers.geom.Point(OpenLayers.proj.fromLonLat([point[1], point[0]])),
+                  popupHtml: popup
+                });
+                providerFeature.setStyle(new OpenLayers.style.Style({
+                  image: new OpenLayers.style.Circle({
+                    radius: 7,
+                    fill: new OpenLayers.style.Fill({ color: '#082B67' }),
+                    stroke: new OpenLayers.style.Stroke({ color: '#031C49', width: 2 })
+                  })
+                }));
+                features.push(providerFeature);
               }
 
-              this.map.invalidateSize();
-              this.map.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
+              const tileSource = new OpenLayers.source.OSM({
+                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                maxZoom: 19,
+                attributions: '&copy; OpenStreetMap contributors'
+              });
+              tileSource.on('tileloaderror', (event) => {
+                console.warn('Nearby provider map tile failed to load', event);
+              });
+              const tileLayer = new OpenLayers.layer.Tile({ source: tileSource });
+              const vectorSource = new OpenLayers.source.Vector({ features });
+              const vectorLayer = new OpenLayers.layer.Vector({ source: vectorSource });
+              this.mapLayers = [tileLayer, vectorLayer];
+
+              this.map = new OpenLayers.Map({
+                target: container,
+                layers: this.mapLayers,
+                view: new OpenLayers.View({ center: leadCoordinate, zoom: 12 })
+              });
+              const MouseWheelZoom = OpenLayers.interaction && OpenLayers.interaction.MouseWheelZoom;
+              if (MouseWheelZoom) {
+                this.map.getInteractions().forEach((interaction) => {
+                  if (interaction instanceof MouseWheelZoom) interaction.setActive(false);
+                });
+              }
+
+              const popupElement = document.createElement('div');
+              popupElement.className = 'crm-nearby-map-overlay';
+              popupElement.hidden = true;
+              container.appendChild(popupElement);
+              this.mapPopupElement = popupElement;
+              this.mapOverlay = new OpenLayers.Overlay({
+                element: popupElement,
+                positioning: 'bottom-center',
+                offset: [0, -10],
+                stopEvent: true
+              });
+              this.map.addOverlay(this.mapOverlay);
+              this.mapClickHandler = (event) => {
+                const feature = this.map.forEachFeatureAtPixel(event.pixel, (candidate) => {
+                  return candidate.get('popupHtml') ? candidate : null;
+                });
+                if (!feature) {
+                  popupElement.hidden = true;
+                  this.mapOverlay.setPosition(undefined);
+                  return;
+                }
+                popupElement.innerHTML = feature.get('popupHtml');
+                popupElement.hidden = false;
+                this.mapOverlay.setPosition(feature.getGeometry().getCoordinates());
+              };
+              this.map.on('singleclick', this.mapClickHandler);
+
+              this.map.updateSize();
+              this.map.getView().fit(radiusGeometry.getExtent(), {
+                padding: [20, 20, 20, 20],
+                maxZoom: 15,
+                size: this.map.getSize()
+              });
             } catch (error) {
               console.error('Nearby provider map failed', error);
               this.destroyMap();
