@@ -4,6 +4,7 @@ const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
 const { identifierValue, numberValue } = require("../../utils/validation");
+const { resolveRequirementLocation } = require("../../utils/requirement-location");
 
 const DEFAULT_RADIUS_KM = 20;
 const MIN_RADIUS_KM = 1;
@@ -57,41 +58,43 @@ function providerLocationLabel(provider = {}) {
 }
 
 function requirementLocationLabel(lead = {}) {
-  return String(lead.addressLine || "").trim()
+  const resolved = resolveRequirementLocation(lead);
+  return String(resolved?.formattedAddress || lead.addressLine || "").trim()
     || joinLocation(
       lead.locationLocality,
       lead.city,
       lead.locationState || lead.state,
-      lead.locationPincode || lead.pincode,
+      resolved?.pincode || lead.locationPincode || lead.pincode,
     )
     || "Requirement location";
 }
 
 function presentLead(lead = {}) {
-  const coordinatesAvailable = hasCoordinates(lead, "locationLatitude", "locationLongitude");
+  const resolved = resolveRequirementLocation(lead);
   return {
     enquiryId: lead.enquiryId || lead.id || "",
     requirementTitle: lead.requirementTitle || lead.serviceType || "Requirement",
     category: lead.category || "",
     categorySlug: lead.categorySlug || "",
     alertDistanceKm: defaultRadiusKmForLead(lead),
-    ...(coordinatesAvailable ? {
-      latitude: Number(lead.locationLatitude),
-      longitude: Number(lead.locationLongitude),
+    ...(resolved ? {
+      latitude: resolved.latitude,
+      longitude: resolved.longitude,
     } : {}),
     locationLabel: requirementLocationLabel(lead),
-    locationSource: lead.locationSource || "",
+    locationSource: resolved?.source || lead.locationSource || "",
   };
 }
 
 function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_RADIUS_KM) {
-  if (!hasCoordinates(lead, "locationLatitude", "locationLongitude")) return [];
+  const resolved = resolveRequirementLocation(lead);
+  if (!resolved) return [];
   const rows = [];
   for (const provider of providers) {
     if (!hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) continue;
     const distanceKm = nearbyLeadAlertService.distanceKmExact(
-      lead.locationLatitude,
-      lead.locationLongitude,
+      resolved.latitude,
+      resolved.longitude,
       provider.serviceLatitude,
       provider.serviceLongitude,
     );
@@ -135,6 +138,15 @@ async function listNearbyProviders(enquiryId, options = {}) {
       locationLocality: 1,
       locationState: 1,
       locationSource: 1,
+      additionalDetails: 1,
+      metadata: 1,
+      location: 1,
+      coordinates: 1,
+      latitude: 1,
+      longitude: 1,
+      lat: 1,
+      lng: 1,
+      lon: 1,
     })
     .lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
@@ -142,7 +154,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
   const fallbackRadiusKm = defaultRadiusKmForLead(lead);
   const radiusKm = normalizeRadiusKm(options.radiusKm, fallbackRadiusKm);
   const presentedLead = presentLead(lead);
-  if (!hasCoordinates(lead, "locationLatitude", "locationLongitude")) {
+  if (!resolveRequirementLocation(lead)) {
     return {
       lead: presentedLead,
       radiusKm,

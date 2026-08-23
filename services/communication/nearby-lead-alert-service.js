@@ -2,6 +2,7 @@
 
 const Provider = require("../../models/Provider");
 const notificationService = require("./notification-service");
+const { resolveRequirementLocation } = require("../../utils/requirement-location");
 
 const MAX_ALERT_DISTANCE_KM = 20;
 const BATCH_SIZE = Math.min(100, Math.max(5, Number(process.env.CRM_NEARBY_LEAD_ALERT_BATCH_SIZE || 25)));
@@ -98,6 +99,16 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   const startedAt = process.hrtime.bigint();
   const leadId = String(lead?.enquiryId || "");
   const radiusKm = alertDistanceKmForLead(lead);
+  const resolvedLocation = resolveRequirementLocation(lead || {});
+  const effectiveLead = resolvedLocation
+    ? {
+        ...lead,
+        locationLatitude: resolvedLocation.latitude,
+        locationLongitude: resolvedLocation.longitude,
+        locationPincode: lead?.locationPincode || resolvedLocation.pincode || lead?.pincode || "",
+        locationSource: lead?.locationSource || resolvedLocation.source,
+      }
+    : lead;
   console.info({
     event: "nearby_alert_dispatch_started",
     enquiryId: leadId,
@@ -105,7 +116,8 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     serviceTypeIds: leadServiceTypeIds(lead || {}),
     remainingUnlocks: Number(lead?.remainingUnlocks || 0),
     radiusKm,
-    coordinatesAvailable: hasCoordinates(lead || {}, "locationLatitude", "locationLongitude"),
+    coordinatesAvailable: Boolean(resolvedLocation),
+    coordinateSource: resolvedLocation?.source || "",
   });
   if (!lead || !lead.enquiryId || !lead.categorySlug || Number(lead.remainingUnlocks || 0) <= 0) {
     const reason = !lead?.enquiryId
@@ -116,7 +128,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     console.warn({ event: "nearby_alert_dispatch_skipped", enquiryId: leadId, reason });
     return { eligible: 0, alerted: 0, skipped: 0, reason };
   }
-  if (!hasCoordinates(lead, "locationLatitude", "locationLongitude")) {
+  if (!resolvedLocation) {
     console.warn({
       event: "nearby_alert_dispatch_skipped",
       enquiryId: leadId,
@@ -164,13 +176,13 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       const output = await notificationService.triggerSafe("nearby_lead_available", {
         event: "nearby_lead_available",
         trigger: "nearby_lead_available",
-        lead,
+        lead: effectiveLead,
         provider,
         distanceKm,
-        leadUrl: providerLeadUrl(lead.enquiryId),
-        marketplaceUrl: providerLeadUrl(lead.enquiryId),
-        idempotencyEntityId: `${lead.enquiryId}:${provider.providerId}`,
-        idempotencySuffix: lead.marketplacePublishedAt || lead.updatedAt || lead.createdAt,
+        leadUrl: providerLeadUrl(effectiveLead.enquiryId),
+        marketplaceUrl: providerLeadUrl(effectiveLead.enquiryId),
+        idempotencyEntityId: `${effectiveLead.enquiryId}:${provider.providerId}`,
+        idempotencySuffix: effectiveLead.marketplacePublishedAt || effectiveLead.updatedAt || effectiveLead.createdAt,
         skipSystemDispatch: true,
       }, actor);
       return output.length > 0;
@@ -181,11 +193,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 
   for await (const provider of cursor) {
     databaseCandidates += 1;
-    if (!providerMatchesLeadPreference(provider, lead)) {
+    if (!providerMatchesLeadPreference(provider, effectiveLead)) {
       subcategoryMismatch += 1;
       console.debug({
         event: "nearby_alert_provider_skipped",
-        enquiryId: lead.enquiryId,
+        enquiryId: effectiveLead.enquiryId,
         providerId: provider.providerId || "",
         reason: "provider_subcategory_mismatch",
       });
@@ -195,7 +207,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       missingContactOrCoordinates += 1;
       console.debug({
         event: "nearby_alert_provider_skipped",
-        enquiryId: lead.enquiryId,
+        enquiryId: effectiveLead.enquiryId,
         providerId: provider.providerId || "",
         reason: !whatsappContact(provider) ? "provider_mobile_missing" : "provider_coordinates_missing",
       });
@@ -204,8 +216,8 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     const distanceKm = distanceKmExact(
       provider.serviceLatitude,
       provider.serviceLongitude,
-      lead.locationLatitude,
-      lead.locationLongitude,
+      resolvedLocation.latitude,
+      resolvedLocation.longitude,
     );
     if (distanceKm === null) {
       invalidDistance += 1;
@@ -233,13 +245,14 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   };
   console.info({
     event: "nearby_alert_provider_scan_completed",
-    enquiryId: lead.enquiryId,
+    enquiryId: effectiveLead.enquiryId,
     radiusKm,
+    coordinateSource: resolvedLocation.source,
     ...result,
   });
   console.info({
     event: "nearby_alert_dispatch_completed",
-    enquiryId: lead.enquiryId,
+    enquiryId: effectiveLead.enquiryId,
     ...result,
     durationMs,
   });
