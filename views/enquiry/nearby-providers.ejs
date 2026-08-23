@@ -171,8 +171,18 @@
           reason: '',
           map: null,
           mapLayers: [],
+          mapRenderToken: 0,
+          coordinatePoint(latitude, longitude) {
+            if (latitude === null || latitude === undefined || String(latitude).trim() === '') return null;
+            if (longitude === null || longitude === undefined || String(longitude).trim() === '') return null;
+            const lat = Number(latitude);
+            const lng = Number(longitude);
+            if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+            if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+            return [lat, lng];
+          },
           get hasLocation() {
-            return Number.isFinite(Number(this.lead.latitude)) && Number.isFinite(Number(this.lead.longitude));
+            return Boolean(this.coordinatePoint(this.lead.latitude, this.lead.longitude));
           },
           get filteredProviders() {
             const needle = String(this.searchText || '').trim().toLowerCase();
@@ -254,24 +264,64 @@
               .replace(/"/g, '&quot;')
               .replace(/'/g, '&#039;');
           },
+          nextFrame() {
+            return new Promise((resolve) => {
+              if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => resolve());
+              } else {
+                window.setTimeout(resolve, 16);
+              }
+            });
+          },
+          async waitForMapContainer() {
+            if (typeof this.$nextTick === 'function') {
+              await this.$nextTick();
+            } else if (window.Alpine && typeof window.Alpine.nextTick === 'function') {
+              await window.Alpine.nextTick();
+            }
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              const container = document.getElementById('nearby-provider-map');
+              if (!container) throw new Error('Nearby provider map container was not found');
+              const rect = container.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) return container;
+              await this.nextFrame();
+            }
+            throw new Error('Nearby provider map container is not visible or has no size');
+          },
+          destroyMap() {
+            if (!this.map) return;
+            try {
+              this.map.off();
+              this.map.remove();
+            } finally {
+              this.map = null;
+            }
+          },
           async renderMap() {
+            const renderToken = ++this.mapRenderToken;
             this.mapError = '';
             if (!this.hasLocation) {
-              if (this.map) {
-                this.map.remove();
-                this.map = null;
-              }
+              this.destroyMap();
               return;
             }
             try {
               const L = await this.ensureLeaflet();
-              if (this.map) this.map.remove();
-              const leadPoint = [Number(this.lead.latitude), Number(this.lead.longitude)];
-              this.map = L.map('nearby-provider-map', { scrollWheelZoom: false });
-              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              const container = await this.waitForMapContainer();
+              if (renderToken !== this.mapRenderToken) return;
+
+              const leadPoint = this.coordinatePoint(this.lead.latitude, this.lead.longitude);
+              if (!leadPoint) throw new Error('Requirement coordinates are invalid for the map');
+
+              this.destroyMap();
+              this.map = L.map(container, { scrollWheelZoom: false });
+              const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap contributors'
-              }).addTo(this.map);
+              });
+              tileLayer.on('tileerror', (event) => {
+                console.warn('Nearby provider map tile failed to load', event?.tile?.src || event);
+              });
+              tileLayer.addTo(this.map);
 
               const radiusCircle = L.circle(leadPoint, {
                 radius: Number(this.radiusKm) * 1000,
@@ -292,7 +342,11 @@
               );
 
               for (const provider of this.filteredProviders) {
-                const point = [Number(provider.latitude), Number(provider.longitude)];
+                const point = this.coordinatePoint(provider.latitude, provider.longitude);
+                if (!point) {
+                  console.warn('Nearby provider marker skipped because coordinates are invalid', provider.providerId || '');
+                  continue;
+                }
                 const name = provider.businessName || provider.name || 'Provider';
                 const popup = '<div class="crm-nearby-map-popup">'
                   + '<strong>' + this.escapeHtml(name) + '</strong>'
@@ -309,9 +363,13 @@
                 }).addTo(this.map).bindPopup(popup);
               }
 
+              this.map.invalidateSize();
               this.map.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
-              window.setTimeout(() => this.map && this.map.invalidateSize(), 50);
+              await this.nextFrame();
+              if (renderToken === this.mapRenderToken && this.map) this.map.invalidateSize();
             } catch (error) {
+              console.error('Nearby provider map failed', error);
+              this.destroyMap();
               this.mapError = 'The visual map could not load. The nearby-provider list and distances are still available below.';
             }
           }
