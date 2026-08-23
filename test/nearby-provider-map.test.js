@@ -78,12 +78,23 @@ test("nearby provider page contains map, radius selector and distance list", () 
   assert.match(view, /Farthest first/);
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
   assert.match(head, /title === 'Nearby providers'/);
-  assert.match(head, /unpkg\.com\/leaflet@1\.9\.4\/dist\/leaflet\.css/);
-  assert.match(head, /sha256-p4NxAoJBhIIN\+hmNHrzRCf9tD\/miZyoHS5obTRR9BMY=/);
-  assert.match(head, /unpkg\.com\/leaflet@1\.9\.4\/dist\/leaflet\.js/);
-  assert.match(head, /sha256-20nQCchB9co0qIjJZRGuk2\/Z9VM\+kNiyxNV1lvTlZBo=/);
+  assert.match(head, /\/vendor\/leaflet\/leaflet\.css\?v=1\.9\.4/);
+  assert.match(head, /\/vendor\/leaflet\/leaflet\.js\?v=1\.9\.4/);
+  assert.doesNotMatch(head, /unpkg\.com\/leaflet/);
   assert.match(view, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
   assert.match(view, /View only — this does not change the requirement's saved WhatsApp alert distance/);
+});
+
+test("Leaflet is self-hosted from the pinned npm dependency", () => {
+  const packageJson = JSON.parse(source("package.json"));
+  const app = source("app.js");
+  const head = source("views/partials/head.ejs");
+
+  assert.equal(packageJson.dependencies.leaflet, "1.9.4");
+  assert.match(app, /app\.use\("\/vendor\/leaflet", express\.static\(path\.join\(__dirname, "node_modules", "leaflet", "dist"\)/);
+  assert.match(head, /\/vendor\/leaflet\/leaflet\.css\?v=1\.9\.4/);
+  assert.match(head, /\/vendor\/leaflet\/leaflet\.js\?v=1\.9\.4/);
+  assert.doesNotMatch(head, /unpkg\.com\/leaflet/);
 });
 
 test("nearby provider map follows Leaflet and Alpine initialization lifecycle", () => {
