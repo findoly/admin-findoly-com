@@ -175,6 +175,11 @@ function updateCarriesAlternateLocation(set = {}) {
   ].some((field) => Object.prototype.hasOwnProperty.call(set, field));
 }
 
+function updateNeedsLocationResolution(set = {}) {
+  return updateCarriesAlternateLocation(set)
+    || Object.prototype.hasOwnProperty.call(set, "status");
+}
+
 enquirySchema.pre(
   ["updateOne", "findOneAndUpdate"],
   function canonicalizeUpdatedRequirementLocation(next) {
@@ -182,17 +187,36 @@ enquirySchema.pre(
     const set = update && !Array.isArray(update) && update.$set && typeof update.$set === "object"
       ? update.$set
       : null;
-    if (!set || !updateCarriesAlternateLocation(set)) return next();
+    if (!set || !updateNeedsLocationResolution(set)) return next();
 
-    const resolved = resolveRequirementLocation(set);
-    if (!resolved || resolved.source === "canonical") return next();
+    const updatedLocation = updateCarriesAlternateLocation(set)
+      ? resolveRequirementLocation(set)
+      : null;
 
     this.model.findOne(this.getQuery())
-      .select({ locationLatitude: 1, locationLongitude: 1, pincode: 1 })
+      .select({
+        locationLatitude: 1,
+        locationLongitude: 1,
+        locationPincode: 1,
+        locationSource: 1,
+        pincode: 1,
+        addressLine: 1,
+        additionalDetails: 1,
+        metadata: 1,
+        location: 1,
+        coordinates: 1,
+        latitude: 1,
+        longitude: 1,
+        lat: 1,
+        lng: 1,
+        lon: 1,
+      })
       .lean()
       .then((existing) => {
         const existingLocation = resolveRequirementLocation(existing || {});
         if (existingLocation?.source === "canonical") return next();
+        const resolved = updatedLocation || existingLocation;
+        if (!resolved) return next();
         set.locationLatitude = resolved.latitude;
         set.locationLongitude = resolved.longitude;
         if (!set.locationPincode) set.locationPincode = resolved.pincode || set.pincode || existing?.pincode || "";
