@@ -96,4 +96,6 @@ test("nearby map, alerts, API responses and Enquiry persistence use the shared r
   assert.match(controller, /withEffectiveLocation/);
   assert.match(model, /canonicalizeRequirementLocation/);
   assert.match(model, /canonicalizeUpdatedRequirementLocation/);
+  assert.match(model, /updateNeedsLocationResolution/);
+  assert.match(model, /Object\.prototype\.hasOwnProperty\.call\(set, "status"\)/);
 });
