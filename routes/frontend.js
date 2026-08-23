@@ -31,6 +31,8 @@ router.get("/enquiries/new", ...protectedPage("requirements.create"), page.enqui
 router.get("/requirements/new", ...protectedPage("requirements.create"), page.enquiryCreate);
 router.get("/enquiries/:enquiryId/edit", ...protectedPage("requirements.edit"), page.enquiryEdit);
 router.get("/requirements/:enquiryId/edit", ...protectedPage("requirements.edit"), page.enquiryEdit);
+router.get("/enquiries/:enquiryId/nearby-providers", ...protectedPage("requirements.view"), page.enquiryNearbyProviders);
+router.get("/requirements/:enquiryId/nearby-providers", ...protectedPage("requirements.view"), page.enquiryNearbyProviders);
 router.get("/enquiries/:enquiryId/providers/:providerLeadUnlockId", ...protectedPage("requirements.view"), page.enquiryProviderStatusShow);
 router.get("/requirements/:enquiryId/providers/:providerLeadUnlockId", ...protectedPage("requirements.view"), page.enquiryProviderStatusShow);
 router.get("/enquiries/:enquiryId/providers", ...protectedPage("requirements.view"), page.enquiryProviderStatuses);
