@@ -23,7 +23,7 @@
           <div class="content">
             <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
 
-            <main x-data="nearbyProviderMap()" x-init="init()" :class="loading && 'crm-loading'">
+            <main x-data="nearbyProviderMap()" :class="loading && 'crm-loading'">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
 
               <section class="card mb-3">
@@ -89,7 +89,7 @@
                   <span class="badge bg-light text-dark ms-auto" x-text="resultCountLabel"></span>
                 </div>
                 <div class="card-body p-0">
-                  <div id="nearby-provider-map" class="crm-nearby-provider-map" aria-label="Nearby providers map"></div>
+                  <div id="nearby-provider-map" x-ref="providerMap" class="crm-nearby-provider-map" aria-label="Nearby providers map"></div>
                   <div x-show="mapError" x-cloak class="alert alert-warning m-3" x-text="mapError"></div>
                 </div>
               </section>
@@ -229,33 +229,6 @@
               this.loading = false;
             }
           },
-          async ensureLeaflet() {
-            if (window.L) return window.L;
-            if (!document.querySelector('link[data-crm-leaflet]')) {
-              const stylesheet = document.createElement('link');
-              stylesheet.rel = 'stylesheet';
-              stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-              stylesheet.dataset.crmLeaflet = 'true';
-              document.head.appendChild(stylesheet);
-            }
-            await new Promise((resolve, reject) => {
-              const existing = document.querySelector('script[data-crm-leaflet]');
-              if (existing) {
-                if (window.L) return resolve();
-                existing.addEventListener('load', resolve, { once: true });
-                existing.addEventListener('error', reject, { once: true });
-                return;
-              }
-              const script = document.createElement('script');
-              script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-              script.dataset.crmLeaflet = 'true';
-              script.onload = resolve;
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-            if (!window.L) throw new Error('Map library did not load');
-            return window.L;
-          },
           escapeHtml(value) {
             return String(value || '')
               .replace(/&/g, '&amp;')
@@ -263,30 +236,6 @@
               .replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;')
               .replace(/'/g, '&#039;');
-          },
-          nextFrame() {
-            return new Promise((resolve) => {
-              if (typeof window.requestAnimationFrame === 'function') {
-                window.requestAnimationFrame(() => resolve());
-              } else {
-                window.setTimeout(resolve, 16);
-              }
-            });
-          },
-          async waitForMapContainer() {
-            if (typeof this.$nextTick === 'function') {
-              await this.$nextTick();
-            } else if (window.Alpine && typeof window.Alpine.nextTick === 'function') {
-              await window.Alpine.nextTick();
-            }
-            for (let attempt = 0; attempt < 6; attempt += 1) {
-              const container = document.getElementById('nearby-provider-map');
-              if (!container) throw new Error('Nearby provider map container was not found');
-              const rect = container.getBoundingClientRect();
-              if (rect.width > 0 && rect.height > 0) return container;
-              await this.nextFrame();
-            }
-            throw new Error('Nearby provider map container is not visible or has no size');
           },
           destroyMap() {
             if (!this.map) return;
@@ -305,16 +254,24 @@
               return;
             }
             try {
-              const L = await this.ensureLeaflet();
-              const container = await this.waitForMapContainer();
+              const L = window.L;
+              if (!L) throw new Error('Leaflet is unavailable on the Nearby Providers page');
+
+              await this.$nextTick();
+              const container = this.$refs.providerMap;
+              if (!container) throw new Error('Nearby provider map container was not found');
+              const rect = container.getBoundingClientRect();
+              if (rect.width <= 0 || rect.height <= 0) {
+                throw new Error('Nearby provider map container is not visible or has no size');
+              }
               if (renderToken !== this.mapRenderToken) return;
 
               const leadPoint = this.coordinatePoint(this.lead.latitude, this.lead.longitude);
               if (!leadPoint) throw new Error('Requirement coordinates are invalid for the map');
 
               this.destroyMap();
-              this.map = L.map(container, { scrollWheelZoom: false });
-              const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              this.map = L.map(container, { scrollWheelZoom: false }).setView(leadPoint, 12);
+              const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap contributors'
               });
@@ -365,8 +322,6 @@
 
               this.map.invalidateSize();
               this.map.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
-              await this.nextFrame();
-              if (renderToken === this.mapRenderToken && this.map) this.map.invalidateSize();
             } catch (error) {
               console.error('Nearby provider map failed', error);
               this.destroyMap();
