@@ -48,14 +48,12 @@ function joinLocation(...values) {
 }
 
 function providerLocationLabel(provider = {}) {
-  return String(provider.serviceAddress || "").trim()
-    || joinLocation(
-      provider.serviceLocality,
-      provider.city,
-      provider.serviceState || provider.state,
-      provider.servicePincode,
-    )
-    || "Service location";
+  return joinLocation(
+    provider.serviceLocality,
+    provider.city,
+    provider.serviceState || provider.state,
+    provider.servicePincode,
+  ) || "Service location";
 }
 
 function requirementLocationLabel(lead = {}) {
@@ -108,7 +106,6 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
       city: provider.city || "",
       state: provider.serviceState || provider.state || "",
       servicePincode: provider.servicePincode || "",
-      serviceAddress: provider.serviceAddress || "",
       locationLabel: providerLocationLabel(provider),
       latitude: Number(provider.serviceLatitude),
       longitude: Number(provider.serviceLongitude),
@@ -171,7 +168,6 @@ async function listNearbyProviders(enquiryId, options = {}) {
       city: 1,
       state: 1,
       servicePincode: 1,
-      serviceAddress: 1,
       serviceLatitude: 1,
       serviceLongitude: 1,
       serviceLocality: 1,
