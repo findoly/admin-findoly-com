@@ -104,6 +104,36 @@ test("missing requirement coordinates remain absent instead of becoming a zero-z
   }], 20), []);
 });
 
+test("nearby provider map uses nested requirement coordinates and formatted address", () => {
+  const service = loadNearbyProviderService();
+  const lead = {
+    enquiryId: "lead-nested-location",
+    pincode: "400095",
+    additionalDetails: {
+      location: {
+        formattedAddress: "Malad, Patelwadi, Ins Hamla, Malad West, Mumbai, Maharashtra 400095, India",
+        pincode: "400095",
+        latitude: 19.1868304,
+        longitude: 72.800849,
+      },
+    },
+  };
+  const presented = service.presentLead(lead);
+  const rows = service.buildNearbyProviderRows(lead, [{
+    providerId: "provider-near",
+    name: "Near Provider",
+    serviceLatitude: 19.19,
+    serviceLongitude: 72.80,
+  }], 20);
+
+  assert.equal(presented.latitude, 19.1868304);
+  assert.equal(presented.longitude, 72.800849);
+  assert.equal(presented.locationSource, "additionalDetails.location");
+  assert.match(presented.locationLabel, /Malad West/);
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].distanceKm < 20);
+});
+
 test("nearby provider rows exclude outside or invalid locations and sort nearest first", () => {
   const service = loadNearbyProviderService();
   const lead = {
