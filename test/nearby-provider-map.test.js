@@ -75,8 +75,24 @@ test("nearby provider page contains map, radius selector and distance list", () 
   assert.match(view, /Nearest first/);
   assert.match(view, /Farthest first/);
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
+  assert.match(view, /unpkg\.com\/leaflet@1\.9\.4/);
   assert.match(view, /openstreetmap\.org/);
   assert.match(view, /View only — this does not change the requirement's saved WhatsApp alert distance/);
+});
+
+test("nearby provider map waits for a visible container and exposes runtime failures", () => {
+  const view = source("views/enquiry/nearby-providers.ejs");
+
+  assert.match(view, /mapRenderToken/);
+  assert.match(view, /waitForMapContainer/);
+  assert.match(view, /\$nextTick/);
+  assert.match(view, /getBoundingClientRect\(\)/);
+  assert.match(view, /L\.map\(container, \{ scrollWheelZoom: false \}\)/);
+  assert.match(view, /this\.map\.invalidateSize\(\)/);
+  assert.match(view, /tileLayer\.on\('tileerror'/);
+  assert.match(view, /coordinatePoint\(provider\.latitude, provider\.longitude\)/);
+  assert.match(view, /console\.error\('Nearby provider map failed', error\)/);
+  assert.match(view, /destroyMap\(\)/);
 });
 
 test("nearby provider service uses the existing Haversine implementation and safe radius limits", () => {
