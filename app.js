@@ -98,6 +98,11 @@ app.use("/vendor/bootstrap-select", express.static(path.join(__dirname, "node_mo
   maxAge: production ? "30d" : 0,
   index: false,
 }));
+app.use("/vendor/leaflet", express.static(path.join(__dirname, "node_modules", "leaflet", "dist"), {
+  etag: true,
+  maxAge: production ? "30d" : 0,
+  index: false,
+}));
 app.use(express.static(path.join(__dirname, "public"), {
   etag: true,
   maxAge: production ? "1h" : 0,
