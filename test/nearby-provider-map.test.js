@@ -78,41 +78,50 @@ test("nearby provider page contains map, radius selector and distance list", () 
   assert.match(view, /Farthest first/);
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
   assert.match(head, /title === 'Nearby providers'/);
-  assert.match(head, /\/vendor\/leaflet\/leaflet\.css\?v=1\.9\.4/);
-  assert.match(head, /\/vendor\/leaflet\/leaflet\.js\?v=1\.9\.4/);
-  assert.doesNotMatch(head, /unpkg\.com\/leaflet/);
+  assert.match(head, /\/vendor\/openlayers\/ol\.css\?v=10\.10\.0/);
+  assert.match(head, /\/vendor\/openlayers\/dist\/ol\.js\?v=10\.10\.0/);
+  assert.doesNotMatch(head, /leaflet/i);
   assert.match(view, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
+  assert.match(view, /OpenStreetMap contributors/);
   assert.match(view, /View only — this does not change the requirement's saved WhatsApp alert distance/);
 });
 
-test("Leaflet is self-hosted from the pinned npm dependency", () => {
+test("OpenLayers is self-hosted from the pinned npm dependency", () => {
   const packageJson = JSON.parse(source("package.json"));
   const app = source("app.js");
   const head = source("views/partials/head.ejs");
 
-  assert.equal(packageJson.dependencies.leaflet, "1.9.4");
-  assert.match(app, /app\.use\("\/vendor\/leaflet", express\.static\(path\.join\(__dirname, "node_modules", "leaflet", "dist"\)/);
-  assert.match(head, /\/vendor\/leaflet\/leaflet\.css\?v=1\.9\.4/);
-  assert.match(head, /\/vendor\/leaflet\/leaflet\.js\?v=1\.9\.4/);
-  assert.doesNotMatch(head, /unpkg\.com\/leaflet/);
+  assert.equal(packageJson.dependencies.ol, "10.10.0");
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson.dependencies, "leaflet"), false);
+  assert.match(app, /app\.use\("\/vendor\/openlayers", express\.static\(path\.join\(__dirname, "node_modules", "ol"\)/);
+  assert.doesNotMatch(app, /\/vendor\/leaflet/);
+  assert.match(head, /\/vendor\/openlayers\/ol\.css\?v=10\.10\.0/);
+  assert.match(head, /\/vendor\/openlayers\/dist\/ol\.js\?v=10\.10\.0/);
+  assert.doesNotMatch(head, /leaflet/i);
 });
 
-test("nearby provider map follows Leaflet and Alpine initialization lifecycle", () => {
+test("nearby provider map follows OpenLayers and Alpine initialization lifecycle", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
   assert.doesNotMatch(view, /x-init="init\(\)"/);
-  assert.doesNotMatch(view, /ensureLeaflet/);
   assert.match(view, /mapRenderToken/);
   assert.match(view, /await this\.\$nextTick\(\)/);
   assert.match(view, /this\.\$refs\.providerMap/);
   assert.match(view, /getBoundingClientRect\(\)/);
-  assert.match(view, /L\.map\(container, \{ scrollWheelZoom: false \}\)\.setView\(leadPoint, 12\)/);
-  assert.match(view, /this\.map\.invalidateSize\(\)/);
-  assert.match(view, /this\.map\.fitBounds\(radiusCircle\.getBounds\(\), \{ padding: \[20, 20\] \}\)/);
-  assert.match(view, /tileLayer\.on\('tileerror'/);
+  assert.match(view, /const OpenLayers = window\.ol/);
+  assert.match(view, /new OpenLayers\.Map\(/);
+  assert.match(view, /OpenLayers\.proj\.fromLonLat/);
+  assert.match(view, /new OpenLayers\.geom\.Circle/);
+  assert.match(view, /new OpenLayers\.source\.OSM/);
+  assert.match(view, /tileSource\.on\('tileloaderror'/);
+  assert.match(view, /new OpenLayers\.Overlay/);
+  assert.match(view, /this\.map\.updateSize\(\)/);
+  assert.match(view, /this\.map\.getView\(\)\.fit\(radiusGeometry\.getExtent\(\)/);
   assert.match(view, /coordinatePoint\(provider\.latitude, provider\.longitude\)/);
   assert.match(view, /console\.error\('Nearby provider map failed', error\)/);
-  assert.match(view, /destroyMap\(\)/);
+  assert.match(view, /this\.map\.setTarget\(null\)/);
+  assert.doesNotMatch(view, /\bL\.map\(/);
+  assert.doesNotMatch(view, /window\.L/);
 });
 
 test("nearby provider service uses the existing Haversine implementation and safe radius limits", () => {
