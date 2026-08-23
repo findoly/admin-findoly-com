@@ -68,27 +68,36 @@ test("requirement details receives a nearby providers action without changing th
 
 test("nearby provider page contains map, radius selector and distance list", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
+  const head = source("views/partials/head.ejs");
 
   assert.match(view, /id="nearby-provider-map"/);
+  assert.match(view, /x-ref="providerMap"/);
   assert.match(view, /type="range" min="1" max="100"/);
   assert.match(view, /Nearby provider list/);
   assert.match(view, /Nearest first/);
   assert.match(view, /Farthest first/);
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
-  assert.match(view, /unpkg\.com\/leaflet@1\.9\.4/);
-  assert.match(view, /openstreetmap\.org/);
+  assert.match(head, /title === 'Nearby providers'/);
+  assert.match(head, /unpkg\.com\/leaflet@1\.9\.4\/dist\/leaflet\.css/);
+  assert.match(head, /sha256-p4NxAoJBhIIN\+hmNHrzRCf9tD\/miZyoHS5obTRR9BMY=/);
+  assert.match(head, /unpkg\.com\/leaflet@1\.9\.4\/dist\/leaflet\.js/);
+  assert.match(head, /sha256-20nQCchB9co0qIjJZRGuk2\/Z9VM\+kNiyxNV1lvTlZBo=/);
+  assert.match(view, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
   assert.match(view, /View only — this does not change the requirement's saved WhatsApp alert distance/);
 });
 
-test("nearby provider map waits for a visible container and exposes runtime failures", () => {
+test("nearby provider map follows Leaflet and Alpine initialization lifecycle", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
+  assert.doesNotMatch(view, /x-init="init\(\)"/);
+  assert.doesNotMatch(view, /ensureLeaflet/);
   assert.match(view, /mapRenderToken/);
-  assert.match(view, /waitForMapContainer/);
-  assert.match(view, /\$nextTick/);
+  assert.match(view, /await this\.\$nextTick\(\)/);
+  assert.match(view, /this\.\$refs\.providerMap/);
   assert.match(view, /getBoundingClientRect\(\)/);
-  assert.match(view, /L\.map\(container, \{ scrollWheelZoom: false \}\)/);
+  assert.match(view, /L\.map\(container, \{ scrollWheelZoom: false \}\)\.setView\(leadPoint, 12\)/);
   assert.match(view, /this\.map\.invalidateSize\(\)/);
+  assert.match(view, /this\.map\.fitBounds\(radiusCircle\.getBounds\(\), \{ padding: \[20, 20\] \}\)/);
   assert.match(view, /tileLayer\.on\('tileerror'/);
   assert.match(view, /coordinatePoint\(provider\.latitude, provider\.longitude\)/);
   assert.match(view, /console\.error\('Nearby provider map failed', error\)/);
