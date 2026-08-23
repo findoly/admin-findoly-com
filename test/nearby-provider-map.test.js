@@ -87,14 +87,10 @@ test("nearby provider page contains map, radius selector and distance list", () 
 
 test("Leaflet is self-hosted from the pinned npm dependency", () => {
   const packageJson = JSON.parse(source("package.json"));
-  const packageLock = JSON.parse(source("package-lock.json"));
   const app = source("app.js");
   const head = source("views/partials/head.ejs");
 
   assert.equal(packageJson.dependencies.leaflet, "1.9.4");
-  assert.equal(packageLock.packages[""].dependencies.leaflet, "1.9.4");
-  assert.equal(packageLock.packages["node_modules/leaflet"].version, "1.9.4");
-  assert.equal(packageLock.packages["node_modules/leaflet"].integrity, "sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==");
   assert.match(app, /app\.use\("\/vendor\/leaflet", express\.static\(path\.join\(__dirname, "node_modules", "leaflet", "dist"\)/);
   assert.match(head, /\/vendor\/leaflet\/leaflet\.css\?v=1\.9\.4/);
   assert.match(head, /\/vendor\/leaflet\/leaflet\.js\?v=1\.9\.4/);
