@@ -39,7 +39,7 @@ function loadNearbyProviderService() {
   }
 }
 
-test("nearby provider map routes are read-only and permission protected", () => {
+test("nearby provider routes are read-only and permission protected", () => {
   const apiRoutes = source("routes/enquiry.js");
   const frontendRoutes = source("routes/frontend.js");
   const controller = source("controllers/enquiryController.js");
@@ -52,76 +52,62 @@ test("nearby provider map routes are read-only and permission protected", () => 
   assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby providers"\)/);
 });
 
-test("requirement details receives a nearby providers action without changing the lead view", () => {
+test("requirement details nearby action shows the default-radius provider count", () => {
   const action = source("public/js/nearby-providers-action.js");
   const head = source("views/partials/head.ejs");
   const leadView = source("views/enquiry/show.ejs");
 
   assert.match(action, /Provider status/);
-  assert.match(action, /Nearby providers/);
-  assert.match(action, /nearby-providers/);
+  assert.match(action, /Nearby providers \(/);
+  assert.match(action, /body\.count/);
+  assert.match(action, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(leadId\) \+ '\/nearby-providers'\)/);
   assert.match(head, /title === 'Requirement details'/);
-  assert.match(head, /nearby-providers-action\.js/);
+  assert.match(head, /nearby-providers-action\.js\?v=20260823-2/);
   assert.match(leadView, /Provider status/);
   assert.match(leadView, /Lead action centre/);
 });
 
-test("nearby provider page contains map, radius selector and distance list", () => {
+test("nearby provider page is list-only and uses the saved default radius", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
-  const head = source("views/partials/head.ejs");
 
-  assert.match(view, /id="nearby-provider-map"/);
-  assert.match(view, /x-ref="providerMap"/);
-  assert.match(view, /type="range" min="1" max="100"/);
   assert.match(view, /Nearby provider list/);
+  assert.match(view, /Find provider/);
   assert.match(view, /Nearest first/);
   assert.match(view, /Farthest first/);
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
-  assert.match(head, /title === 'Nearby providers'/);
-  assert.match(head, /\/vendor\/openlayers\/ol\.css\?v=10\.10\.0/);
-  assert.match(head, /\/vendor\/openlayers\/dist\/ol\.js\?v=10\.10\.0/);
-  assert.doesNotMatch(head, /leaflet/i);
-  assert.match(view, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
-  assert.match(view, /OpenStreetMap contributors/);
-  assert.match(view, /View only — this does not change the requirement's saved WhatsApp alert distance/);
+  assert.match(view, /providerCountLabel/);
+  assert.match(view, /within the saved ' \+ this\.radiusKm \+ ' km radius'/);
+  assert.match(view, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(this\.leadId\) \+ '\/nearby-providers'\)/);
+  assert.doesNotMatch(view, /radiusKm=/);
+  assert.doesNotMatch(view, /id="nearby-provider-map"/);
+  assert.doesNotMatch(view, /type="range"/);
+  assert.doesNotMatch(view, /Provider map/);
 });
 
-test("OpenLayers is self-hosted from the pinned npm dependency", () => {
+test("map dependencies and vendor assets are removed", () => {
   const packageJson = JSON.parse(source("package.json"));
   const app = source("app.js");
   const head = source("views/partials/head.ejs");
-
-  assert.equal(packageJson.dependencies.ol, "10.10.0");
-  assert.equal(Object.prototype.hasOwnProperty.call(packageJson.dependencies, "leaflet"), false);
-  assert.match(app, /app\.use\("\/vendor\/openlayers", express\.static\(path\.join\(__dirname, "node_modules", "ol"\)/);
-  assert.doesNotMatch(app, /\/vendor\/leaflet/);
-  assert.match(head, /\/vendor\/openlayers\/ol\.css\?v=10\.10\.0/);
-  assert.match(head, /\/vendor\/openlayers\/dist\/ol\.js\?v=10\.10\.0/);
-  assert.doesNotMatch(head, /leaflet/i);
-});
-
-test("nearby provider map follows OpenLayers and Alpine initialization lifecycle", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
-  assert.doesNotMatch(view, /x-init="init\(\)"/);
-  assert.match(view, /mapRenderToken/);
-  assert.match(view, /await this\.\$nextTick\(\)/);
-  assert.match(view, /this\.\$refs\.providerMap/);
-  assert.match(view, /getBoundingClientRect\(\)/);
-  assert.match(view, /const OpenLayers = window\.ol/);
-  assert.match(view, /new OpenLayers\.Map\(/);
-  assert.match(view, /OpenLayers\.proj\.fromLonLat/);
-  assert.match(view, /new OpenLayers\.geom\.Circle/);
-  assert.match(view, /new OpenLayers\.source\.OSM/);
-  assert.match(view, /tileSource\.on\('tileloaderror'/);
-  assert.match(view, /new OpenLayers\.Overlay/);
-  assert.match(view, /this\.map\.updateSize\(\)/);
-  assert.match(view, /this\.map\.getView\(\)\.fit\(radiusGeometry\.getExtent\(\)/);
-  assert.match(view, /coordinatePoint\(provider\.latitude, provider\.longitude\)/);
-  assert.match(view, /console\.error\('Nearby provider map failed', error\)/);
-  assert.match(view, /this\.map\.setTarget\(null\)/);
-  assert.doesNotMatch(view, /\bL\.map\(/);
-  assert.doesNotMatch(view, /window\.L/);
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson.dependencies, "ol"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson.dependencies, "leaflet"), false);
+  assert.doesNotMatch(app, /\/vendor\/openlayers/);
+  assert.doesNotMatch(app, /\/vendor\/leaflet/);
+  assert.doesNotMatch(head, /\/vendor\/openlayers/);
+  assert.doesNotMatch(head, /\/vendor\/leaflet/);
+  assert.doesNotMatch(view, /OpenLayers|OpenStreetMap|tile\.openstreetmap|window\.ol|window\.L/);
+});
+
+test("nearby provider list keeps search and sorting without map lifecycle code", () => {
+  const view = source("views/enquiry/nearby-providers.ejs");
+
+  assert.match(view, /x-data="nearbyProviderList\(\)"/);
+  assert.match(view, /get filteredProviders\(\)/);
+  assert.match(view, /this\.sortOrder === 'farthest'/);
+  assert.match(view, /this\.sortOrder === 'name'/);
+  assert.match(view, /this\.providerCount = Number\.isFinite\(count\)/);
+  assert.doesNotMatch(view, /renderMap|destroyMap|mapRenderToken|providerMap|mapError/);
 });
 
 test("nearby provider service uses the existing Haversine implementation and safe radius limits", () => {
@@ -136,7 +122,7 @@ test("nearby provider service uses the existing Haversine implementation and saf
   assert.throws(() => service.normalizeRadiusKm("101", 20));
 });
 
-test("missing requirement coordinates remain absent instead of becoming a zero-zero map point", () => {
+test("missing requirement coordinates remain absent instead of becoming a zero-zero point", () => {
   const service = loadNearbyProviderService();
   const lead = service.presentLead({ enquiryId: "lead-no-location", alertDistanceKm: 20 });
 
@@ -149,7 +135,7 @@ test("missing requirement coordinates remain absent instead of becoming a zero-z
   }], 20), []);
 });
 
-test("nearby provider map uses nested requirement coordinates and formatted address", () => {
+test("nearby provider list uses nested requirement coordinates and formatted address", () => {
   const service = loadNearbyProviderService();
   const lead = {
     enquiryId: "lead-nested-location",

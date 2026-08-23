@@ -1,4 +1,15 @@
 (function addNearbyProvidersRequirementAction() {
+  async function updateCount(link, leadId) {
+    try {
+      const body = await apiFetch('/api/enquiry/' + encodeURIComponent(leadId) + '/nearby-providers');
+      const count = Number(body.count);
+      if (!Number.isFinite(count)) return;
+      link.textContent = 'Nearby providers (' + Math.max(0, Math.trunc(count)) + ')';
+    } catch (_error) {
+      // Keep the action available even if the count request cannot be completed.
+    }
+  }
+
   function insertAction() {
     const match = window.location.pathname.match(/^\/(enquiries|requirements)\/([^/]+)\/?$/);
     if (!match) return;
@@ -17,6 +28,7 @@
     link.textContent = 'Nearby providers';
     link.dataset.nearbyProvidersAction = 'true';
     providerStatus.insertAdjacentElement('afterend', link);
+    updateCount(link, match[2]);
   }
 
   if (document.readyState === 'loading') {
