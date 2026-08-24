@@ -13,6 +13,11 @@ const frontendController = {
   enquiryProviderStatuses: render("enquiry/provider-statuses", "Unlocked providers"),
   enquiryProviderStatusShow: render("enquiry/provider-status-show", "Provider unlock details"),
   providers: render("provider/index", "Providers"),
+  providerMap: (req, res) => res.render("provider/map", {
+    title: "Provider map",
+    googleMapsBrowserApiKey: String(process.env.GOOGLE_MAPS_BROWSER_API_KEY || "").trim(),
+    googleMapsMapId: String(process.env.GOOGLE_MAPS_MAP_ID || "").trim(),
+  }),
   providerRequests: render("provider-request/index", "Provider requests"),
   providerRequestShow: render("provider-request/show", "Provider request"),
   agents: render("agent/index", "Agents"),
