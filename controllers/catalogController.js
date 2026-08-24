@@ -1,4 +1,5 @@
 const service = require("../services/catalog/catalog-service");
+const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 
 async function categories(req, res, next) {
   try {
@@ -20,7 +21,9 @@ async function categories(req, res, next) {
 
 async function createCategory(req, res, next) {
   try {
-    return res.status(201).json({ success: true, data: await service.createCategory(req.body) });
+    const category = await service.createCategory(req.body);
+    const pricedCategory = await leadQualificationService.applyCategoryMaxLeadPrice(category, req.body);
+    return res.status(201).json({ success: true, data: pricedCategory });
   } catch (error) {
     return next(error);
   }
@@ -28,7 +31,9 @@ async function createCategory(req, res, next) {
 
 async function updateCategory(req, res, next) {
   try {
-    return res.json({ success: true, data: await service.updateCategory(req.params.categoryId, req.body) });
+    const category = await service.updateCategory(req.params.categoryId, req.body);
+    const pricedCategory = await leadQualificationService.applyCategoryMaxLeadPrice(category, req.body);
+    return res.json({ success: true, data: pricedCategory });
   } catch (error) {
     return next(error);
   }
