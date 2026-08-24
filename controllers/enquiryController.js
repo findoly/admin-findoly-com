@@ -64,6 +64,10 @@ async function createPublic(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    await leadQualificationService.assertDirectLeadValueEditAllowed(
+      req.params.enquiryId,
+      req.body,
+    );
     res.json({
       success: true,
       data: withEffectiveLocation(await service.update(
