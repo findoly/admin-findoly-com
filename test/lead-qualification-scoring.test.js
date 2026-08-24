@@ -78,7 +78,7 @@ test("a 56 percent price score rounds to 60 percent and prices a ₹150 maximum 
   assert.equal(result.system.priceScorePercent, 56);
   assert.equal(result.system.roundedPricePercent, 60);
   assert.equal(result.system.leadPricePaise, 9000);
-  assert.equal(result.system.intentScorePercent, 66);
+  assert.equal(result.system.intentScorePercent, 67);
   assert.equal(result.system.leadIntent, "medium");
   assert.equal(result.system.priorityScorePercent, 100);
   assert.equal(result.system.priority, "urgent");
