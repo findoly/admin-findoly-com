@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Provider network</div>
+                <h1 class="page-title mb-1">Provider map</h1>
+                <p class="crm-page-subtitle mb-0">Explore provider coverage by category, status and distance from any selected map point.</p>
+              </div>
+              <a href="/providers" class="btn btn-light crm-primary-action">
+                <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back to providers
+              </a>
+            </div>
+          </div>
+
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+
+            <main
+              x-data="providerMap()"
+              x-init="init()"
+              data-provider-map-root
+              data-google-maps-browser-api-key="<%= googleMapsBrowserApiKey %>"
+              data-google-maps-map-id="<%= googleMapsMapId %>"
+            >
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="configError" x-cloak class="alert alert-warning" x-text="configError"></div>
+              <div x-show="truncated" x-cloak class="alert alert-warning">
+                The provider map is limited to the first 10,000 records for browser safety.
+              </div>
+
+              <section class="card crm-filter-card mb-3">
+                <div class="card-body">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-xl-3 col-md-6">
+                      <label class="form-label" for="provider-map-category">Category</label>
+                      <select id="provider-map-category" class="form-select" x-model="filters.categorySlug" @change="applyDirectoryFilters()">
+                        <option value="">All categories</option>
+                        <template x-for="category in categories" :key="category">
+                          <option :value="category" x-text="categoryLabel(category)"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                      <label class="form-label" for="provider-map-status">Status</label>
+                      <select id="provider-map-status" class="form-select" x-model="filters.status" @change="applyDirectoryFilters()">
+                        <option value="">All providers</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                    </div>
+                    <div class="col-xl-2 col-md-6">
+                      <label class="form-label" for="provider-map-radius">Distance radius</label>
+                      <div class="input-group">
+                        <input
+                          id="provider-map-radius"
+                          type="number"
+                          class="form-control"
+                          min="1"
+                          max="100"
+                          step="1"
+                          x-model.number="radiusKm"
+                          @change="normalizeRadius()"
+                          aria-describedby="provider-map-radius-help"
+                        >
+                        <span class="input-group-text">km</span>
+                      </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                      <div class="d-flex flex-wrap gap-2" aria-label="Quick radius choices">
+                        <button type="button" class="btn btn-light btn-sm" @click="setRadius(5)">5 km</button>
+                        <button type="button" class="btn btn-light btn-sm" @click="setRadius(10)">10 km</button>
+                        <button type="button" class="btn btn-light btn-sm" @click="setRadius(20)">20 km</button>
+                        <button type="button" class="btn btn-light btn-sm" @click="setRadius(50)">50 km</button>
+                        <button type="button" class="btn btn-light btn-sm" @click="setRadius(100)">100 km</button>
+                      </div>
+                    </div>
+                    <div class="col-xl-2 col-md-6 d-flex gap-2 justify-content-xl-end">
+                      <button type="button" class="btn btn-light" @click="clearDirectoryFilters()" :disabled="!filters.categorySlug && !filters.status">Clear filters</button>
+                      <button type="button" class="btn btn-light" @click="clearCenter()" :disabled="!selectedCenter">Clear point</button>
+                    </div>
+                  </div>
+                  <div id="provider-map-radius-help" class="form-text mt-2">
+                    Click anywhere on the map to set the center. The radius is view-only and does not change provider alert settings.
+                  </div>
+                </div>
+              </section>
+
+              <section class="card crm-data-card">
+                <div class="card-header crm-card-heading crm-list-heading provider-map-heading">
+                  <div>
+                    <h2 class="card-title mb-1">Coverage overview</h2>
+                    <p class="text-muted mb-0" x-text="selectedPointLabel()"></p>
+                  </div>
+                  <span class="crm-list-refresh" x-show="loading || mapLoading"><span></span>Refreshing</span>
+                </div>
+
+                <div class="provider-map-summary border-bottom">
+                  <div><span>Matching providers</span><strong x-text="totalFiltered"></strong></div>
+                  <div><span>Providers on map</span><strong x-text="providersOnMap"></strong></div>
+                  <div><span>Missing location</span><strong x-text="missingLocationCount"></strong></div>
+                  <div><span>Radius</span><strong><span x-text="radiusKm"></span> km</strong></div>
+                </div>
+
+                <div class="position-relative">
+                  <div x-ref="mapCanvas" class="provider-network-map" role="region" aria-label="Provider coverage map" x-show="!configError"></div>
+                  <div class="provider-map-placeholder" x-show="!mapReady && !mapLoading && configError" x-cloak>
+                    <strong>Google Maps configuration required</strong>
+                    <span>Set the browser Maps key and Map ID for this CRM environment.</span>
+                  </div>
+                </div>
+              </section>
+            </main>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .provider-network-map {
+        width: 100%;
+        min-height: 560px;
+        background: #f4f6f8;
+      }
+      .provider-map-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .provider-map-summary > div {
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .provider-map-summary > div > span {
+        color: var(--bs-secondary-color, #6c757d);
+        font-size: .8125rem;
+      }
+      .provider-map-summary strong {
+        font-size: 1.05rem;
+      }
+      .provider-map-placeholder {
+        min-height: 560px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 24px;
+        text-align: center;
+        color: var(--bs-secondary-color, #6c757d);
+      }
+      @media (max-width: 767.98px) {
+        .provider-network-map,
+        .provider-map-placeholder {
+          min-height: 420px;
+        }
+        .provider-map-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+    <script src="/js/provider-map.js"></script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>
