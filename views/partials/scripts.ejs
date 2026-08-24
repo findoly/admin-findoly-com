@@ -291,27 +291,28 @@
     return items;
   }
 
-  function crmPaginationComponentState(container) {
+  function crmPaginationContext(container) {
     if (!window.Alpine || typeof window.Alpine.$data !== 'function') return null;
+    const currentElement = container.__crmCurrentPageElement;
+    const expression = String(currentElement?.getAttribute('x-text') || '').trim();
+    const match = expression.match(/^([A-Za-z_$][\w$]*)\.page$/);
+    if (!match) return null;
+    const paginationKey = match[1];
+
     let scope = container.closest('[x-data]');
     while (scope) {
       try {
         const state = window.Alpine.$data(scope);
-        if (state && state.pagination) return state;
+        const pagination = state?.[paginationKey];
+        if (pagination && typeof pagination === 'object') {
+          return { state, pagination, paginationKey };
+        }
       } catch (error) {
-        // Continue looking for the nearest Alpine component that owns pagination.
+        // Continue looking for the nearest Alpine component that owns this pagination object.
       }
       scope = scope.parentElement ? scope.parentElement.closest('[x-data]') : null;
     }
     return null;
-  }
-
-  function crmPaginationLoadState(state) {
-    if (state && typeof state.load === 'function') {
-      state.load();
-      return true;
-    }
-    return false;
   }
 
   function renderCrmPaginationNumbers(container) {
@@ -323,8 +324,8 @@
     container.querySelectorAll('[data-crm-page-number], [data-crm-page-ellipsis]').forEach((element) => element.remove());
 
     const currentPage = Math.max(1, Number(currentElement.textContent.trim()) || 1);
-    const state = crmPaginationComponentState(container);
-    const hasNext = state?.pagination ? Boolean(state.pagination.hasNext) : !nextButton.disabled;
+    const context = crmPaginationContext(container);
+    const hasNext = context?.pagination ? Boolean(context.pagination.hasNext) : !nextButton.disabled;
     const items = knownCursorPageItems(currentPage, hasNext);
 
     currentElement.setAttribute('aria-current', 'page');
@@ -352,17 +353,20 @@
       button.textContent = String(item);
       button.setAttribute('aria-label', 'Go to page ' + item);
       button.addEventListener('click', () => {
-        const liveState = crmPaginationComponentState(container);
-        if (!liveState?.pagination) return;
-        if (item === Number(liveState.pagination.page) + 1) {
+        const liveContext = crmPaginationContext(container);
+        const livePagination = liveContext?.pagination;
+        const livePage = Number(livePagination?.page || currentElement.textContent.trim() || 1);
+        if (item === livePage + 1) {
           nextButton.click();
           return;
         }
-        if (item === Number(liveState.pagination.page) - 1) {
+        if (item === livePage - 1) {
           previousButton.click();
           return;
         }
-        if (cursorGoToPage(liveState.pagination, item)) crmPaginationLoadState(liveState);
+        if (item < livePage - 1 && livePagination && cursorGoToPage(livePagination, item + 1)) {
+          previousButton.click();
+        }
       });
       container.insertBefore(button, nextButton);
     }
@@ -397,7 +401,6 @@
   }, { once: true });
 
   const CRM_SIDEBAR_COLLAPSED_KEY = 'leadops.crm.sidebar.collapsed.v1';
-
   function readSidebarCollapsed() {
     try {
       return window.localStorage.getItem(CRM_SIDEBAR_COLLAPSED_KEY) === '1';
