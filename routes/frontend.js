@@ -40,6 +40,7 @@ router.get("/requirements/:enquiryId/providers", ...protectedPage("requirements.
 router.get("/enquiries/:enquiryId", ...protectedPage("requirements.view"), page.enquiryShow);
 router.get("/requirements/:enquiryId", ...protectedPage("requirements.view"), page.enquiryShow);
 router.get("/providers", ...protectedPage("providers.view"), page.providers);
+router.get("/providers/map", ...protectedPage("providers.view"), page.providerMap);
 router.get("/provider-requests", ...protectedPage("provider_requests.view"), page.providerRequests);
 router.get("/provider-requests/:providerJoinRequestId", ...protectedPage("provider_requests.view"), page.providerRequestShow);
 router.get("/providers/new", ...protectedPage("providers.create"), page.providerCreate);
