@@ -1,5 +1,6 @@
 const service = require("../services/enquiry/enquiry-service");
 const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
+const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 function withEffectiveLocation(data) {
@@ -78,6 +79,7 @@ async function update(req, res, next) {
 
 async function status(req, res, next) {
   try {
+    await leadQualificationService.assertJourneyTransitionAllowed(req.params.enquiryId, req.body);
     res.json({
       success: true,
       data: withEffectiveLocation(await service.updateStatus(
@@ -85,6 +87,47 @@ async function status(req, res, next) {
         req.body,
         req.admin?.email || "admin",
       )),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function qualification(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadQualificationService.getQualification(req.params.enquiryId),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function qualificationPreview(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadQualificationService.previewQualification(req.params.enquiryId, req.body),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function saveQualification(req, res, next) {
+  try {
+    const result = await leadQualificationService.saveQualification(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    res.json({
+      success: true,
+      data: {
+        qualification: result.qualification,
+        lead: withEffectiveLocation(result.lead),
+      },
     });
   } catch (error) {
     next(error);
@@ -195,6 +238,9 @@ module.exports = {
   createPublic,
   update,
   status,
+  qualification,
+  qualificationPreview,
+  saveQualification,
   referralValidation,
   saleConversion,
   note,
