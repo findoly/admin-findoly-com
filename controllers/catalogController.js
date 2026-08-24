@@ -1,5 +1,11 @@
 const service = require("../services/catalog/catalog-service");
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
+const { normalizeCategoryMaxLeadPricePaise } = require("../utils/lead-qualification");
+
+function validateQualificationPricing(input = {}) {
+  if (!Object.prototype.hasOwnProperty.call(input, "maxLeadPricePaise")) return;
+  normalizeCategoryMaxLeadPricePaise(input.maxLeadPricePaise);
+}
 
 async function categories(req, res, next) {
   try {
@@ -21,6 +27,7 @@ async function categories(req, res, next) {
 
 async function createCategory(req, res, next) {
   try {
+    validateQualificationPricing(req.body);
     const category = await service.createCategory(req.body);
     const pricedCategory = await leadQualificationService.applyCategoryMaxLeadPrice(category, req.body);
     return res.status(201).json({ success: true, data: pricedCategory });
@@ -31,6 +38,7 @@ async function createCategory(req, res, next) {
 
 async function updateCategory(req, res, next) {
   try {
+    validateQualificationPricing(req.body);
     const category = await service.updateCategory(req.params.categoryId, req.body);
     const pricedCategory = await leadQualificationService.applyCategoryMaxLeadPrice(category, req.body);
     return res.json({ success: true, data: pricedCategory });
