@@ -46,6 +46,7 @@ const STATUS_FILTERS = Object.freeze({
   rejected: ["rejected"],
 });
 const TIMELINE_LIMIT = 50;
+const DEFAULT_PROVIDER_UNLOCKS = 3;
 
 function hasNumericValue(value) {
   return value !== null
@@ -137,6 +138,12 @@ async function normalizeInput(input = {}, current = {}) {
     && currentAlertDistanceKm <= 100
     ? currentAlertDistanceKm
     : await catalogService.getCategoryAlertDistanceKm(categorySlug);
+  const currentMaxProviderUnlocks = Number(current.maxProviderUnlocks);
+  const maxProviderUnlockFallback = Number.isInteger(currentMaxProviderUnlocks)
+    && currentMaxProviderUnlocks >= 1
+    && currentMaxProviderUnlocks <= 1000
+    ? currentMaxProviderUnlocks
+    : await catalogService.getCategoryDefaultProviderUnlocks(categorySlug);
 
   const name = humanTextValue(input.name ?? current.name, {
     label: "Customer name",
@@ -219,7 +226,7 @@ async function normalizeInput(input = {}, current = {}) {
     }),
     maxProviderUnlocks: numberValue(input.maxProviderUnlocks, {
       label: "Maximum provider unlocks",
-      fallback: current.maxProviderUnlocks ?? 5,
+      fallback: maxProviderUnlockFallback,
       min: Math.max(1, usedUnlockSlots),
       max: 1000,
       integer: true,
@@ -281,7 +288,7 @@ function presentEnquiry(row = {}) {
   const maxProviderUnlocks = Number.isInteger(Number(row.maxProviderUnlocks))
     && Number(row.maxProviderUnlocks) > 0
     ? Number(row.maxProviderUnlocks)
-    : 5;
+    : DEFAULT_PROVIDER_UNLOCKS;
   const alertDistanceKm = Number(row.alertDistanceKm);
   const unlockedCount = Math.max(0, Number(row.unlockedCount || 0));
   const reservedUnlockCount = Math.max(0, Number(row.reservedUnlockCount || 0));
@@ -471,7 +478,7 @@ async function publishMarketplace(enquiryId, actor = "system") {
 
   lead = await ensureEnquiryLocation(lead);
   const now = new Date();
-  const maxProviderUnlocks = Math.max(1, Number(lead.maxProviderUnlocks || 5));
+  const maxProviderUnlocks = Math.max(1, Number(lead.maxProviderUnlocks || DEFAULT_PROVIDER_UNLOCKS));
   const unlockedCount = Math.max(0, Number(lead.unlockedCount || 0));
   const reservedUnlockCount = Math.max(0, Number(lead.reservedUnlockCount || 0));
   const remainingUnlocks = Math.max(0, maxProviderUnlocks - unlockedCount - reservedUnlockCount);
