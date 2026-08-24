@@ -40,7 +40,8 @@ function isQualificationComplete(lead = {}) {
     lead.leadQualification
     && lead.leadQualification.completed === true
     && lead.leadQualification.completedAt
-    && lead.leadQualification.final,
+    && lead.leadQualification.final
+    && String(lead.leadQualification.categorySlug || "") === String(lead.categorySlug || ""),
   );
 }
 
@@ -139,7 +140,7 @@ async function saveQualification(enquiryId, input = {}, actor = "admin") {
   const calculated = calculateQualification(input.answers || {}, categoryMaxLeadPricePaise);
   const final = normalizeFinalSelection(input.overrides || input.final || {}, calculated.system);
   const now = new Date();
-  const requalifying = isQualificationComplete(lead);
+  const requalifying = Boolean(lead.leadQualification?.completed);
   const snapshot = {
     version: 1,
     completed: true,
@@ -243,6 +244,26 @@ async function assertJourneyTransitionAllowed(enquiryId, input = {}) {
   }
 }
 
+async function assertDirectLeadValueEditAllowed(enquiryId, input = {}) {
+  const protectedFields = ["leadPricePaise", "leadIntent", "priority"];
+  if (!protectedFields.some((field) => Object.prototype.hasOwnProperty.call(input || {}, field))) return;
+  const lead = await getLead(enquiryId);
+  if (isProviderControlled(lead)) {
+    throw qualificationError(
+      "Lead price, intent and priority are locked after approval or provider access",
+      409,
+      "LEAD_QUALIFICATION_LOCKED",
+    );
+  }
+  if (isQualificationComplete(lead)) {
+    throw qualificationError(
+      "Use Lead Qualification to change price, intent or priority so the override is recorded",
+      400,
+      "LEAD_QUALIFICATION_OVERRIDE_REQUIRED",
+    );
+  }
+}
+
 async function applyCategoryMaxLeadPrice(category = {}, input = {}) {
   const categoryId = String(category.categoryId || category.id || "").trim();
   const supplied = Object.prototype.hasOwnProperty.call(input || {}, "maxLeadPricePaise");
@@ -267,6 +288,7 @@ module.exports = {
   previewQualification,
   saveQualification,
   assertJourneyTransitionAllowed,
+  assertDirectLeadValueEditAllowed,
   applyCategoryMaxLeadPrice,
   getCategoryMaxLeadPricePaise,
   isQualificationComplete,
