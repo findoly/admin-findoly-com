@@ -47,8 +47,10 @@ test("CRM publishes once and controls the provider unlock limit", () => {
   assert.match(service, /Approve the lead before publishing it to the marketplace/);
   assert.match(service, /marketplacePublishedAt/);
   assert.match(service, /maxProviderUnlocks/);
+  assert.match(service, /getCategoryDefaultProviderUnlocks/);
   assert.doesNotMatch(service, /Provider\.find\(/);
   assert.match(form, /Maximum provider unlocks/);
-  assert.match(form, /maxProviderUnlocks:\s*5/);
+  assert.match(form, /maxProviderUnlocks:\s*3/);
+  assert.match(form, /defaultProviderUnlocks/);
   assert.match(show, /of.*unlocked/);
 });

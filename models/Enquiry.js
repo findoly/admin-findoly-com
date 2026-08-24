@@ -83,8 +83,8 @@ const enquirySchema = new mongoose.Schema(
     timeline: { type: [mongoose.Schema.Types.Mixed], default: [] },
     unlockedCount: { type: Number, default: 0, min: 0 },
     reservedUnlockCount: { type: Number, default: 0, min: 0 },
-    remainingUnlocks: { type: Number, default: 5, min: 0 },
-    maxProviderUnlocks: { type: Number, default: 5, min: 1, max: 1000 },
+    remainingUnlocks: { type: Number, default: 3, min: 0 },
+    maxProviderUnlocks: { type: Number, default: 3, min: 1, max: 1000 },
     providerConfirmedCount: { type: Number, default: 0, min: 0 },
     providerSaleConversionStatus: {
       type: String,

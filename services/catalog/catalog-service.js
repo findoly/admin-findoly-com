@@ -19,6 +19,25 @@ const {
 } = require("../../utils/validation");
 
 const DEFAULT_ALERT_DISTANCE_KM = 20;
+const DEFAULT_PROVIDER_UNLOCKS = 3;
+const CATEGORY_PROVIDER_UNLOCK_CACHE_TTL_MS = 5 * 60 * 1000;
+const categoryProviderUnlockCache = new Map();
+
+function normalizeDefaultProviderUnlocks(value) {
+  const normalized = Number(value);
+  return Number.isInteger(normalized) && normalized >= 1 && normalized <= 1000
+    ? normalized
+    : DEFAULT_PROVIDER_UNLOCKS;
+}
+
+function cacheCategoryProviderUnlocks(categorySlug, value) {
+  const slug = String(categorySlug || "").trim().toLowerCase();
+  if (!slug) return;
+  categoryProviderUnlockCache.set(slug, {
+    value: normalizeDefaultProviderUnlocks(value),
+    expiresAt: Date.now() + CATEGORY_PROVIDER_UNLOCK_CACHE_TTL_MS,
+  });
+}
 
 function slugify(value) {
   return String(value || "")
@@ -57,6 +76,7 @@ function presentCategory(row = {}) {
     alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
       ? alertDistanceKm
       : DEFAULT_ALERT_DISTANCE_KM,
+    defaultProviderUnlocks: normalizeDefaultProviderUnlocks(row.defaultProviderUnlocks),
     serviceTypeCount: Number(row.serviceTypeCount || 0),
   };
 }
@@ -100,6 +120,13 @@ function normalizeCategoryInput(input = {}, current = null) {
       fallback: existing.alertDistanceKm ?? DEFAULT_ALERT_DISTANCE_KM,
       min: 1,
       max: 100,
+      integer: true,
+    }),
+    defaultProviderUnlocks: numberValue(input.defaultProviderUnlocks, {
+      label: "Default provider unlocks",
+      fallback: existing.defaultProviderUnlocks ?? DEFAULT_PROVIDER_UNLOCKS,
+      min: 1,
+      max: 1000,
       integer: true,
     }),
     displayOrder: numberValue(input.displayOrder, {
@@ -208,6 +235,7 @@ async function listCategories(options = {}) {
             .replace(/\b\w/g, (character) => character.toUpperCase()),
           description: "",
           alertDistanceKm: DEFAULT_ALERT_DISTANCE_KM,
+          defaultProviderUnlocks: DEFAULT_PROVIDER_UNLOCKS,
           active: true,
           legacy: true,
           serviceTypeCount: countMap.get(slug) || 0,
@@ -288,7 +316,9 @@ async function createCategory(input = {}) {
       sourceWebsite: "any",
       formType: "default",
     });
-    return presentCategory(category.toObject());
+    const presented = presentCategory(category.toObject());
+    cacheCategoryProviderUnlocks(presented.slug, presented.defaultProviderUnlocks);
+    return presented;
   } catch (error) {
     if (error?.code === 11000) {
       throw Object.assign(new Error("A category with this slug already exists"), {
@@ -313,6 +343,7 @@ async function updateCategory(categoryId, input = {}) {
       name: data.name,
       description: data.description,
       alertDistanceKm: data.alertDistanceKm,
+      defaultProviderUnlocks: data.defaultProviderUnlocks,
       displayOrder: data.displayOrder,
       websiteVisible: data.websiteVisible,
       imageMediaId: data.imageMediaId,
@@ -322,8 +353,9 @@ async function updateCategory(categoryId, input = {}) {
     },
   });
 
-  const updated = await Category.findOne(query).lean();
-  return presentCategory(updated);
+  const updated = presentCategory(await Category.findOne(query).lean());
+  cacheCategoryProviderUnlocks(updated.slug, updated.defaultProviderUnlocks);
+  return updated;
 }
 
 async function getCategory(categoryId) {
@@ -346,6 +378,25 @@ async function getCategoryAlertDistanceKm(categorySlug) {
   return Number.isInteger(value) && value >= 1 && value <= 100
     ? value
     : DEFAULT_ALERT_DISTANCE_KM;
+}
+
+async function getCategoryDefaultProviderUnlocks(categorySlug) {
+  const slug = tokenValue(categorySlug, {
+    label: "Category",
+    required: true,
+    maxLength: 80,
+    lowercase: true,
+  });
+  const cached = categoryProviderUnlockCache.get(slug);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) categoryProviderUnlockCache.delete(slug);
+
+  const category = await Category.findOne({ slug })
+    .select({ defaultProviderUnlocks: 1 })
+    .lean();
+  const value = normalizeDefaultProviderUnlocks(category?.defaultProviderUnlocks);
+  cacheCategoryProviderUnlocks(slug, value);
+  return value;
 }
 
 async function listServiceTypes(options = {}) {
@@ -558,6 +609,7 @@ module.exports = {
   rejectCategoryDelete,
   resolveLeadServiceTypes,
   getCategoryAlertDistanceKm,
+  getCategoryDefaultProviderUnlocks,
   slugify,
   normalizeCategoryInput,
   normalizeServiceTypeInput,

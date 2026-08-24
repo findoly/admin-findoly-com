@@ -122,7 +122,7 @@
                     <div class="col-md-3">
                       <label class="form-label">Maximum provider unlocks</label>
                       <input type="number" :min="minimumUnlockLimit()" max="1000" step="1" class="form-control" x-model.number="form.maxProviderUnlocks" required />
-                      <div class="form-text">Default is 5. The limit cannot be lower than current unlocks or active payment reservations.</div>
+                      <div class="form-text">Starts from the selected Category default. The limit cannot be lower than current unlocks or active payment reservations.</div>
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Provider alert distance (km)</label>
@@ -198,7 +198,7 @@
                     requirementTitle: "",
                     status: "new",
                     priority: "normal",
-                    maxProviderUnlocks: 5,
+                    maxProviderUnlocks: 3,
                     preferredDate: "",
                     preferredSlot: "",
                     sourceWebsite: "manual-admin",
@@ -268,6 +268,7 @@
                   async categoryChanged() {
                     const category = this.syncCategory();
                     this.form.alertDistanceKm = Number(category?.alertDistanceKm || 20);
+                    this.form.maxProviderUnlocks = Number(category?.defaultProviderUnlocks || 3);
                     this.form.serviceTypeIds = [];
                     await this.loadServiceTypes(true);
                   },
@@ -325,7 +326,7 @@
                       serviceTypeIds: [...this.form.serviceTypeIds],
                       requirementTitle: this.form.requirementTitle,
                       priority: this.form.priority,
-                      maxProviderUnlocks: Number(this.form.maxProviderUnlocks || 5),
+                      maxProviderUnlocks: Number(this.form.maxProviderUnlocks || 3),
                       preferredDate: this.form.preferredDate,
                       preferredSlot: this.form.preferredSlot,
                       sourceWebsite: this.form.sourceWebsite,
