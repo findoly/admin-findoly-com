@@ -206,9 +206,11 @@
     window.setTimeout(dismiss, lifetime);
   }
 
-  function createCursorPagination(limit = 20) {
+  function createCursorPagination(limit = 100) {
+    const requestedLimit = Number(limit);
+    const initialLimit = requestedLimit === 20 ? 100 : requestedLimit;
     return {
-      limit,
+      limit: Number.isInteger(initialLimit) && initialLimit > 0 ? Math.min(100, initialLimit) : 100,
       page: 1,
       cursor: '',
       nextCursor: '',
@@ -228,10 +230,10 @@
   }
 
   function applyCursorPagination(pagination, response = {}) {
-    const requestedLimit = Number(response.limit || pagination.limit || 20);
+    const requestedLimit = Number(response.limit || pagination.limit || 100);
     pagination.limit = Number.isInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(100, requestedLimit)
-      : 20;
+      : 100;
     pagination.nextCursor = typeof response.nextCursor === 'string' ? response.nextCursor : '';
     pagination.hasNext = Boolean(response.hasNext && pagination.nextCursor);
     const returned = Number(response.returned || 0);
@@ -252,6 +254,147 @@
     pagination.page -= 1;
     return true;
   }
+
+  function cursorGoToPage(pagination, targetPage) {
+    const target = Number(targetPage);
+    const current = Number(pagination?.page || 1);
+    if (!Number.isInteger(target) || target < 1 || target === current) return false;
+    if (target === current + 1) return cursorNext(pagination);
+    if (target > current) return false;
+
+    const history = Array.isArray(pagination.history) ? pagination.history : [];
+    const historyIndex = target - 1;
+    if (historyIndex >= history.length) return false;
+
+    pagination.cursor = history[historyIndex] || '';
+    pagination.history = history.slice(0, historyIndex);
+    pagination.page = target;
+    pagination.nextCursor = '';
+    pagination.hasNext = false;
+    pagination.returned = 0;
+    return true;
+  }
+
+  function knownCursorPageItems(currentPage, hasNext) {
+    const current = Math.max(1, Number(currentPage) || 1);
+    const lastKnown = current + (hasNext ? 1 : 0);
+    const wanted = new Set([1, current - 2, current - 1, current, current + 1, lastKnown]);
+    const pages = [...wanted]
+      .filter((page) => Number.isInteger(page) && page >= 1 && page <= lastKnown)
+      .sort((a, b) => a - b);
+    const items = [];
+    for (const page of pages) {
+      const previous = items[items.length - 1];
+      if (typeof previous === 'number' && page - previous > 1) items.push('ellipsis');
+      items.push(page);
+    }
+    return items;
+  }
+
+  function crmPaginationComponentState(container) {
+    if (!window.Alpine || typeof window.Alpine.$data !== 'function') return null;
+    let scope = container.closest('[x-data]');
+    while (scope) {
+      try {
+        const state = window.Alpine.$data(scope);
+        if (state && state.pagination) return state;
+      } catch (error) {
+        // Continue looking for the nearest Alpine component that owns pagination.
+      }
+      scope = scope.parentElement ? scope.parentElement.closest('[x-data]') : null;
+    }
+    return null;
+  }
+
+  function crmPaginationLoadState(state) {
+    if (state && typeof state.load === 'function') {
+      state.load();
+      return true;
+    }
+    return false;
+  }
+
+  function renderCrmPaginationNumbers(container) {
+    const currentElement = container.__crmCurrentPageElement;
+    const previousButton = container.__crmPreviousButton;
+    const nextButton = container.__crmNextButton;
+    if (!currentElement || !previousButton || !nextButton) return;
+
+    container.querySelectorAll('[data-crm-page-number], [data-crm-page-ellipsis]').forEach((element) => element.remove());
+
+    const currentPage = Math.max(1, Number(currentElement.textContent.trim()) || 1);
+    const state = crmPaginationComponentState(container);
+    const hasNext = state?.pagination ? Boolean(state.pagination.hasNext) : !nextButton.disabled;
+    const items = knownCursorPageItems(currentPage, hasNext);
+
+    currentElement.setAttribute('aria-current', 'page');
+    currentElement.setAttribute('aria-label', 'Current page ' + currentPage);
+    currentElement.dataset.crmCurrentPage = 'true';
+
+    if (currentElement.parentElement === container) currentElement.remove();
+
+    for (const item of items) {
+      if (item === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.dataset.crmPageEllipsis = 'true';
+        ellipsis.setAttribute('aria-hidden', 'true');
+        ellipsis.textContent = '…';
+        container.insertBefore(ellipsis, nextButton);
+        continue;
+      }
+      if (item === currentPage) {
+        container.insertBefore(currentElement, nextButton);
+        continue;
+      }
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.crmPageNumber = String(item);
+      button.textContent = String(item);
+      button.setAttribute('aria-label', 'Go to page ' + item);
+      button.addEventListener('click', () => {
+        const liveState = crmPaginationComponentState(container);
+        if (!liveState?.pagination) return;
+        if (item === Number(liveState.pagination.page) + 1) {
+          nextButton.click();
+          return;
+        }
+        if (item === Number(liveState.pagination.page) - 1) {
+          previousButton.click();
+          return;
+        }
+        if (cursorGoToPage(liveState.pagination, item)) crmPaginationLoadState(liveState);
+      });
+      container.insertBefore(button, nextButton);
+    }
+  }
+
+  function enhanceCrmPagination(container) {
+    if (!container || container.dataset.crmNumberedPagination === 'true') return;
+    const children = [...container.children];
+    const navigationButtons = children.filter((element) => element.tagName === 'BUTTON');
+    const currentElement = children.find((element) => element.tagName === 'SPAN');
+    if (navigationButtons.length < 2 || !currentElement) return;
+
+    container.dataset.crmNumberedPagination = 'true';
+    container.__crmPreviousButton = navigationButtons[0];
+    container.__crmNextButton = navigationButtons[navigationButtons.length - 1];
+    container.__crmCurrentPageElement = currentElement;
+
+    const observer = new MutationObserver(() => renderCrmPaginationNumbers(container));
+    observer.observe(currentElement, { childList: true, characterData: true, subtree: true });
+    observer.observe(container.__crmNextButton, { attributes: true, attributeFilter: ['disabled'] });
+    renderCrmPaginationNumbers(container);
+  }
+
+  function enhanceAllCrmPaginations() {
+    document.querySelectorAll('.crm-pagination').forEach(enhanceCrmPagination);
+  }
+
+  document.addEventListener('alpine:initialized', enhanceAllCrmPaginations);
+  document.addEventListener('DOMContentLoaded', () => {
+    enhanceAllCrmPaginations();
+    window.setTimeout(enhanceAllCrmPaginations, 0);
+  }, { once: true });
 
   const CRM_SIDEBAR_COLLAPSED_KEY = 'leadops.crm.sidebar.collapsed.v1';
 
