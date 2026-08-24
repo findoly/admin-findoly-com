@@ -188,8 +188,8 @@ async function saveQualification(enquiryId, input = {}, actor = "admin") {
       { status: { $ne: "approved" } },
       { marketplaceAvailable: { $ne: true } },
       { marketplaceStatus: { $ne: "published" } },
-      { unlockedCount: { $in: [0, null] } },
-      { reservedUnlockCount: { $in: [0, null] } },
+      { $or: [{ unlockedCount: 0 }, { unlockedCount: null }, { unlockedCount: { $exists: false } }] },
+      { $or: [{ reservedUnlockCount: 0 }, { reservedUnlockCount: null }, { reservedUnlockCount: { $exists: false } }] },
     ],
   };
   const result = await Enquiry.updateOne(updateQuery, {
