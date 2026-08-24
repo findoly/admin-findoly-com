@@ -10,6 +10,7 @@ const categorySchema = new mongoose.Schema(
     formType: { type: String, default: "default" },
     description: { type: String, default: "", maxlength: 2000 },
     alertDistanceKm: { type: Number, default: 20, min: 1, max: 100 },
+    defaultProviderUnlocks: { type: Number, default: 3, min: 1, max: 1000 },
     displayOrder: { type: Number, default: 0, min: 0, max: 100000, index: true },
     websiteVisible: { type: Boolean, default: true, index: true },
     imageMediaId: { type: String, default: "", index: true, maxlength: 64 },
