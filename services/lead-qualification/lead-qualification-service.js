@@ -244,10 +244,24 @@ async function assertJourneyTransitionAllowed(enquiryId, input = {}) {
   }
 }
 
+function normalizedProtectedValue(field, value) {
+  if (field === "leadPricePaise") return Number(value);
+  return String(value || "").trim().toLowerCase();
+}
+
 async function assertDirectLeadValueEditAllowed(enquiryId, input = {}) {
   const protectedFields = ["leadPricePaise", "leadIntent", "priority"];
-  if (!protectedFields.some((field) => Object.prototype.hasOwnProperty.call(input || {}, field))) return;
+  const suppliedFields = protectedFields.filter((field) =>
+    Object.prototype.hasOwnProperty.call(input || {}, field),
+  );
+  if (!suppliedFields.length) return;
+
   const lead = await getLead(enquiryId);
+  const changedFields = suppliedFields.filter((field) =>
+    normalizedProtectedValue(field, input[field]) !== normalizedProtectedValue(field, lead[field]),
+  );
+  if (!changedFields.length) return;
+
   if (isProviderControlled(lead)) {
     throw qualificationError(
       "Lead price, intent and priority are locked after approval or provider access",
