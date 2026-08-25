@@ -95,6 +95,7 @@
     if (context.pincodeInput && PINCODE_PATTERN.test(currentPincode)) {
       context.pincodeInput.dataset.crmOriginalPincode = currentPincode;
     }
+    return pincodeChanged;
   }
 
   function applyRequirementLocation(location, context) {
@@ -114,18 +115,24 @@
     if (context.pincodeInput && PINCODE_PATTERN.test(currentPincode)) {
       context.pincodeInput.dataset.crmOriginalPincode = currentPincode;
     }
+    return pincodeChanged;
   }
 
   function applyLocation(location, requestedPincode) {
     try {
       const context = currentContext();
-      if (!context?.pincodeInput || !location || typeof location !== "object") return;
+      if (!context?.pincodeInput || !location || typeof location !== "object") return null;
       const currentPincode = cleanText(context.pincodeInput.value, 6);
-      if (!PINCODE_PATTERN.test(currentPincode) || currentPincode !== requestedPincode) return;
-      if (context.type === "provider") applyProviderLocation(location, context);
-      else if (context.type === "requirement") applyRequirementLocation(location, context);
+      if (!PINCODE_PATTERN.test(currentPincode) || currentPincode !== requestedPincode) return null;
+      const pincodeChanged = context.type === "provider"
+        ? applyProviderLocation(location, context)
+        : context.type === "requirement"
+          ? applyRequirementLocation(location, context)
+          : false;
+      return { context, pincodeChanged: Boolean(pincodeChanged) };
     } catch (_error) {
       // Location enrichment is optional and must never block CRM form usage.
+      return null;
     }
   }
 
@@ -137,7 +144,22 @@
       const body = await originalApiFetch(url, options);
       try {
         const match = String(url || "").match(PINCODE_API_PATTERN);
-        if (match) applyLocation(body?.data, match[1]);
+        if (match) {
+          const applied = applyLocation(body?.data, match[1]);
+          if (applied && !applied.pincodeChanged && body?.data && typeof body.data === "object") {
+            // The legacy form lookup assigns city/state again after apiFetch resolves.
+            // Return empty suggestions on an unchanged PIN so those assignments preserve
+            // manually customized values that the runtime intentionally left untouched.
+            return {
+              ...body,
+              data: {
+                ...body.data,
+                city: "",
+                state: "",
+              },
+            };
+          }
+        }
       } catch (_error) {
         // Optional UI enrichment must not alter the API call result.
       }
