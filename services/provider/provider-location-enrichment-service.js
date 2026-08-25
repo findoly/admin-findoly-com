@@ -50,6 +50,35 @@ async function persistProviderLocation(providerId, provider, update) {
   return result.matchedCount ? { ...provider, ...update } : provider;
 }
 
+function manualFallback(provider = {}) {
+  return {
+    serviceLatitude: null,
+    serviceLongitude: null,
+    serviceLocality: "",
+    serviceDistrict: "",
+    serviceState: provider.state || "",
+    serviceCountry: "India",
+    serviceLocationVerifiedAt: null,
+    serviceLocationSource: "manual_pincode",
+  };
+}
+
+async function persistManualFallback(providerId, provider) {
+  const fallback = manualFallback(provider);
+  try {
+    return await persistProviderLocation(providerId, provider, fallback);
+  } catch (persistError) {
+    console.warn({
+      event: "provider_location_fallback_save_failed",
+      providerId,
+      pincode: cleanText(provider.servicePincode, 6),
+      code: String(persistError.code || "LOCATION_SAVE_FAILED"),
+      message: String(persistError.message || persistError).slice(0, 1000),
+    });
+    return { ...provider, ...fallback };
+  }
+}
+
 async function enrichProviderLocation(
   provider = {},
   { pincodeChanged = false, previousProvider = {}, submittedProvider = {} } = {},
@@ -57,6 +86,13 @@ async function enrichProviderLocation(
   const providerId = cleanText(provider.providerId || provider.id, 128);
   const pincode = cleanText(provider.servicePincode, 6);
   if (!providerId || !/^[1-9]\d{5}$/.test(pincode)) return provider;
+
+  const providerLocationSource = cleanText(provider.serviceLocationSource, 80).toLowerCase();
+  if (pincodeChanged && providerLocationSource === "manual_pincode") {
+    // The lower-level provider save already attempted Google and fell back.
+    // Do not create a second timeout window in the same user Save request.
+    return persistManualFallback(providerId, provider);
+  }
 
   try {
     const location = await geocodePincode(pincode);
@@ -119,7 +155,6 @@ async function enrichProviderLocation(
       && validCoordinate(location?.longitude, -180, 180);
     const providerCoordinatesValid = validCoordinate(provider.serviceLatitude, -90, 90)
       && validCoordinate(provider.serviceLongitude, -180, 180);
-    const providerLocationSource = cleanText(provider.serviceLocationSource, 80).toLowerCase();
     const providerCoordinatesVerified = providerCoordinatesValid && providerLocationSource !== "manual_pincode";
     if (googleCoordinatesValid) {
       if (pincodeChanged || !providerCoordinatesVerified) {
@@ -153,29 +188,7 @@ async function enrichProviderLocation(
       message: String(error.message || error).slice(0, 1000),
     });
     if (!pincodeChanged) return provider;
-
-    const fallback = {
-      serviceLatitude: null,
-      serviceLongitude: null,
-      serviceLocality: "",
-      serviceDistrict: "",
-      serviceState: provider.state || "",
-      serviceCountry: "India",
-      serviceLocationVerifiedAt: null,
-      serviceLocationSource: "manual_pincode",
-    };
-    try {
-      return await persistProviderLocation(providerId, provider, fallback);
-    } catch (persistError) {
-      console.warn({
-        event: "provider_location_fallback_save_failed",
-        providerId,
-        pincode,
-        code: String(persistError.code || "LOCATION_SAVE_FAILED"),
-        message: String(persistError.message || persistError).slice(0, 1000),
-      });
-      return { ...provider, ...fallback };
-    }
+    return persistManualFallback(providerId, provider);
   }
 }
 
