@@ -65,7 +65,10 @@ async function update(req, res, next) {
       req.admin?.email || req.admin?.employeeId || "crm-admin",
     );
     const pincodeChanged = String(current.servicePincode || "") !== String(updated.servicePincode || "");
-    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(updated, { pincodeChanged });
+    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(updated, {
+      pincodeChanged,
+      previousProvider: current,
+    });
     res.json({
       success: true,
       data: enriched,
