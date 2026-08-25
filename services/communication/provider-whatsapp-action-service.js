@@ -1,6 +1,7 @@
 "use strict";
 
 const Communication = require("../../models/Communication");
+const Enquiry = require("../../models/Enquiry");
 const communicationService = require("./communication-service");
 const providerActionService = require("../integration/provider-action-service");
 const {
@@ -10,8 +11,16 @@ const {
 } = require("./whatsapp-action-token");
 const { normalizeMobile } = require("../../utils/mobile");
 const { boundedJsonValue } = require("../../utils/bounded-json");
+const { QUESTIONS } = require("../../utils/lead-qualification");
 
 const ACTION_HISTORY_LIMIT = 200;
+const PROVIDER_QUALIFICATION_FIELDS = Object.freeze([
+  Object.freeze({ id: "readiness", label: "Readiness" }),
+  Object.freeze({ id: "timeline", label: "Service timeline" }),
+  Object.freeze({ id: "clarity", label: "Requirement clarity" }),
+  Object.freeze({ id: "responsiveness", label: "Responsiveness" }),
+  Object.freeze({ id: "requirement_size", label: "Requirement size" }),
+]);
 
 function actionHistoryPush(entry) {
   return { $each: [entry], $slice: -ACTION_HISTORY_LIMIT };
@@ -21,6 +30,11 @@ function textFrom(value) {
   if (value === undefined || value === null) return "";
   if (typeof value === "string" || typeof value === "number") return String(value).trim();
   return "";
+}
+
+function humanize(value) {
+  const text = textFrom(value).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 function quickReplyDetails(event = {}) {
@@ -105,11 +119,74 @@ function joinLocation(lead = {}) {
     .join(", ");
 }
 
+function qualificationAnswerLabel(snapshot = {}, questionId) {
+  const saved = (Array.isArray(snapshot.answers) ? snapshot.answers : [])
+    .find((item) => String(item?.questionId || "") === questionId);
+  if (textFrom(saved?.answer)) return textFrom(saved.answer);
+  const question = QUESTIONS.find((item) => item.id === questionId);
+  const option = question?.options?.find((item) => item.id === saved?.answerId);
+  return textFrom(option?.label);
+}
+
+function messageContextFromLead(lead = {}) {
+  const qualification = lead.leadQualification && typeof lead.leadQualification === "object"
+    ? lead.leadQualification
+    : {};
+  const completed = qualification.completed === true;
+  const providerQualification = completed
+    ? PROVIDER_QUALIFICATION_FIELDS
+      .map((field) => ({ ...field, value: qualificationAnswerLabel(qualification, field.id) }))
+      .filter((field) => field.value)
+    : [];
+  const final = completed && qualification.final && typeof qualification.final === "object"
+    ? qualification.final
+    : {};
+  return {
+    qualification: providerQualification,
+    leadIntent: textFrom(final.leadIntent || (completed ? lead.leadIntent : "")),
+    priority: textFrom(final.priority || (completed ? lead.priority : "")),
+    marketplaceClosureReason: textFrom(lead.marketplaceClosureReason),
+    marketplaceStatus: textFrom(lead.marketplaceStatus),
+    marketplaceExpiresAt: lead.marketplaceExpiresAt || null,
+    remainingUnlocks: Number(lead.remainingUnlocks || 0),
+    providerConfirmedCount: Number(lead.providerConfirmedCount || 0),
+    providerSaleConversionStatus: textFrom(lead.providerSaleConversionStatus),
+  };
+}
+
+async function enrichResultForMessage(original = {}, result = {}) {
+  const status = String(result?.status || "");
+  if (!["unlocked", "already_unlocked", "lead_unavailable"].includes(status)) return result;
+  const enquiryId = textFrom(result?.lead?.enquiryId || original.enquiryId);
+  if (!enquiryId || typeof Enquiry.findOne !== "function") return result;
+  try {
+    const query = Enquiry.findOne({ enquiryId });
+    const selected = typeof query?.select === "function"
+      ? query.select({
+        leadQualification: 1,
+        leadIntent: 1,
+        priority: 1,
+        marketplaceClosureReason: 1,
+        marketplaceStatus: 1,
+        marketplaceExpiresAt: 1,
+        remainingUnlocks: 1,
+        providerConfirmedCount: 1,
+        providerSaleConversionStatus: 1,
+      })
+      : query;
+    const lead = typeof selected?.lean === "function" ? await selected.lean() : await selected;
+    return lead ? { ...result, messageContext: messageContextFromLead(lead) } : result;
+  } catch (_error) {
+    return result;
+  }
+}
+
 function successMessage(result = {}) {
   const lead = result.lead || {};
   const provider = result.provider || {};
+  const context = result.messageContext || {};
   const lines = [
-    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "The enquiry details are now available.",
+    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "Enquiry unlocked successfully.",
     "",
     `Service: ${lead.serviceType || lead.category || "Service"}`,
     `Customer: ${lead.customerName || "Not provided"}`,
@@ -118,11 +195,24 @@ function successMessage(result = {}) {
   if (lead.customerEmail) lines.push(`Email: ${lead.customerEmail}`);
   const location = joinLocation(lead);
   if (location) lines.push(`Location: ${location}`);
-  if (lead.leadTitle) lines.push(`Requirement: ${lead.leadTitle}`);
+
+  const qualification = Array.isArray(context.qualification) ? context.qualification : [];
+  if (qualification.length) {
+    lines.push("");
+    lines.push("Lead details");
+    qualification.forEach((item) => lines.push(`${item.label}: ${item.value}`));
+  }
+  const leadQuality = [
+    context.leadIntent ? `${humanize(context.leadIntent)} intent` : "",
+    context.priority ? `${humanize(context.priority)} priority` : "",
+  ].filter(Boolean);
+  if (leadQuality.length) lines.push(`Lead quality: ${leadQuality.join(" · ")}`);
+
+  lines.push("");
   lines.push(`Credits used: ${Number(lead.chargedCredits || 0)}`);
   lines.push(`Remaining balance: ${Number(provider.availableCredits ?? provider.walletCredits ?? 0)} credits`);
   lines.push("");
-  lines.push(`Enquiry reference: ${lead.enquiryId || ""}`);
+  lines.push("Contact the customer promptly while the enquiry is active.");
   return lines.join("\n");
 }
 
@@ -145,7 +235,23 @@ function failureMessage(result = {}) {
     return "Your provider account is not currently eligible to view this enquiry. Please contact Findoly support.";
   }
   if (status === "lead_unavailable") {
-    return "This enquiry is no longer available. It may have expired or reached its provider limit.";
+    const context = result.messageContext || {};
+    if (context.providerSaleConversionStatus === "converted" || Number(context.providerConfirmedCount || 0) > 0) {
+      return "This enquiry has already been confirmed with a provider and is no longer available.";
+    }
+    if (context.marketplaceClosureReason === "unlock_limit" || Number(context.remainingUnlocks) === 0) {
+      return [
+        "This enquiry has received enough provider interest and is now closed.",
+        "To maintain lead quality and customer experience, we limit how many providers can access each enquiry. It may already be progressing with one of the connected providers.",
+      ].join("\n");
+    }
+    const expiredAt = context.marketplaceExpiresAt ? new Date(context.marketplaceExpiresAt) : null;
+    if (context.marketplaceClosureReason === "expired"
+      || context.marketplaceStatus === "expired"
+      || (expiredAt && !Number.isNaN(expiredAt.getTime()) && expiredAt <= new Date())) {
+      return "This enquiry is no longer active. Please check the latest available enquiries.";
+    }
+    return "This enquiry is no longer available. Please check the latest available enquiries.";
   }
   return "We could not open this enquiry from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
 }
@@ -432,6 +538,7 @@ async function processInbound(event, options = {}) {
       idempotencyKey: `whatsapp-unlock:${original.communicationId}:${idempotencyReference}`,
       requestId: options.requestId,
     });
+    result = await enrichResultForMessage(original, result);
   } catch (error) {
     const fallbackResult = { status: "failed", code: error.code || "WHATSAPP_UNLOCK_FAILED" };
     let responseDeliveryFailed = false;
@@ -491,4 +598,6 @@ module.exports = {
   successMessage,
   failureMessage,
   responseMessage,
+  messageContextFromLead,
+  enrichResultForMessage,
 };
