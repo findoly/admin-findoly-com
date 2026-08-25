@@ -495,9 +495,10 @@
                     return humanize(event.type || 'Activity');
                   },
                   applyQualification(data = {}) {
+                    const savedAnswers = { ...(data.answers || {}) };
                     this.qualification = {
                       questions: Array.isArray(data.questions) ? data.questions : [],
-                      answers: data.answers || {},
+                      answers: savedAnswers,
                       system: data.system || null,
                       final: data.final || null,
                       completed: data.completed === true,
@@ -506,7 +507,10 @@
                       completedAt: data.completedAt || null,
                       completedBy: data.completedBy || ''
                     };
-                    this.qualificationAnswers = { ...(data.answers || {}) };
+                    this.qualificationAnswers = { ...savedAnswers };
+                    this.$nextTick(() => {
+                      this.qualificationAnswers = { ...savedAnswers };
+                    });
                     const selected = data.final || data.system || {};
                     this.qualificationFinal = {
                       leadPriceRupees: Number(selected.leadPricePaise || 0) / 100,
