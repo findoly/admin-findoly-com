@@ -87,6 +87,10 @@ function resolveRequirementLocation(record = {}) {
     };
   }
 
+  // manual_pincode is an explicit unverified state. Do not fall through to
+  // legacy/alternate coordinates because they may belong to the previous PIN.
+  if (canonicalSource === "manual_pincode") return null;
+
   const additionalDetails = record.additionalDetails && typeof record.additionalDetails === "object"
     ? record.additionalDetails
     : {};
