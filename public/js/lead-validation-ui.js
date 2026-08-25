@@ -2,7 +2,7 @@
   'use strict';
 
   const path = window.location.pathname.replace(/\/$/, '');
-  const match = path.match(/^\/enquiries\/([^/]+)$/);
+  const match = path.match(/^\/(?:enquiries|requirements)\/([^/]+)$/);
   if (!match) return;
 
   const enquiryId = decodeURIComponent(match[1]);
