@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 100;
 const MAX_CURSOR_LENGTH = 4096;
 

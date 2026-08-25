@@ -1,6 +1,19 @@
 (function () {
   'use strict';
 
+  function loadLeadValidationUi() {
+    const path = window.location.pathname.replace(/\/$/, '');
+    if (!/^\/(?:enquiries|requirements)\/[^/]+$/.test(path)) return;
+    if (document.querySelector('script[data-lead-validation-ui]')) return;
+    const script = document.createElement('script');
+    script.src = '/js/lead-validation-ui.js';
+    script.async = false;
+    script.dataset.leadValidationUi = 'true';
+    document.head.appendChild(script);
+  }
+
+  loadLeadValidationUi();
+
   if (window.Alpine) return;
 
   const sources = [
