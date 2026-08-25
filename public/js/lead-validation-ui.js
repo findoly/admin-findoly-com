@@ -37,6 +37,36 @@
     ) || null;
   }
 
+  function findActionCard(title) {
+    return [...document.querySelectorAll('.crm-lead-action-card')].find((card) =>
+      card.querySelector('h3')?.textContent?.trim() === title
+    ) || null;
+  }
+
+  function syncQualificationGate(validation = {}) {
+    const questionnaireReady = validation.completed === true && validation.final?.decision === 'valid';
+    const card = findActionCard('Lead qualification');
+    if (!card || questionnaireReady) return;
+
+    card.classList.remove('is-required', 'is-complete');
+    card.classList.add('is-locked');
+
+    const editable = [...card.children].find((element) =>
+      element.getAttribute && element.getAttribute('x-show') === 'validationReady && !providerControlled'
+    );
+    if (editable) editable.style.setProperty('display', 'none', 'important');
+
+    const existingWarning = card.querySelector('[data-validation-questionnaire-gate]');
+    if (existingWarning) return;
+
+    const warning = document.createElement('div');
+    warning.dataset.validationQuestionnaireGate = 'true';
+    warning.className = 'crm-action-lock crm-action-lock-warning';
+    warning.innerHTML = '<strong>Complete the validation questionnaire first</strong><span>Finish Step 1 with a final Valid decision before calculating lead price, intent and priority.</span>';
+    if (editable) card.insertBefore(warning, editable);
+    else card.appendChild(warning);
+  }
+
   function decisionClass(decision) {
     if (decision === 'valid') return 'alert-success';
     if (decision === 'invalid') return 'alert-danger';
@@ -226,6 +256,7 @@
     try {
       const body = await request(`/api/enquiry/${encodeURIComponent(enquiryId)}/validation`);
       const validation = body.data || {};
+      syncQualificationGate(validation);
       const state = {
         validation,
         answers: { ...(validation.answers || {}) },
