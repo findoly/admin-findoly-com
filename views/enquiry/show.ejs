@@ -107,7 +107,7 @@
                       </div>
                     </article>
 
-                    <article class="crm-lead-action-card" :class="{'is-required': validationReady && !qualificationComplete && !providerControlled, 'is-complete': qualificationComplete, 'is-locked': !validationReady || providerControlled}">
+                    <article class="crm-lead-action-card" :class="{'is-required': validationReady && !qualificationComplete && !providerControlled && !isRejected, 'is-complete': qualificationComplete, 'is-locked': !validationReady || providerControlled || isRejected}">
                       <div class="crm-action-heading">
                         <span class="crm-action-step">2</span>
                         <div>
@@ -122,18 +122,23 @@
                         <span>Mark the lead Valid before answering qualification questions.</span>
                       </div>
 
+                      <div x-show="validationReady && isRejected && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Restore the rejected lead first</strong>
+                        <span>Use Restore previous in Journey status before completing lead qualification.</span>
+                      </div>
+
                       <div x-show="providerControlled" x-cloak class="crm-action-lock">
                         <strong>Qualification locked after approval</strong>
                         <span x-show="qualificationComplete" x-text="'Final price ' + money(qualification.final?.leadPricePaise || lead.leadPricePaise) + ' · ' + humanize(qualification.final?.leadIntent || lead.leadIntent || 'low') + ' intent · ' + humanize(qualification.final?.priority || lead.priority || 'normal') + ' priority'"></span>
                         <span x-show="!qualificationComplete">This lead was already provider-controlled before qualification was completed.</span>
                       </div>
 
-                      <div x-show="validationReady && !providerControlled" x-cloak>
+                      <div x-show="validationReady && !providerControlled && !isRejected" x-cloak>
                         <div x-show="qualificationLoading" class="text-muted mb-2">Loading qualification…</div>
                         <template x-for="question in qualification.questions" :key="question.id">
                           <div class="mb-3">
                             <label class="form-label" x-text="question.prompt"></label>
-                            <select class="form-select" x-model="qualificationAnswers[question.id]" @change="qualificationAnswerChanged()" :disabled="qualificationSaving">
+                            <select class="form-select" x-model="qualificationAnswers[question.id]" @change="qualificationAnswerChanged()" :disabled="qualificationSaving || isRejected">
                               <option value="">Select an answer</option>
                               <template x-for="option in question.options" :key="question.id + '-' + option.id">
                                 <option :value="option.id" x-text="option.label"></option>
@@ -182,7 +187,7 @@
                             </div>
                           </div>
 
-                          <button class="btn btn-primary w-100" @click="saveQualification()" :disabled="qualificationSaving || !qualificationAnswersComplete">
+                          <button class="btn btn-primary w-100" @click="saveQualification()" :disabled="qualificationSaving || !qualificationAnswersComplete || isRejected">
                             <span x-text="qualificationSaving ? 'Saving…' : (qualificationComplete ? 'Update qualification' : 'Complete qualification')"></span>
                           </button>
                           <p class="crm-action-help mb-0 mt-2">System values are suggestions. Final price, intent and priority remain editable until approval. Price cannot exceed the Category maximum.</p>
@@ -214,7 +219,7 @@
                         <strong>Complete lead validation first</strong>
                         <span>Mark the lead Valid to unlock qualification and journey actions, or Invalid to reject it automatically.</span>
                       </div>
-                      <div x-show="validationReady && !qualificationComplete && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                      <div x-show="validationReady && !qualificationComplete && !providerControlled && !isRejected" x-cloak class="crm-action-lock crm-action-lock-warning">
                         <strong>Complete lead qualification first</strong>
                         <span>Answer all six qualification questions and save the final price, intent and priority before moving forward.</span>
                       </div>
@@ -531,7 +536,7 @@
                     }
                   },
                   async qualificationAnswerChanged() {
-                    if (!this.qualificationAnswersComplete || this.qualificationPreviewing || this.providerControlled) return;
+                    if (!this.qualificationAnswersComplete || this.qualificationPreviewing || this.providerControlled || this.isRejected) return;
                     this.qualificationPreviewing = true;
                     try {
                       const data = (await apiFetch('/api/enquiry/' + this.recordId + '/qualification/preview', {
@@ -553,6 +558,10 @@
                   },
                   async saveQualification() {
                     if (this.qualificationSaving) return;
+                    if (this.isRejected) {
+                      this.notify('Restore the rejected lead before completing qualification.', 'error');
+                      return;
+                    }
                     if (!this.qualificationAnswersComplete) {
                       this.notify('Answer all six qualification questions.', 'error');
                       return;
@@ -631,6 +640,7 @@
                       this.notify(this.lead.agentId ? 'Enter a mandatory note before changing this Agent Portal requirement.' : 'Enter a rejection reason before rejecting the lead.', 'error');
                       return;
                     }
+                    if (action === 'reject' && !window.confirm('Reject this lead?\n\nThis will move the requirement to Rejected and make it unavailable to providers.')) return;
                     this.statusSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/status', {
