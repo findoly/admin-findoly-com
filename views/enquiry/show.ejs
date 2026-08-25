@@ -52,7 +52,7 @@
                         <span class="crm-action-step">1</span>
                         <div>
                           <h3>Lead validation</h3>
-                          <p>Mandatory before any employee journey action.</p>
+                          <p>Mandatory before qualification and journey actions.</p>
                         </div>
                         <span class="crm-status ms-auto" :class="statusClass(lead.agentReferralValidation || 'pending')" x-text="humanize(lead.agentReferralValidation || 'pending')"></span>
                       </div>
@@ -106,9 +106,93 @@
                       </div>
                     </article>
 
-                    <article class="crm-lead-action-card crm-journey-action" :class="{'is-required': validationReady && !providerControlled && !isRejected, 'is-locked': !validationReady || providerControlled}">
+                    <article class="crm-lead-action-card" :class="{'is-required': validationReady && !qualificationComplete && !providerControlled, 'is-complete': qualificationComplete, 'is-locked': !validationReady || providerControlled}">
                       <div class="crm-action-heading">
                         <span class="crm-action-step">2</span>
+                        <div>
+                          <h3>Lead qualification</h3>
+                          <p>Six selectable answers calculate price, intent and priority.</p>
+                        </div>
+                        <span class="crm-status ms-auto" :class="qualificationComplete ? 'status-approved' : 'status-pending'" x-text="qualificationComplete ? 'Qualified' : 'Pending'"></span>
+                      </div>
+
+                      <div x-show="!validationReady && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Complete lead validation first</strong>
+                        <span>Mark the lead Valid before answering qualification questions.</span>
+                      </div>
+
+                      <div x-show="providerControlled" x-cloak class="crm-action-lock">
+                        <strong>Qualification locked after approval</strong>
+                        <span x-show="qualificationComplete" x-text="'Final price ' + money(qualification.final?.leadPricePaise || lead.leadPricePaise) + ' · ' + humanize(qualification.final?.leadIntent || lead.leadIntent || 'low') + ' intent · ' + humanize(qualification.final?.priority || lead.priority || 'normal') + ' priority'"></span>
+                        <span x-show="!qualificationComplete">This lead was already provider-controlled before qualification was completed.</span>
+                      </div>
+
+                      <div x-show="validationReady && !providerControlled" x-cloak>
+                        <div x-show="qualificationLoading" class="text-muted mb-2">Loading qualification…</div>
+                        <template x-for="question in qualification.questions" :key="question.id">
+                          <div class="mb-3">
+                            <label class="form-label" x-text="question.prompt"></label>
+                            <select class="form-select" x-model="qualificationAnswers[question.id]" @change="qualificationAnswerChanged()" :disabled="qualificationSaving">
+                              <option value="">Select an answer</option>
+                              <template x-for="option in question.options" :key="question.id + '-' + option.id">
+                                <option :value="option.id" x-text="option.label"></option>
+                              </template>
+                            </select>
+                          </div>
+                        </template>
+
+                        <div x-show="qualificationPreviewing" class="text-muted mb-2">Calculating qualification…</div>
+                        <div x-show="qualification.system" x-cloak>
+                          <div class="alert alert-light border mb-3">
+                            <div class="fw-semibold mb-1">System calculation</div>
+                            <div class="small">
+                              Price score <strong x-text="qualification.system?.priceScorePercent + '%'"></strong>
+                              → rounded to <strong x-text="qualification.system?.roundedPricePercent + '%'"></strong>
+                              of Category maximum <strong x-text="money(qualification.system?.categoryMaxLeadPricePaise)"></strong>.
+                            </div>
+                            <div class="small mt-1">
+                              Suggested price <strong x-text="money(qualification.system?.leadPricePaise)"></strong>
+                              · Intent <strong x-text="humanize(qualification.system?.leadIntent)"></strong>
+                              · Priority <strong x-text="humanize(qualification.system?.priority)"></strong>
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                              <label class="form-label">Final lead price (₹)</label>
+                              <input type="number" class="form-control" min="0" step="10" :max="Number(qualification.categoryMaxLeadPricePaise || 0) / 100" x-model.number="qualificationFinal.leadPriceRupees">
+                            </div>
+                            <div class="col-md-4">
+                              <label class="form-label">Final intent</label>
+                              <select class="form-select" x-model="qualificationFinal.leadIntent">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </div>
+                            <div class="col-md-4">
+                              <label class="form-label">Final priority</label>
+                              <select class="form-select" x-model="qualificationFinal.priority">
+                                <option value="low">Low</option>
+                                <option value="normal">Normal</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <button class="btn btn-primary w-100" @click="saveQualification()" :disabled="qualificationSaving || !qualificationAnswersComplete">
+                            <span x-text="qualificationSaving ? 'Saving…' : (qualificationComplete ? 'Update qualification' : 'Complete qualification')"></span>
+                          </button>
+                          <p class="crm-action-help mb-0 mt-2">System values are suggestions. Final price, intent and priority remain editable until approval. Price cannot exceed the Category maximum.</p>
+                        </div>
+                        <div x-show="!qualification.system && !qualificationPreviewing" class="crm-action-help">Answer all six questions to calculate the qualification.</div>
+                      </div>
+                    </article>
+
+                    <article class="crm-lead-action-card crm-journey-action" :class="{'is-required': validationReady && qualificationComplete && !providerControlled && !isRejected, 'is-locked': !validationReady || !qualificationComplete || providerControlled}">
+                      <div class="crm-action-heading">
+                        <span class="crm-action-step">3</span>
                         <div>
                           <h3>Journey status</h3>
                           <p>Move one stage at a time with a recorded note.</p>
@@ -127,7 +211,11 @@
                       </div>
                       <div x-show="!validationReady && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
                         <strong>Complete lead validation first</strong>
-                        <span>Mark the lead Valid to unlock journey actions, or Invalid to reject it automatically.</span>
+                        <span>Mark the lead Valid to unlock qualification and journey actions, or Invalid to reject it automatically.</span>
+                      </div>
+                      <div x-show="validationReady && !qualificationComplete && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Complete lead qualification first</strong>
+                        <span>Answer all six qualification questions and save the final price, intent and priority before moving forward.</span>
                       </div>
 
                       <div x-show="validationReady && !providerControlled" x-cloak>
@@ -143,7 +231,7 @@
 
                     <article class="crm-lead-action-card crm-conversion-action" :class="{'is-complete': lead.providerSaleConversionStatus === 'converted'}">
                       <div class="crm-action-heading">
-                        <span class="crm-action-step">3</span>
+                        <span class="crm-action-step">4</span>
                         <div>
                           <h3>Sale conversion</h3>
                           <p>Read-only and calculated from unlocked providers.</p>
@@ -291,9 +379,15 @@
                   note: '',
                   statusNote: '',
                   referralForm: { status: '', method: '', reason: '', note: '' },
+                  qualification: { questions: [], answers: {}, system: null, final: null, completed: false, locked: false, categoryMaxLeadPricePaise: 10000 },
+                  qualificationAnswers: {},
+                  qualificationFinal: { leadPriceRupees: 0, leadIntent: '', priority: '' },
                   loading: true,
                   statusSaving: false,
                   referralSaving: false,
+                  qualificationLoading: false,
+                  qualificationPreviewing: false,
+                  qualificationSaving: false,
                   noteSaving: false,
                   stateSaving: false,
                   journeySteps: ['new', 'verification', 'approved'],
@@ -312,6 +406,13 @@
                   get validationReady() {
                     return this.lead.agentReferralValidation === 'valid';
                   },
+                  get qualificationComplete() {
+                    return this.qualification?.completed === true;
+                  },
+                  get qualificationAnswersComplete() {
+                    const questions = Array.isArray(this.qualification?.questions) ? this.qualification.questions : [];
+                    return questions.length === 6 && questions.every((question) => Boolean(this.qualificationAnswers?.[question.id]));
+                  },
                   get journeyBaseStatus() {
                     return this.isRejected ? (this.lead.metadata?.rejectedFromStatus || 'new') : this.currentStatus;
                   },
@@ -319,7 +420,7 @@
                     return !this.providerControlled && this.validationReady && (this.isRejected || this.journeySteps.indexOf(this.journeyBaseStatus) > 0);
                   },
                   get canNext() {
-                    if (this.providerControlled || !this.validationReady || this.isRejected) return false;
+                    if (this.providerControlled || !this.validationReady || !this.qualificationComplete || this.isRejected) return false;
                     const employeeSteps = this.journeySteps;
                     const index = employeeSteps.indexOf(this.journeyBaseStatus);
                     return index >= 0 && index < employeeSteps.length - 1;
@@ -354,6 +455,7 @@
                       { label: 'Customer OTP', value: this.lead.customerMobileVerified ? 'Verified' : 'Not verified' },
                       { label: 'Category', value: this.lead.category || humanize(this.lead.categorySlug) },
                       { label: 'Service Types', value: Array.isArray(this.lead.serviceTypes) && this.lead.serviceTypes.length ? this.lead.serviceTypes.map((item) => item.name || item).filter(Boolean).join(', ') : (this.lead.serviceType || '—') },
+                      { label: 'Intent', value: this.lead.leadIntent ? humanize(this.lead.leadIntent) + ' intent' : 'Not qualified' },
                       { label: 'Priority', value: humanize(this.lead.priority || 'normal') + ' priority' },
                       { label: 'City', value: this.lead.city },
                       { label: 'Price', value: money(this.lead.leadPricePaise) },
@@ -383,12 +485,104 @@
                     if (event.type === 'status_changed') return humanize(event.toStatus || 'Status changed');
                     if (event.type === 'provider_sale_conversion') return 'Sale converted by provider';
                     if (event.type === 'provider_sale_conversion_reverted') return 'Sale conversion reversed';
+                    if (event.type === 'lead_qualification') return 'Lead qualification completed';
+                    if (event.type === 'lead_requalified') return 'Lead qualification updated';
                     if (['agent_referral_validation', 'lead_validation'].includes(event.type)) return 'Lead validation updated';
                     if (event.type === 'created') return 'Lead created';
                     if (event.type === 'note') return 'Note added';
                     if (event.type === 'deactivated') return 'Lead deactivated';
                     if (event.type === 'reactivated') return 'Lead reactivated';
                     return humanize(event.type || 'Activity');
+                  },
+                  applyQualification(data = {}) {
+                    this.qualification = {
+                      questions: Array.isArray(data.questions) ? data.questions : [],
+                      answers: data.answers || {},
+                      system: data.system || null,
+                      final: data.final || null,
+                      completed: data.completed === true,
+                      locked: data.locked === true,
+                      categoryMaxLeadPricePaise: Number(data.categoryMaxLeadPricePaise ?? 10000),
+                      completedAt: data.completedAt || null,
+                      completedBy: data.completedBy || ''
+                    };
+                    this.qualificationAnswers = { ...(data.answers || {}) };
+                    const selected = data.final || data.system || {};
+                    this.qualificationFinal = {
+                      leadPriceRupees: Number(selected.leadPricePaise || 0) / 100,
+                      leadIntent: selected.leadIntent || '',
+                      priority: selected.priority || ''
+                    };
+                  },
+                  async loadQualification() {
+                    this.qualificationLoading = true;
+                    try {
+                      const data = (await apiFetch('/api/enquiry/' + this.recordId + '/qualification')).data || {};
+                      this.applyQualification(data);
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.qualificationLoading = false;
+                    }
+                  },
+                  async qualificationAnswerChanged() {
+                    if (!this.qualificationAnswersComplete || this.qualificationPreviewing || this.providerControlled) return;
+                    this.qualificationPreviewing = true;
+                    try {
+                      const data = (await apiFetch('/api/enquiry/' + this.recordId + '/qualification/preview', {
+                        method: 'POST',
+                        body: JSON.stringify({ answers: this.qualificationAnswers })
+                      })).data || {};
+                      this.qualification.system = data.system || null;
+                      this.qualification.categoryMaxLeadPricePaise = Number(data.system?.categoryMaxLeadPricePaise ?? this.qualification.categoryMaxLeadPricePaise ?? 10000);
+                      this.qualificationFinal = {
+                        leadPriceRupees: Number(data.system?.leadPricePaise || 0) / 100,
+                        leadIntent: data.system?.leadIntent || '',
+                        priority: data.system?.priority || ''
+                      };
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.qualificationPreviewing = false;
+                    }
+                  },
+                  async saveQualification() {
+                    if (this.qualificationSaving) return;
+                    if (!this.qualificationAnswersComplete) {
+                      this.notify('Answer all six qualification questions.', 'error');
+                      return;
+                    }
+                    if (!this.qualification.system) {
+                      await this.qualificationAnswerChanged();
+                      if (!this.qualification.system) return;
+                    }
+                    const priceRupees = Number(this.qualificationFinal.leadPriceRupees);
+                    const maxRupees = Number(this.qualification.categoryMaxLeadPricePaise || 0) / 100;
+                    if (!Number.isInteger(priceRupees) || priceRupees < 0 || priceRupees > maxRupees || priceRupees % 10 !== 0) {
+                      this.notify('Final lead price must be within the Category maximum and use ₹10 increments.', 'error');
+                      return;
+                    }
+                    this.qualificationSaving = true;
+                    try {
+                      const data = (await apiFetch('/api/enquiry/' + this.recordId + '/qualification', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          answers: this.qualificationAnswers,
+                          overrides: {
+                            leadPricePaise: priceRupees * 100,
+                            leadIntent: this.qualificationFinal.leadIntent,
+                            priority: this.qualificationFinal.priority
+                          }
+                        })
+                      })).data || {};
+                      if (data.lead) this.lead = data.lead;
+                      if (data.qualification) this.applyQualification(data.qualification);
+                      this.notify(this.qualificationComplete ? 'Lead qualification saved. Journey actions are available.' : 'Lead qualification saved.', 'success');
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.qualificationSaving = false;
+                    }
                   },
                   async load() {
                     this.loading = true;
@@ -398,6 +592,7 @@
                       this.referralForm.status = ['valid', 'invalid'].includes(validation) ? validation : '';
                       this.referralForm.method = this.lead.leadValidationMethod || '';
                       this.referralForm.reason = this.lead.agentReferralInvalidReason || '';
+                      await this.loadQualification();
                       await this.loadCommunications();
                     } catch (error) {
                       this.notify(error.message, 'error');
@@ -423,6 +618,10 @@
                       this.notify('Complete lead validation first.', 'error');
                       return;
                     }
+                    if (action === 'next' && !this.qualificationComplete) {
+                      this.notify('Complete lead qualification before moving the journey forward.', 'error');
+                      return;
+                    }
                     if ((this.lead.agentId || action === 'reject') && !this.statusNote.trim()) {
                       this.notify(this.lead.agentId ? 'Enter a mandatory note before changing this Agent Portal requirement.' : 'Enter a rejection reason before rejecting the lead.', 'error');
                       return;
@@ -435,6 +634,7 @@
                       })).data;
                       this.statusNote = '';
                       this.notify('Lead status updated to ' + humanize(this.currentStatus) + '.', 'success');
+                      await this.loadQualification();
                       await this.loadCommunications();
                     } catch (error) {
                       this.notify(error.message, 'error');
@@ -472,7 +672,8 @@
                       })).data;
                       const markedInvalid = this.lead.agentReferralValidation === 'invalid';
                       this.referralForm.note = '';
-                      this.notify(markedInvalid ? 'Lead marked Invalid. It was automatically moved to Rejected.' : 'Lead marked Valid. Journey actions are now available.', 'success');
+                      await this.loadQualification();
+                      this.notify(markedInvalid ? 'Lead marked Invalid. It was automatically moved to Rejected.' : 'Lead marked Valid. Complete qualification before moving the journey forward.', 'success');
                     } catch (error) {
                       this.notify(error.message, 'error');
                     } finally {
@@ -501,6 +702,7 @@
                     this.stateSaving = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId + '/reactivate', { method: 'POST', body: '{}' })).data;
+                      await this.loadQualification();
                       this.notify('Lead reactivated.', 'success');
                     } catch (error) {
                       this.notify(error.message, 'error');

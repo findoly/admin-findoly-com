@@ -77,6 +77,11 @@
                           <div class="form-text">Copied to each new requirement in this Category. Existing requirements keep their saved unlock limit.</div>
                         </div>
                         <div class="mb-3">
+                          <label class="form-label" for="category-max-lead-price">Maximum lead price (₹)</label>
+                          <input id="category-max-lead-price" type="number" class="form-control" min="0" max="10000000" step="10" x-model.number="form.maxLeadPriceRupees" required>
+                          <div class="form-text">Highest provider unlock price for this Category. Qualification applies the rounded score percentage to this maximum.</div>
+                        </div>
+                        <div class="mb-3">
                           <label class="form-label" for="category-order">Website display order</label>
                           <input id="category-order" type="number" class="form-control" min="0" max="100000" step="1" x-model.number="form.displayOrder">
                         </div>
@@ -127,9 +132,9 @@
 
                     <div class="table-responsive">
                       <table class="table crm-table mb-0">
-                        <thead><tr><th>Category</th><th>Slug</th><th>Subcategories</th><th>Alert radius</th><th>Unlock limit</th><th>Status</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
+                        <thead><tr><th>Category</th><th>Slug</th><th>Subcategories</th><th>Alert radius</th><th>Unlock limit</th><th>Max lead price</th><th>Status</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
                         <tbody>
-                          <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                          <template x-if="loading"><tr><td colspan="9"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
                           <template x-for="category in categories" :key="category.categoryId || category.slug">
                             <tr>
                               <td><div class="fw-semibold" x-text="category.name"></div><small class="text-muted" x-text="category.description || 'No description added'"></small></td>
@@ -137,6 +142,7 @@
                               <td><a class="btn btn-light btn-sm" :href="subcategoriesUrl(category)"><span x-text="category.serviceTypeCount || 0"></span> managed</a></td>
                               <td><span x-text="Number(category.alertDistanceKm || 20) + ' km'"></span></td>
                               <td><span x-text="Number(category.defaultProviderUnlocks || 3)"></span></td>
+                              <td><span x-text="'₹' + (Number(category.maxLeadPricePaise ?? 10000) / 100).toLocaleString('en-IN')"></span></td>
                               <td><span class="badge" :class="category.active !== false ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" x-text="category.active !== false ? 'Active' : 'Inactive'"></span></td>
                               <td x-text="formatDate(category.updatedAt || category.createdAt)"></td>
                               <td class="text-end crm-table-actions">
@@ -145,7 +151,7 @@
                               </td>
                             </tr>
                           </template>
-                          <tr x-show="!categories.length && !loading"><td colspan="8" class="text-center py-5"><strong>No Categories found</strong><div class="text-muted mt-1" x-text="q || status ? 'Clear the filters and try again.' : 'Create your first Category to start adding Subcategories.'"></div></td></tr>
+                          <tr x-show="!categories.length && !loading"><td colspan="9" class="text-center py-5"><strong>No Categories found</strong><div class="text-muted mt-1" x-text="q || status ? 'Clear the filters and try again.' : 'Create your first Category to start adding Subcategories.'"></div></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -161,7 +167,7 @@
                   categories: [], mediaItems: [], editingId: '', loading: true, saving: false,
                   error: '', success: '', q: '', status: '', sort: 'newest',
                   pagination: createCursorPagination(20),
-                  form: { name: '', slug: '', description: '', alertDistanceKm: 20, defaultProviderUnlocks: 3, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true },
+                  form: { name: '', slug: '', description: '', alertDistanceKm: 20, defaultProviderUnlocks: 3, maxLeadPriceRupees: 100, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true },
                   slugTouched: false,
                   slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); },
                   syncSlug() { if (!this.editingId && !this.slugTouched) this.form.slug = this.slugify(this.form.name); },
@@ -186,11 +192,11 @@
                   subcategoriesUrl(category) { return '/service-types?categorySlug=' + encodeURIComponent(category.slug || ''); },
                   editCategory(category) {
                     this.editingId = category.categoryId;
-                    this.form = { name: category.name || '', slug: category.slug || '', description: category.description || '', alertDistanceKm: Number(category.alertDistanceKm || 20), defaultProviderUnlocks: Number(category.defaultProviderUnlocks || 3), displayOrder: Number(category.displayOrder || 0), websiteVisible: category.websiteVisible !== false, imageMediaId: category.imageMediaId || '', bannerMediaId: category.bannerMediaId || '', active: category.active !== false };
+                    this.form = { name: category.name || '', slug: category.slug || '', description: category.description || '', alertDistanceKm: Number(category.alertDistanceKm || 20), defaultProviderUnlocks: Number(category.defaultProviderUnlocks || 3), maxLeadPriceRupees: Number(category.maxLeadPricePaise ?? 10000) / 100, displayOrder: Number(category.displayOrder || 0), websiteVisible: category.websiteVisible !== false, imageMediaId: category.imageMediaId || '', bannerMediaId: category.bannerMediaId || '', active: category.active !== false };
                     this.slugTouched = true; this.error = ''; this.success = '';
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   },
-                  resetCategoryForm() { this.editingId = ''; this.form = { name: '', slug: '', description: '', alertDistanceKm: 20, defaultProviderUnlocks: 3, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true }; this.slugTouched = false; },
+                  resetCategoryForm() { this.editingId = ''; this.form = { name: '', slug: '', description: '', alertDistanceKm: 20, defaultProviderUnlocks: 3, maxLeadPriceRupees: 100, displayOrder: 0, websiteVisible: true, imageMediaId: '', bannerMediaId: '', active: true }; this.slugTouched = false; },
                   async saveCategory() {
                     if (this.saving) return;
                     this.saving = true; this.error = ''; this.success = '';
@@ -203,8 +209,14 @@
                       if (!Number.isInteger(defaultProviderUnlocks) || defaultProviderUnlocks < 1 || defaultProviderUnlocks > 1000) {
                         throw new Error('Default provider unlocks must be a whole number between 1 and 1000');
                       }
+                      const maxLeadPriceRupees = Number(this.form.maxLeadPriceRupees);
+                      if (!Number.isInteger(maxLeadPriceRupees) || maxLeadPriceRupees < 0 || maxLeadPriceRupees > 10000000 || maxLeadPriceRupees % 10 !== 0) {
+                        throw new Error('Maximum lead price must be a whole rupee amount in ₹10 increments');
+                      }
+                      const payload = { ...this.form, maxLeadPricePaise: maxLeadPriceRupees * 100 };
+                      delete payload.maxLeadPriceRupees;
                       const url = this.editingId ? '/api/catalog/categories/' + encodeURIComponent(this.editingId) : '/api/catalog/categories';
-                      await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(this.form) });
+                      await apiFetch(url, { method: this.editingId ? 'PUT' : 'POST', body: JSON.stringify(payload) });
                       this.success = this.editingId ? 'Category updated successfully.' : 'Category created successfully. You can now add its Subcategories.';
                       this.resetCategoryForm(); this.search();
                     } catch (error) { this.error = error.message; } finally { this.saving = false; }
