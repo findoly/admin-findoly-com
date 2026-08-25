@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 function source(relativePath) {
   return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
@@ -57,6 +58,38 @@ test("requirements persist PIN coordinates and nearby provider lookup retries mi
   assert.match(locationService, /locationSource:\s*"manual_pincode"/);
   assert.match(nearby, /syncLeadLocation\(lead\)/);
   assert.match(nearby, /canonicalLocationPincodeMismatch/);
+});
+
+test("requirement location resolver rejects stale or unverified canonical coordinates", () => {
+  assert.equal(resolveRequirementLocation({
+    pincode: "400095",
+    locationPincode: "400022",
+    locationLatitude: 19.04,
+    locationLongitude: 72.86,
+    locationSource: "google_geocoding",
+  }), null);
+
+  assert.equal(resolveRequirementLocation({
+    pincode: "400095",
+    locationPincode: "400095",
+    locationLatitude: 19.18,
+    locationLongitude: 72.81,
+    locationSource: "manual_pincode",
+  }), null);
+
+  assert.deepEqual(resolveRequirementLocation({
+    pincode: "400095",
+    locationPincode: "400095",
+    locationLatitude: 19.1888023,
+    locationLongitude: 72.8197043,
+    locationSource: "google_geocoding",
+  }), {
+    latitude: 19.1888023,
+    longitude: 72.8197043,
+    source: "canonical",
+    pincode: "400095",
+    formattedAddress: "",
+  });
 });
 
 test("approved requirements are represented and persisted as customer mobile verified", () => {
