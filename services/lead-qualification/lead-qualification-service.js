@@ -45,6 +45,15 @@ function isQualificationComplete(lead = {}) {
   );
 }
 
+function isValidationQuestionnaireComplete(lead = {}) {
+  return Boolean(
+    lead.leadValidationDecision
+    && lead.leadValidationDecision.completed === true
+    && lead.leadValidationDecision.final?.decision === "valid"
+    && lead.agentReferralValidation === "valid",
+  );
+}
+
 function isProviderControlled(lead = {}) {
   return canonicalLeadStatus(lead.status) === "approved"
     || lead.marketplaceAvailable === true
@@ -111,8 +120,12 @@ function assertLeadCanBeQualified(lead = {}) {
   if (lead.isActive === false) {
     throw qualificationError("Reactivate the lead before completing qualification", 409, "LEAD_INACTIVE");
   }
-  if (lead.agentReferralValidation !== "valid") {
-    throw qualificationError("Mark the lead Valid before completing qualification", 409, "LEAD_VALIDATION_REQUIRED");
+  if (!isValidationQuestionnaireComplete(lead)) {
+    throw qualificationError(
+      "Complete the lead validation questionnaire with a final Valid decision before qualification",
+      409,
+      "LEAD_VALIDATION_QUESTIONNAIRE_REQUIRED",
+    );
   }
   if (canonicalLeadStatus(lead.status) === "rejected") {
     throw qualificationError("Restore the rejected lead before completing qualification", 409, "LEAD_REJECTED");
@@ -233,8 +246,14 @@ function isForwardTransition(lead = {}, input = {}) {
 
 async function assertJourneyTransitionAllowed(enquiryId, input = {}) {
   const lead = await getLead(enquiryId);
-  if (lead.agentReferralValidation !== "valid") return;
   if (!isForwardTransition(lead, input)) return;
+  if (!isValidationQuestionnaireComplete(lead)) {
+    throw qualificationError(
+      "Complete the lead validation questionnaire with a final Valid decision before moving the journey forward",
+      400,
+      "LEAD_VALIDATION_QUESTIONNAIRE_REQUIRED",
+    );
+  }
   if (!isQualificationComplete(lead)) {
     throw qualificationError(
       "Complete lead qualification before moving the journey forward",
@@ -306,5 +325,6 @@ module.exports = {
   applyCategoryMaxLeadPrice,
   getCategoryMaxLeadPricePaise,
   isQualificationComplete,
+  isValidationQuestionnaireComplete,
   isProviderControlled,
 };
