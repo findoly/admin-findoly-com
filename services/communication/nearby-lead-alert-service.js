@@ -23,6 +23,11 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
   return [record[latitudeField], record[longitudeField]].every((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
 }
 
+function hasVerifiedProviderCoordinates(provider = {}) {
+  return String(provider.serviceLocationSource || "").trim().toLowerCase() !== "manual_pincode"
+    && hasCoordinates(provider, "serviceLatitude", "serviceLongitude");
+}
+
 function alertDistanceKmForLead(lead = {}) {
   const value = Number(lead.alertDistanceKm);
   return Number.isInteger(value) && value >= 1 && value <= 100
@@ -144,6 +149,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     categorySlugs: lead.categorySlug,
     serviceLatitude: { $ne: null },
     serviceLongitude: { $ne: null },
+    serviceLocationSource: { $ne: "manual_pincode" },
     $or: [
       { normalizedWhatsappNumber: { $exists: true, $gt: "" } },
       { whatsappNumber: { $exists: true, $gt: "" } },
@@ -156,7 +162,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       providerId: 1, name: 1, businessName: 1, mobile: 1, normalizedMobile: 1,
       whatsappNumber: 1, normalizedWhatsappNumber: 1, email: 1, categorySlugs: 1,
       whatsappLeadAlertsEnabled: 1, whatsappLeadPreferences: 1,
-      city: 1, state: 1, serviceLatitude: 1, serviceLongitude: 1,
+      city: 1, state: 1, serviceLatitude: 1, serviceLongitude: 1, serviceLocationSource: 1,
     })
     .lean()
     .cursor({ batchSize: BATCH_SIZE });
@@ -203,7 +209,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       });
       continue;
     }
-    if (!whatsappContact(provider) || !hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) {
+    if (!whatsappContact(provider) || !hasVerifiedProviderCoordinates(provider)) {
       missingContactOrCoordinates += 1;
       console.debug({
         event: "nearby_alert_provider_skipped",
@@ -262,6 +268,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
 module.exports = {
   MAX_ALERT_DISTANCE_KM,
   distanceKmExact,
+  hasVerifiedProviderCoordinates,
   alertDistanceKmForLead,
   leadServiceTypeIds,
   providerMatchesLeadPreference,

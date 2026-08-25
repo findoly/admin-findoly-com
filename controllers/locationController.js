@@ -12,6 +12,10 @@ async function lookupPincode(req, res, next) {
         city: location.city || location.locality || location.district || "",
         state: location.state || "",
         country: location.country || "India",
+        formattedAddress: location.formattedAddress || "",
+        postcodeLocalities: Array.isArray(location.postcodeLocalities)
+          ? location.postcodeLocalities.filter(Boolean)
+          : [],
         latitude: Number(location.latitude),
         longitude: Number(location.longitude),
         source: location.source || "google_geocoding",

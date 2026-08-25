@@ -1,5 +1,6 @@
 const service = require("../services/provider/provider-service");
 const creditService = require("../services/provider/provider-credit-service");
+const providerLocationEnrichmentService = require("../services/provider/provider-location-enrichment-service");
 
 async function list(req, res, next) {
   try {
@@ -47,7 +48,12 @@ async function transactions(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    res.status(201).json({ success: true, data: await service.create(req.body, req.admin?.email || req.admin?.employeeId || "crm-admin") });
+    const created = await service.create(req.body, req.admin?.email || req.admin?.employeeId || "crm-admin");
+    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(created, {
+      pincodeChanged: true,
+      submittedProvider: req.body,
+    });
+    res.status(201).json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
@@ -55,9 +61,21 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    const current = await service.get(req.params.providerId);
+    const updated = await service.update(
+      req.params.providerId,
+      req.body,
+      req.admin?.email || req.admin?.employeeId || "crm-admin",
+    );
+    const pincodeChanged = String(current.servicePincode || "") !== String(updated.servicePincode || "");
+    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(updated, {
+      pincodeChanged,
+      previousProvider: current,
+      submittedProvider: req.body,
+    });
     res.json({
       success: true,
-      data: await service.update(req.params.providerId, req.body, req.admin?.email || req.admin?.employeeId || "crm-admin"),
+      data: enriched,
     });
   } catch (error) {
     next(error);

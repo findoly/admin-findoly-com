@@ -65,17 +65,31 @@ function candidate(source, container, options = {}) {
 function resolveRequirementLocation(record = {}) {
   if (!record || typeof record !== "object") return null;
 
+  const recordPincode = pincodeValue(record.pincode);
+  const canonicalPincode = pincodeValue(record.locationPincode);
+  const canonicalSource = textValue(record.locationSource).toLowerCase();
   const canonicalLatitude = numericCoordinate(record.locationLatitude, -90, 90);
   const canonicalLongitude = numericCoordinate(record.locationLongitude, -180, 180);
-  if (canonicalLatitude !== null && canonicalLongitude !== null) {
+  const canonicalPincodeMatches = !recordPincode || !canonicalPincode || recordPincode === canonicalPincode;
+  const canonicalSourceIsVerified = canonicalSource !== "manual_pincode";
+  if (
+    canonicalLatitude !== null
+    && canonicalLongitude !== null
+    && canonicalPincodeMatches
+    && canonicalSourceIsVerified
+  ) {
     return {
       latitude: canonicalLatitude,
       longitude: canonicalLongitude,
       source: "canonical",
-      pincode: pincodeValue(record.locationPincode || record.pincode),
+      pincode: canonicalPincode || recordPincode,
       formattedAddress: textValue(record.addressLine),
     };
   }
+
+  // manual_pincode is an explicit unverified state. Do not fall through to
+  // legacy/alternate coordinates because they may belong to the previous PIN.
+  if (canonicalSource === "manual_pincode") return null;
 
   const additionalDetails = record.additionalDetails && typeof record.additionalDetails === "object"
     ? record.additionalDetails
@@ -101,7 +115,9 @@ function resolveRequirementLocation(record = {}) {
       pincode: record.pincode,
       formattedAddress: record.addressLine,
     });
-    if (resolved) return resolved;
+    if (!resolved) continue;
+    if (recordPincode && resolved.pincode && resolved.pincode !== recordPincode) continue;
+    return resolved;
   }
   return null;
 }
