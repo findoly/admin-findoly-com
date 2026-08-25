@@ -7,6 +7,10 @@ function validCoordinate(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
+function cleanText(value, maxLength = 500) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
 function currentLocationData(lead = {}) {
   return {
     locationLatitude: Number(lead.locationLatitude),
@@ -35,6 +39,14 @@ function manualLocationData(lead = {}, pincode = "") {
   };
 }
 
+function shouldUseGoogleValue(currentValue, previousValue, { hasPrevious, pincodeChanged }) {
+  const current = cleanText(currentValue);
+  const previous = cleanText(previousValue);
+  if (!hasPrevious) return !current;
+  if (pincodeChanged) return current === previous;
+  return !current && !previous;
+}
+
 async function persistLocation(enquiryId, locationData, extra = {}) {
   const result = await Enquiry.updateOne(
     { $or: [{ enquiryId }, { id: enquiryId }] },
@@ -43,20 +55,35 @@ async function persistLocation(enquiryId, locationData, extra = {}) {
   return result.matchedCount ? { ...locationData, ...extra } : null;
 }
 
-async function syncLeadLocation(lead = {}) {
+async function syncLeadLocation(lead = {}, options = {}) {
   const enquiryId = String(lead.enquiryId || lead.id || "").trim();
   const pincode = String(lead.pincode || "").trim();
   if (!enquiryId || !/^[1-9]\d{5}$/.test(pincode)) return null;
 
+  const previousLead = options.previousLead && typeof options.previousLead === "object"
+    ? options.previousLead
+    : {};
+  const hasPrevious = Boolean(Object.keys(previousLead).length);
+  const fillMissingDescriptive = options.fillMissingDescriptive !== false;
+  const previousPincode = String(previousLead.pincode || "").trim();
   const storedLocationPincode = String(lead.locationPincode || "").trim();
   const currentLocationSource = String(lead.locationSource || "").trim().toLowerCase();
   const canonicalMatchesPincode = pincode === storedLocationPincode;
-  const pincodeChanged = /^[1-9]\d{5}$/.test(storedLocationPincode)
+  const changedFromPrevious = /^[1-9]\d{5}$/.test(previousPincode)
+    && previousPincode !== pincode;
+  const changedFromCanonical = /^[1-9]\d{5}$/.test(storedLocationPincode)
     && storedLocationPincode !== pincode;
+  const pincodeChanged = changedFromPrevious || (!/^[1-9]\d{5}$/.test(previousPincode) && changedFromCanonical);
   const hasCurrentCoordinates = validCoordinate(lead.locationLatitude, -90, 90)
     && validCoordinate(lead.locationLongitude, -180, 180);
   const currentCoordinatesVerified = currentLocationSource !== "manual_pincode";
-  if (canonicalMatchesPincode && hasCurrentCoordinates && currentCoordinatesVerified) {
+  const needsDescriptiveRefresh = fillMissingDescriptive && hasPrevious && pincodeChanged;
+  if (
+    canonicalMatchesPincode
+    && hasCurrentCoordinates
+    && currentCoordinatesVerified
+    && !needsDescriptiveRefresh
+  ) {
     return currentLocationData(lead);
   }
 
@@ -83,14 +110,23 @@ async function syncLeadLocation(lead = {}) {
       locationVerifiedAt: location.verifiedAt || new Date(),
       locationSource: location.source || "google_geocoding",
     };
-    const googleCity = location.city || location.locality || location.district || "";
-    const googleState = location.state || "";
-    const googleAddress = location.formattedAddress || "";
-    const extra = {
-      city: pincodeChanged ? (googleCity || lead.city || "") : (lead.city || googleCity),
-      state: pincodeChanged ? (googleState || lead.state || "") : (lead.state || googleState),
-      addressLine: pincodeChanged ? (googleAddress || lead.addressLine || "") : (lead.addressLine || googleAddress),
-    };
+    const extra = {};
+    if (fillMissingDescriptive) {
+      const googleCity = location.city || location.locality || location.district || "";
+      const googleState = location.state || "";
+      const googleAddress = location.formattedAddress || "";
+      const comparison = { hasPrevious, pincodeChanged };
+
+      extra.city = shouldUseGoogleValue(lead.city, previousLead.city, comparison)
+        ? (googleCity || lead.city || "")
+        : (lead.city || "");
+      extra.state = shouldUseGoogleValue(lead.state, previousLead.state, comparison)
+        ? (googleState || lead.state || "")
+        : (lead.state || "");
+      extra.addressLine = shouldUseGoogleValue(lead.addressLine, previousLead.addressLine, comparison)
+        ? (googleAddress || lead.addressLine || "")
+        : (lead.addressLine || "");
+    }
     return persistLocation(enquiryId, locationData, extra);
   } catch (error) {
     console.warn({
