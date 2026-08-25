@@ -107,7 +107,7 @@ test("provider WhatsApp success message gives useful qualification context witho
     messageContext: context,
   });
 
-  assert.match(message, /Enquiry unlocked successfully\./);
+  assert.match(message, /The enquiry details are now available\./);
   assert.match(message, /Readiness: Ready to proceed now/);
   assert.match(message, /Service timeline: Within 7 days/);
   assert.match(message, /Requirement clarity: Mostly clear/);
@@ -121,6 +121,7 @@ test("provider WhatsApp success message gives useful qualification context witho
   assert.doesNotMatch(message, /Enquiry reference/i);
   assert.doesNotMatch(message, /internal-enquiry-reference/);
   assert.doesNotMatch(message, /This customer requirement must not be sent/);
+  assert.doesNotMatch(message, /unlock/i);
 });
 
 test("legacy unlocked leads without qualification still receive a clean basic WhatsApp response", () => {
@@ -163,6 +164,23 @@ test("max-provider closure uses positive lead-quality wording instead of an expi
   assert.match(message, /lead quality and customer experience/i);
   assert.match(message, /may already be progressing/i);
   assert.doesNotMatch(message, /expired/i);
+});
+
+test("explicit non-capacity closures never use max-provider interest wording", () => {
+  const service = actionService();
+  for (const marketplaceClosureReason of ["invalid", "deactivated", "status_change"]) {
+    const message = service.failureMessage({
+      status: "lead_unavailable",
+      messageContext: {
+        marketplaceClosureReason,
+        remainingUnlocks: 0,
+        providerConfirmedCount: 0,
+        providerSaleConversionStatus: "pending",
+      },
+    });
+    assert.equal(message, "This enquiry is no longer available. Please check the latest available enquiries.");
+    assert.doesNotMatch(message, /provider interest/i);
+  }
 });
 
 test("confirmed unavailable enquiry uses the stronger confirmed message", () => {
