@@ -9,6 +9,7 @@ const frontendController = {
   enquiryCreate: render("enquiry/form", "Create requirement"),
   enquiryEdit: render("enquiry/form", "Edit requirement"),
   enquiryShow: render("enquiry/show", "Requirement details"),
+  enquiryReview: render("enquiry/review", "Validation & qualification review"),
   enquiryNearbyProviders: render("enquiry/nearby-providers", "Nearby providers"),
   enquiryProviderStatuses: render("enquiry/provider-statuses", "Unlocked providers"),
   enquiryProviderStatusShow: render("enquiry/provider-status-show", "Provider unlock details"),
