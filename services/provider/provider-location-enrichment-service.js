@@ -29,6 +29,19 @@ function validCoordinate(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
+function sameTextList(left, right) {
+  const first = cleanLocalities(left);
+  const second = cleanLocalities(right);
+  if (first.length !== second.length) return false;
+  return first.every((value, index) => value === second[index]);
+}
+
+function hasOwn(object, field) {
+  return Boolean(object)
+    && typeof object === "object"
+    && Object.prototype.hasOwnProperty.call(object, field);
+}
+
 async function persistProviderLocation(providerId, provider, update) {
   const result = await Provider.updateOne(
     { $or: [{ providerId }, { id: providerId }] },
@@ -39,7 +52,7 @@ async function persistProviderLocation(providerId, provider, update) {
 
 async function enrichProviderLocation(
   provider = {},
-  { pincodeChanged = false, previousProvider = {} } = {},
+  { pincodeChanged = false, previousProvider = {}, submittedProvider = {} } = {},
 ) {
   const providerId = cleanText(provider.providerId || provider.id, 128);
   const pincode = cleanText(provider.servicePincode, 6);
@@ -53,31 +66,63 @@ async function enrichProviderLocation(
     const city = cleanText(location?.city || location?.locality || location?.district, 100);
     const state = cleanText(location?.state, 100);
     const formattedAddress = cleanText(location?.formattedAddress, 500);
+    const previousCity = cleanText(previousProvider?.city, 100);
+    const previousState = cleanText(previousProvider?.state, 100);
     const previousAddress = cleanText(previousProvider?.serviceAddress, 500);
     const previousAreas = cleanLocalities(previousProvider?.serviceAreas);
+    const providerCity = cleanText(provider?.city, 100);
+    const providerState = cleanText(provider?.state, 100);
+    const providerAddress = cleanText(provider?.serviceAddress, 500);
     const providerAreas = cleanLocalities(provider?.serviceAreas);
+    const submittedCity = cleanText(submittedProvider?.city, 100);
+    const submittedState = cleanText(submittedProvider?.state, 100);
+    const submittedAddress = cleanText(submittedProvider?.serviceAddress, 500);
+    const submittedAreas = cleanLocalities(submittedProvider?.serviceAreas);
+    const hasPrevious = Boolean(previousProvider?.providerId || previousProvider?.id);
 
-    if (city && (pincodeChanged || !cleanText(provider.city, 100))) update.city = city;
-    if (state && (pincodeChanged || !cleanText(provider.state, 100))) update.state = state;
-    if (
-      formattedAddress
-      && (pincodeChanged || (!cleanText(provider.serviceAddress, 500) && !previousAddress))
-    ) {
-      update.serviceAddress = formattedAddress;
+    const submittedCityChanged = hasOwn(submittedProvider, "city")
+      && submittedCity
+      && (!hasPrevious || submittedCity !== previousCity);
+    const submittedStateChanged = hasOwn(submittedProvider, "state")
+      && submittedState
+      && (!hasPrevious || submittedState !== previousState);
+    const submittedAddressChanged = hasOwn(submittedProvider, "serviceAddress")
+      && (!hasPrevious || submittedAddress !== previousAddress);
+    const submittedAreasChanged = hasOwn(submittedProvider, "serviceAreas")
+      && (!hasPrevious || !sameTextList(submittedAreas, previousAreas));
+
+    if (submittedCityChanged) {
+      if (providerCity !== submittedCity) update.city = submittedCity;
+    } else if (city && (!providerCity || (pincodeChanged && providerCity === previousCity))) {
+      update.city = city;
     }
-    if (
-      postcodeLocalities.length
-      && (pincodeChanged || (!providerAreas.length && !previousAreas.length))
-    ) {
-      update.serviceAreas = postcodeLocalities;
+
+    if (submittedStateChanged) {
+      if (providerState !== submittedState) update.state = submittedState;
+    } else if (state && (!providerState || (pincodeChanged && providerState === previousState))) {
+      update.state = state;
+    }
+
+    if (!submittedAddressChanged && formattedAddress) {
+      const stalePreviousAddress = pincodeChanged && providerAddress === previousAddress;
+      const neverHadAddress = !providerAddress && !previousAddress;
+      if (stalePreviousAddress || neverHadAddress) update.serviceAddress = formattedAddress;
+    }
+
+    if (!submittedAreasChanged && postcodeLocalities.length) {
+      const stalePreviousAreas = pincodeChanged && sameTextList(providerAreas, previousAreas);
+      const neverHadAreas = !providerAreas.length && !previousAreas.length;
+      if (stalePreviousAreas || neverHadAreas) update.serviceAreas = postcodeLocalities;
     }
 
     const googleCoordinatesValid = validCoordinate(location?.latitude, -90, 90)
       && validCoordinate(location?.longitude, -180, 180);
     const providerCoordinatesValid = validCoordinate(provider.serviceLatitude, -90, 90)
       && validCoordinate(provider.serviceLongitude, -180, 180);
+    const providerLocationSource = cleanText(provider.serviceLocationSource, 80).toLowerCase();
+    const providerCoordinatesVerified = providerCoordinatesValid && providerLocationSource !== "manual_pincode";
     if (googleCoordinatesValid) {
-      if (pincodeChanged || !providerCoordinatesValid) {
+      if (pincodeChanged || !providerCoordinatesVerified) {
         update.serviceLatitude = Number(location.latitude);
         update.serviceLongitude = Number(location.longitude);
         update.serviceLocationVerifiedAt = location.verifiedAt || new Date();
