@@ -123,9 +123,9 @@ async function enrichProviderLocation(
       && submittedState
       && (!hasPrevious || submittedState !== previousState);
     const submittedAddressChanged = hasOwn(submittedProvider, "serviceAddress")
-      && (!hasPrevious || submittedAddress !== previousAddress);
+      && (hasPrevious ? submittedAddress !== previousAddress : Boolean(submittedAddress));
     const submittedAreasChanged = hasOwn(submittedProvider, "serviceAreas")
-      && (!hasPrevious || !sameTextList(submittedAreas, previousAreas));
+      && (hasPrevious ? !sameTextList(submittedAreas, previousAreas) : submittedAreas.length > 0);
 
     if (submittedCityChanged) {
       if (providerCity !== submittedCity) update.city = submittedCity;
