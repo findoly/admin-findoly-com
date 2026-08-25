@@ -3,7 +3,7 @@
 
   function loadLeadValidationUi() {
     const path = window.location.pathname.replace(/\/$/, '');
-    if (!/^\/enquiries\/[^/]+$/.test(path)) return;
+    if (!/^\/(?:enquiries|requirements)\/[^/]+$/.test(path)) return;
     if (document.querySelector('script[data-lead-validation-ui]')) return;
     const script = document.createElement('script');
     script.src = '/js/lead-validation-ui.js';
