@@ -1,0 +1,83 @@
+"use strict";
+
+const Provider = require("../../models/Provider");
+const { geocodePincode } = require("../location/geocoding-service");
+
+function cleanText(value, maxLength = 500) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function cleanLocalities(value) {
+  if (!Array.isArray(value)) return [];
+  const output = [];
+  const seen = new Set();
+  for (const item of value) {
+    const text = cleanText(item, 120);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(text);
+    if (output.length >= 100) break;
+  }
+  return output;
+}
+
+function validCoordinate(value, min, max) {
+  if (value === null || value === undefined || String(value).trim() === "") return false;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max;
+}
+
+async function enrichProviderLocation(provider = {}, { pincodeChanged = false } = {}) {
+  const providerId = cleanText(provider.providerId || provider.id, 128);
+  const pincode = cleanText(provider.servicePincode, 6);
+  if (!providerId || !/^[1-9]\d{5}$/.test(pincode)) return provider;
+
+  try {
+    const location = await geocodePincode(pincode);
+    const postcodeLocalities = cleanLocalities(location?.postcodeLocalities);
+    const update = {};
+
+    const city = cleanText(location?.city || location?.locality || location?.district, 100);
+    const state = cleanText(location?.state, 100);
+    const formattedAddress = cleanText(location?.formattedAddress, 500);
+    if (city && (pincodeChanged || !cleanText(provider.city, 100))) update.city = city;
+    if (state && (pincodeChanged || !cleanText(provider.state, 100))) update.state = state;
+    if (formattedAddress && (pincodeChanged || !cleanText(provider.serviceAddress, 500))) {
+      update.serviceAddress = formattedAddress;
+    }
+    if (postcodeLocalities.length && (pincodeChanged || !Array.isArray(provider.serviceAreas) || !provider.serviceAreas.length)) {
+      update.serviceAreas = postcodeLocalities;
+    }
+
+    if (validCoordinate(location?.latitude, -90, 90) && validCoordinate(location?.longitude, -180, 180)) {
+      update.serviceLatitude = Number(location.latitude);
+      update.serviceLongitude = Number(location.longitude);
+      update.serviceLocality = location.locality || "";
+      update.serviceDistrict = location.district || "";
+      update.serviceState = location.state || provider.serviceState || provider.state || "";
+      update.serviceCountry = location.country || "India";
+      update.serviceLocationVerifiedAt = location.verifiedAt || new Date();
+      update.serviceLocationSource = location.source || "google_geocoding";
+    }
+
+    if (!Object.keys(update).length) return provider;
+    const result = await Provider.updateOne(
+      { $or: [{ providerId }, { id: providerId }] },
+      { $set: { ...update, updatedAt: new Date() } },
+    );
+    return result.matchedCount ? { ...provider, ...update } : provider;
+  } catch (error) {
+    console.warn({
+      event: "provider_location_enrichment_failed",
+      providerId,
+      pincode,
+      code: String(error.code || "GEOCODING_UNAVAILABLE"),
+      message: String(error.message || error).slice(0, 1000),
+    });
+    return provider;
+  }
+}
+
+module.exports = { enrichProviderLocation };
