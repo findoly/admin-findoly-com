@@ -172,7 +172,7 @@ async function geocodePincode(value, options = {}) {
       body?.status === "ZERO_RESULTS"
         ? "We could not find this Indian PIN code. Check it and try again."
         : "We could not verify this PIN code right now. Please try again shortly.",
-      body?.status === "ZERO_RESULTS" ? 400 : 503,
+      503,
       body?.status === "ZERO_RESULTS" ? "PINCODE_NOT_FOUND" : "GEOCODING_UNAVAILABLE",
     );
   }
