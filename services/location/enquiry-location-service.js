@@ -48,7 +48,10 @@ async function syncLeadLocation(lead = {}) {
   const pincode = String(lead.pincode || "").trim();
   if (!enquiryId || !/^[1-9]\d{5}$/.test(pincode)) return null;
 
-  const canonicalMatchesPincode = pincode === String(lead.locationPincode || "").trim();
+  const storedLocationPincode = String(lead.locationPincode || "").trim();
+  const canonicalMatchesPincode = pincode === storedLocationPincode;
+  const pincodeChanged = /^[1-9]\d{5}$/.test(storedLocationPincode)
+    && storedLocationPincode !== pincode;
   const hasCurrentCoordinates = validCoordinate(lead.locationLatitude, -90, 90)
     && validCoordinate(lead.locationLongitude, -180, 180);
   if (canonicalMatchesPincode && hasCurrentCoordinates) {
@@ -78,10 +81,13 @@ async function syncLeadLocation(lead = {}) {
       locationVerifiedAt: location.verifiedAt || new Date(),
       locationSource: location.source || "google_geocoding",
     };
+    const googleCity = location.city || location.locality || location.district || "";
+    const googleState = location.state || "";
+    const googleAddress = location.formattedAddress || "";
     const extra = {
-      city: lead.city || location.city || location.locality || location.district || "",
-      state: lead.state || location.state || "",
-      addressLine: lead.addressLine || location.formattedAddress || "",
+      city: pincodeChanged ? (googleCity || lead.city || "") : (lead.city || googleCity),
+      state: pincodeChanged ? (googleState || lead.state || "") : (lead.state || googleState),
+      addressLine: pincodeChanged ? (googleAddress || lead.addressLine || "") : (lead.addressLine || googleAddress),
     };
     return persistLocation(enquiryId, locationData, extra);
   } catch (error) {
