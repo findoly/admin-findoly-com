@@ -69,7 +69,7 @@ test("requirements persist PIN coordinates and nearby provider lookup retries mi
   assert.match(nearby, /canonicalLocationPincodeMismatch/);
 });
 
-test("requirement location resolver rejects stale or unverified canonical coordinates", () => {
+test("requirement location resolver rejects stale or unverified coordinates", () => {
   assert.equal(resolveRequirementLocation({
     pincode: "400095",
     locationPincode: "400022",
@@ -84,6 +84,17 @@ test("requirement location resolver rejects stale or unverified canonical coordi
     locationLatitude: 19.18,
     locationLongitude: 72.81,
     locationSource: "manual_pincode",
+  }), null);
+
+  assert.equal(resolveRequirementLocation({
+    pincode: "400095",
+    locationPincode: "400095",
+    locationLatitude: null,
+    locationLongitude: null,
+    locationSource: "manual_pincode",
+    additionalDetails: {
+      location: { latitude: 19.04, longitude: 72.86 },
+    },
   }), null);
 
   assert.deepEqual(resolveRequirementLocation({
