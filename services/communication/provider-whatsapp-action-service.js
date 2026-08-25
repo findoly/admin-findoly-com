@@ -186,7 +186,7 @@ function successMessage(result = {}) {
   const provider = result.provider || {};
   const context = result.messageContext || {};
   const lines = [
-    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "Enquiry unlocked successfully.",
+    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "The enquiry details are now available.",
     "",
     `Service: ${lead.serviceType || lead.category || "Service"}`,
     `Customer: ${lead.customerName || "Not provided"}`,
@@ -239,17 +239,18 @@ function failureMessage(result = {}) {
     if (context.providerSaleConversionStatus === "converted" || Number(context.providerConfirmedCount || 0) > 0) {
       return "This enquiry has already been confirmed with a provider and is no longer available.";
     }
-    if (context.marketplaceClosureReason === "unlock_limit" || Number(context.remainingUnlocks) === 0) {
+    const closureReason = textFrom(context.marketplaceClosureReason);
+    const expiredAt = context.marketplaceExpiresAt ? new Date(context.marketplaceExpiresAt) : null;
+    if (closureReason === "expired"
+      || context.marketplaceStatus === "expired"
+      || (expiredAt && !Number.isNaN(expiredAt.getTime()) && expiredAt <= new Date())) {
+      return "This enquiry is no longer active. Please check the latest available enquiries.";
+    }
+    if (closureReason === "unlock_limit" || (!closureReason && Number(context.remainingUnlocks) === 0)) {
       return [
         "This enquiry has received enough provider interest and is now closed.",
         "To maintain lead quality and customer experience, we limit how many providers can access each enquiry. It may already be progressing with one of the connected providers.",
       ].join("\n");
-    }
-    const expiredAt = context.marketplaceExpiresAt ? new Date(context.marketplaceExpiresAt) : null;
-    if (context.marketplaceClosureReason === "expired"
-      || context.marketplaceStatus === "expired"
-      || (expiredAt && !Number.isNaN(expiredAt.getTime()) && expiredAt <= new Date())) {
-      return "This enquiry is no longer active. Please check the latest available enquiries.";
     }
     return "This enquiry is no longer available. Please check the latest available enquiries.";
   }
