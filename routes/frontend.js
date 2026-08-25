@@ -33,6 +33,8 @@ router.get("/enquiries/:enquiryId/edit", ...protectedPage("requirements.edit"), 
 router.get("/requirements/:enquiryId/edit", ...protectedPage("requirements.edit"), page.enquiryEdit);
 router.get("/enquiries/:enquiryId/nearby-providers", ...protectedPage("requirements.view"), page.enquiryNearbyProviders);
 router.get("/requirements/:enquiryId/nearby-providers", ...protectedPage("requirements.view"), page.enquiryNearbyProviders);
+router.get("/enquiries/:enquiryId/review", ...protectedPage("requirements.view"), page.enquiryReview);
+router.get("/requirements/:enquiryId/review", ...protectedPage("requirements.view"), page.enquiryReview);
 router.get("/enquiries/:enquiryId/providers/:providerLeadUnlockId", ...protectedPage("requirements.view"), page.enquiryProviderStatusShow);
 router.get("/requirements/:enquiryId/providers/:providerLeadUnlockId", ...protectedPage("requirements.view"), page.enquiryProviderStatusShow);
 router.get("/enquiries/:enquiryId/providers", ...protectedPage("requirements.view"), page.enquiryProviderStatuses);
