@@ -40,6 +40,13 @@ test("lead action centre inserts qualification between validation and journey", 
   assert.match(view, /System values are suggestions/);
 });
 
+test("qualification UI rehydrates saved answers after dynamic options render", () => {
+  const view = source("views/enquiry/show.ejs");
+  assert.match(view, /const savedAnswers = \{ \.\.\.\(data\.answers \|\| \{\}\) \};/);
+  assert.match(view, /this\.qualificationAnswers = \{ \.\.\.savedAnswers \};/);
+  assert.match(view, /this\.\$nextTick\(\(\) => \{\s*this\.qualificationAnswers = \{ \.\.\.savedAnswers \};\s*\}\);/);
+});
+
 test("qualification service preserves system and final values with audit history", () => {
   const service = source("services/lead-qualification/lead-qualification-service.js");
   assert.match(service, /leadQualification:\s*snapshot/);
