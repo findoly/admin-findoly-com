@@ -384,13 +384,13 @@ function validCoordinate(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
-function manualLocation(data, current = {}) {
-  const city = textValue(data.city || current.city, {
+function manualLocation(data) {
+  const city = textValue(data.city, {
     label: "Provider city",
     required: true,
     maxLength: 100,
   });
-  const state = textValue(data.state || current.state || current.serviceState, {
+  const state = textValue(data.state, {
     label: "Provider state",
     required: true,
     maxLength: 100,
@@ -401,10 +401,10 @@ function manualLocation(data, current = {}) {
     state,
     serviceLatitude: null,
     serviceLongitude: null,
-    serviceLocality: current.serviceLocality || "",
-    serviceDistrict: current.serviceDistrict || "",
+    serviceLocality: "",
+    serviceDistrict: "",
     serviceState: state,
-    serviceCountry: current.serviceCountry || "India",
+    serviceCountry: "India",
     serviceLocationVerifiedAt: null,
     serviceLocationSource: "manual_pincode",
   };
@@ -415,6 +415,7 @@ async function applyProviderLocation(data, current = {}) {
   if (!pincode) throw validationError("Provider service PIN code is required");
 
   const sameLocation = pincode === String(current.servicePincode || "")
+    && String(current.serviceLocationSource || "").trim().toLowerCase() !== "manual_pincode"
     && validCoordinate(current.serviceLatitude, -90, 90)
     && validCoordinate(current.serviceLongitude, -180, 180);
   if (sameLocation) {
@@ -428,8 +429,8 @@ async function applyProviderLocation(data, current = {}) {
       serviceCountry: current.serviceCountry || "India",
       serviceLocationVerifiedAt: current.serviceLocationVerifiedAt || new Date(),
       serviceLocationSource: current.serviceLocationSource || "google_geocoding",
-      city: current.city || data.city || "",
-      state: current.serviceState || current.state || data.state || "",
+      city: data.city || current.city || "",
+      state: data.state || current.serviceState || current.state || "",
     };
   }
 
@@ -461,7 +462,7 @@ async function applyProviderLocation(data, current = {}) {
     if (Number(error?.status || 500) < 500) throw error;
     // A temporary maps/configuration problem must not make provider creation
     // impossible. Save a validated manual city/state and allow later re-sync.
-    return manualLocation(data, current);
+    return manualLocation(data);
   }
 }
 

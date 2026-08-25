@@ -1,4 +1,5 @@
 const service = require("../services/provider-request/provider-request-service");
+const providerLocationEnrichmentService = require("../services/provider/provider-location-enrichment-service");
 
 async function metadata(req, res, next) {
   try {
@@ -39,6 +40,12 @@ async function updateStatus(req, res, next) {
 async function convert(req, res, next) {
   try {
     const data = await service.convert(req.params.providerJoinRequestId, req.body, req.admin);
+    if (!data.existing && data.provider) {
+      data.provider = await providerLocationEnrichmentService.enrichProviderLocation(data.provider, {
+        pincodeChanged: true,
+        submittedProvider: req.body,
+      });
+    }
     return res.status(data.existing ? 200 : 201).json({
       success: true,
       message: data.existing

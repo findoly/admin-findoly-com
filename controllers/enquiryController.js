@@ -1,20 +1,34 @@
 const service = require("../services/enquiry/enquiry-service");
 const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
+const customerVerificationService = require("../services/enquiry/customer-verification-service");
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
 const enquiryLocationService = require("../services/location/enquiry-location-service");
+const { resolveLeadStatusTransition } = require("../utils/lead-journey");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
+
+function normalizeApprovedMobileVerification(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const status = String(data.journeyStatus || data.status || "").trim().toLowerCase();
+  if (status !== "approved") return data;
+  return {
+    ...data,
+    customerMobileVerified: true,
+    customerMobileVerifiedAt: data.customerMobileVerifiedAt || data.statusUpdatedAt || null,
+  };
+}
 
 function withEffectiveLocation(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return data;
-  const resolved = resolveRequirementLocation(data);
-  if (!resolved) return data;
+  const normalized = normalizeApprovedMobileVerification(data);
+  const resolved = resolveRequirementLocation(normalized);
+  if (!resolved) return normalized;
   return {
-    ...data,
+    ...normalized,
     locationLatitude: resolved.latitude,
     locationLongitude: resolved.longitude,
-    locationPincode: data.locationPincode || resolved.pincode || data.pincode || "",
-    locationSource: data.locationSource || resolved.source,
+    locationPincode: normalized.locationPincode || resolved.pincode || normalized.pincode || "",
+    locationSource: normalized.locationSource || resolved.source,
   };
 }
 
@@ -36,7 +50,9 @@ async function list(req, res, next) {
 
 async function get(req, res, next) {
   try {
-    res.json({ success: true, data: withEffectiveLocation(await service.get(req.params.enquiryId)) });
+    const lead = await service.get(req.params.enquiryId);
+    const verifiedLead = await customerVerificationService.ensureApprovedCustomerMobileVerified(lead);
+    res.json({ success: true, data: withEffectiveLocation(verifiedLead) });
   } catch (error) {
     next(error);
   }
@@ -45,10 +61,11 @@ async function get(req, res, next) {
 async function create(req, res, next) {
   try {
     const createdLead = await service.create(req.body, req.admin?.email || "api");
-    await enquiryLocationService.attachCreatedLeadLocation(createdLead);
+    await enquiryLocationService.syncLeadLocation(createdLead);
+    const refreshedLead = await service.get(createdLead.enquiryId);
     res.status(201).json({
       success: true,
-      data: withEffectiveLocation(await service.get(createdLead.enquiryId)),
+      data: withEffectiveLocation(refreshedLead),
     });
   } catch (error) {
     next(error);
@@ -72,13 +89,22 @@ async function update(req, res, next) {
       req.params.enquiryId,
       req.body,
     );
+    const previousLead = await service.get(req.params.enquiryId);
+    const updatedLead = await service.update(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    const publishAlreadyFailedGeocoding = updatedLead.journeyStatus === "approved"
+      && String(updatedLead.locationSource || "").toLowerCase() === "manual_pincode";
+    if (!publishAlreadyFailedGeocoding) {
+      await enquiryLocationService.syncLeadLocation(updatedLead, { previousLead });
+    }
+    const refreshedLead = await service.get(updatedLead.enquiryId);
+    const verifiedLead = await customerVerificationService.ensureApprovedCustomerMobileVerified(refreshedLead);
     res.json({
       success: true,
-      data: withEffectiveLocation(await service.update(
-        req.params.enquiryId,
-        req.body,
-        req.admin?.email || "admin",
-      )),
+      data: withEffectiveLocation(verifiedLead),
     });
   } catch (error) {
     next(error);
@@ -86,17 +112,35 @@ async function update(req, res, next) {
 }
 
 async function status(req, res, next) {
+  let verificationPreparation = null;
   try {
     await leadQualificationService.assertJourneyTransitionAllowed(req.params.enquiryId, req.body);
+    const currentLead = await service.get(req.params.enquiryId);
+    const transition = resolveLeadStatusTransition(
+      currentLead.status || currentLead.journeyStatus,
+      req.body,
+      currentLead.metadata || {},
+    );
+    if (transition.toStatus === "approved") {
+      verificationPreparation = await customerVerificationService.prepareApprovalCustomerMobileVerification(currentLead);
+    }
+
+    const changedLead = await service.updateStatus(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    const verifiedLead = await customerVerificationService.ensureApprovedCustomerMobileVerified(changedLead);
     res.json({
       success: true,
-      data: withEffectiveLocation(await service.updateStatus(
-        req.params.enquiryId,
-        req.body,
-        req.admin?.email || "admin",
-      )),
+      data: withEffectiveLocation(verifiedLead),
     });
   } catch (error) {
+    if (verificationPreparation) {
+      await customerVerificationService.rollbackPreparedApprovalCustomerMobileVerification(
+        verificationPreparation,
+      );
+    }
     next(error);
   }
 }

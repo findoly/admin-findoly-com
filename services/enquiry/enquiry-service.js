@@ -423,6 +423,7 @@ async function ensureEnquiryLocation(enquiry) {
     throw validationError("A valid 6-digit lead PIN code is required before marketplace publishing");
   }
   const alreadyVerified = pincode === String(enquiry.locationPincode || "")
+    && String(enquiry.locationSource || "").trim().toLowerCase() !== "manual_pincode"
     && hasNumericValue(enquiry.locationLatitude)
     && hasNumericValue(enquiry.locationLongitude);
   if (alreadyVerified) return enquiry;
@@ -445,13 +446,18 @@ async function ensureEnquiryLocation(enquiry) {
     });
     return { ...enquiry, ...locationData };
   } catch (_error) {
-    // A geocoding outage must not block approval. Providers without a precise
-    // distance match see the lead only at the open-network marketplace stage.
+    // A geocoding outage must not block approval. Clear any old coordinates so
+    // this explicit manual state retries Google later and cannot look verified.
     return {
       ...enquiry,
+      locationLatitude: null,
+      locationLongitude: null,
       locationPincode: pincode,
+      locationLocality: "",
+      locationDistrict: "",
       locationState: enquiry.state || "",
       locationCountry: "India",
+      locationVerifiedAt: null,
       locationSource: "manual_pincode",
     };
   }
@@ -496,9 +502,14 @@ async function publishMarketplace(enquiryId, actor = "system") {
       marketplacePublishedAt,
       marketplaceExpiresAt,
       remainingUnlocks,
+      locationLatitude: hasNumericValue(lead.locationLatitude) ? Number(lead.locationLatitude) : null,
+      locationLongitude: hasNumericValue(lead.locationLongitude) ? Number(lead.locationLongitude) : null,
       locationPincode: lead.locationPincode || lead.pincode,
+      locationLocality: lead.locationLocality || "",
+      locationDistrict: lead.locationDistrict || "",
       locationState: lead.locationState || lead.state || "",
       locationCountry: lead.locationCountry || "India",
+      locationVerifiedAt: lead.locationVerifiedAt || null,
       locationSource: lead.locationSource || "manual_pincode",
       updatedAt: now,
     },

@@ -11,6 +11,8 @@ const pincodeLocationSchema = new mongoose.Schema(
     state: { type: String, default: "" },
     country: { type: String, default: "India" },
     formattedAddress: { type: String, default: "" },
+    postcodeLocalities: { type: [String], default: [] },
+    enrichmentVersion: { type: Number, default: 0 },
     source: { type: String, default: "google_geocoding" },
     verifiedAt: { type: Date, default: Date.now },
   },
