@@ -80,8 +80,8 @@
     const originalPincode = cleanText(context.pincodeInput?.dataset.crmOriginalPincode, 6);
     const pincodeChanged = context.isCreate || (originalPincode && originalPincode !== currentPincode);
 
-    setModelValue(city, location?.city || location?.locality || location?.district);
-    setModelValue(state, location?.state);
+    setModelValue(city, location?.city || location?.locality || location?.district, { onlyIfEmpty: !pincodeChanged });
+    setModelValue(state, location?.state, { onlyIfEmpty: !pincodeChanged });
 
     if (pincodeChanged || !cleanText(address?.value, 500)) {
       setModelValue(address, location?.formattedAddress);
@@ -105,8 +105,8 @@
     const originalPincode = cleanText(context.pincodeInput?.dataset.crmOriginalPincode, 6);
     const pincodeChanged = context.isCreate || (originalPincode && originalPincode !== currentPincode);
 
-    setModelValue(city, location?.city || location?.locality || location?.district);
-    setModelValue(state, location?.state);
+    setModelValue(city, location?.city || location?.locality || location?.district, { onlyIfEmpty: !pincodeChanged });
+    setModelValue(state, location?.state, { onlyIfEmpty: !pincodeChanged });
     if (pincodeChanged || !cleanText(address?.value, 500)) {
       setModelValue(address, location?.formattedAddress);
     }
