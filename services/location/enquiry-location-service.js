@@ -49,12 +49,14 @@ async function syncLeadLocation(lead = {}) {
   if (!enquiryId || !/^[1-9]\d{5}$/.test(pincode)) return null;
 
   const storedLocationPincode = String(lead.locationPincode || "").trim();
+  const currentLocationSource = String(lead.locationSource || "").trim().toLowerCase();
   const canonicalMatchesPincode = pincode === storedLocationPincode;
   const pincodeChanged = /^[1-9]\d{5}$/.test(storedLocationPincode)
     && storedLocationPincode !== pincode;
   const hasCurrentCoordinates = validCoordinate(lead.locationLatitude, -90, 90)
     && validCoordinate(lead.locationLongitude, -180, 180);
-  if (canonicalMatchesPincode && hasCurrentCoordinates) {
+  const currentCoordinatesVerified = currentLocationSource !== "manual_pincode";
+  if (canonicalMatchesPincode && hasCurrentCoordinates && currentCoordinatesVerified) {
     return currentLocationData(lead);
   }
 
