@@ -70,6 +70,7 @@ function validCachedLocation(cached) {
 function safeLogMessage(value) {
   return String(value || "")
     .replace(/([?&]key=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, "[redacted-google-api-key]")
     .slice(0, 1000);
 }
 
@@ -130,9 +131,17 @@ async function geocodePincode(value, options = {}) {
   }
 
   if (!response.ok) {
+    let errorBody = null;
+    try {
+      errorBody = await response.json();
+    } catch (_error) {
+      // HTTP status/statusText still provide safe diagnostics when Google sends non-JSON.
+    }
     logGeocodingFailure("google_geocoding_http_failed", {
       pincode,
       httpStatus: response.status,
+      googleStatus: errorBody?.status || "",
+      errorMessage: errorBody?.error_message || response.statusText || "",
     });
     if (cachedLocation) return cachedLocation;
     throw validationError(
@@ -148,6 +157,7 @@ async function geocodePincode(value, options = {}) {
   } catch (error) {
     logGeocodingFailure("google_geocoding_invalid_json", {
       pincode,
+      httpStatus: response.status,
       errorMessage: error?.message || error,
     });
     if (cachedLocation) return cachedLocation;
@@ -164,6 +174,7 @@ async function geocodePincode(value, options = {}) {
   if (body?.status !== "OK" || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     logGeocodingFailure("google_geocoding_response_rejected", {
       pincode,
+      httpStatus: response.status,
       googleStatus: body?.status || "UNKNOWN",
       errorMessage: body?.error_message || "",
     });
@@ -184,6 +195,12 @@ async function geocodePincode(value, options = {}) {
   );
   const countryCode = String(countryComponent?.short_name || "").toUpperCase();
   if (countryCode && countryCode !== "IN") {
+    logGeocodingFailure("google_geocoding_country_rejected", {
+      pincode,
+      httpStatus: response.status,
+      googleStatus: body?.status || "OK",
+      errorMessage: `Unexpected country code ${countryCode}`,
+    });
     throw validationError("The service PIN code must be located in India");
   }
 
