@@ -49,7 +49,10 @@ async function transactions(req, res, next) {
 async function create(req, res, next) {
   try {
     const created = await service.create(req.body, req.admin?.email || req.admin?.employeeId || "crm-admin");
-    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(created, { pincodeChanged: true });
+    const enriched = await providerLocationEnrichmentService.enrichProviderLocation(created, {
+      pincodeChanged: true,
+      submittedProvider: req.body,
+    });
     res.status(201).json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -68,6 +71,7 @@ async function update(req, res, next) {
     const enriched = await providerLocationEnrichmentService.enrichProviderLocation(updated, {
       pincodeChanged,
       previousProvider: current,
+      submittedProvider: req.body,
     });
     res.json({
       success: true,
