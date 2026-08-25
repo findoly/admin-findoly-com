@@ -22,6 +22,11 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
     && validCoordinate(record[longitudeField], -180, 180);
 }
 
+function providerHasVerifiedCoordinates(provider = {}) {
+  return String(provider.serviceLocationSource || "").trim().toLowerCase() !== "manual_pincode"
+    && hasCoordinates(provider, "serviceLatitude", "serviceLongitude");
+}
+
 function defaultRadiusKmForLead(lead = {}) {
   const value = Number(lead.alertDistanceKm);
   return Number.isInteger(value) && value >= MIN_RADIUS_KM && value <= MAX_RADIUS_KM
@@ -50,8 +55,11 @@ function joinLocation(...values) {
 }
 
 function providerLocationLabel(provider = {}) {
+  const verifiedLocality = String(provider.serviceLocationSource || "").trim().toLowerCase() === "manual_pincode"
+    ? ""
+    : provider.serviceLocality;
   return joinLocation(
-    provider.serviceLocality,
+    verifiedLocality,
     provider.city,
     provider.serviceState || provider.state,
     provider.servicePincode,
@@ -92,7 +100,7 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
   if (!resolved) return [];
   const rows = [];
   for (const provider of providers) {
-    if (!hasCoordinates(provider, "serviceLatitude", "serviceLongitude")) continue;
+    if (!providerHasVerifiedCoordinates(provider)) continue;
     const distanceKm = nearbyLeadAlertService.distanceKmExact(
       resolved.latitude,
       resolved.longitude,
@@ -165,7 +173,9 @@ async function listNearbyProviders(enquiryId, options = {}) {
 
   let workingLead = lead;
   if (!resolveRequirementLocation(lead) || canonicalLocationPincodeMismatch(lead)) {
-    const syncedLocation = await enquiryLocationService.syncLeadLocation(lead);
+    const syncedLocation = await enquiryLocationService.syncLeadLocation(lead, {
+      fillMissingDescriptive: false,
+    });
     if (syncedLocation) workingLead = { ...lead, ...syncedLocation };
   }
 
@@ -187,6 +197,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
     categorySlugs: workingLead.categorySlug,
     serviceLatitude: { $ne: null },
     serviceLongitude: { $ne: null },
+    serviceLocationSource: { $ne: "manual_pincode" },
   })
     .select({
       providerId: 1,
@@ -201,6 +212,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
       serviceLongitude: 1,
       serviceLocality: 1,
       serviceState: 1,
+      serviceLocationSource: 1,
     })
     .lean();
 
@@ -220,6 +232,7 @@ module.exports = {
   MAX_RADIUS_KM,
   validCoordinate,
   hasCoordinates,
+  providerHasVerifiedCoordinates,
   defaultRadiusKmForLead,
   normalizeRadiusKm,
   providerLocationLabel,
