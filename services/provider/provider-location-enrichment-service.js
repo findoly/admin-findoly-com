@@ -29,6 +29,14 @@ function validCoordinate(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
+async function persistProviderLocation(providerId, provider, update) {
+  const result = await Provider.updateOne(
+    { $or: [{ providerId }, { id: providerId }] },
+    { $set: { ...update, updatedAt: new Date() } },
+  );
+  return result.matchedCount ? { ...provider, ...update } : provider;
+}
+
 async function enrichProviderLocation(
   provider = {},
   { pincodeChanged = false, previousProvider = {} } = {},
@@ -76,11 +84,7 @@ async function enrichProviderLocation(
     }
 
     if (!Object.keys(update).length) return provider;
-    const result = await Provider.updateOne(
-      { $or: [{ providerId }, { id: providerId }] },
-      { $set: { ...update, updatedAt: new Date() } },
-    );
-    return result.matchedCount ? { ...provider, ...update } : provider;
+    return persistProviderLocation(providerId, provider, update);
   } catch (error) {
     console.warn({
       event: "provider_location_enrichment_failed",
@@ -89,7 +93,30 @@ async function enrichProviderLocation(
       code: String(error.code || "GEOCODING_UNAVAILABLE"),
       message: String(error.message || error).slice(0, 1000),
     });
-    return provider;
+    if (!pincodeChanged) return provider;
+
+    const fallback = {
+      serviceLatitude: null,
+      serviceLongitude: null,
+      serviceLocality: "",
+      serviceDistrict: "",
+      serviceState: provider.state || "",
+      serviceCountry: "India",
+      serviceLocationVerifiedAt: null,
+      serviceLocationSource: "manual_pincode",
+    };
+    try {
+      return await persistProviderLocation(providerId, provider, fallback);
+    } catch (persistError) {
+      console.warn({
+        event: "provider_location_fallback_save_failed",
+        providerId,
+        pincode,
+        code: String(persistError.code || "LOCATION_SAVE_FAILED"),
+        message: String(persistError.message || persistError).slice(0, 1000),
+      });
+      return { ...provider, ...fallback };
+    }
   }
 }
 
