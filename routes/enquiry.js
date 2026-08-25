@@ -7,6 +7,8 @@ router.post("/", requirePermission("requirements.create"), c.create);
 router.get("/:enquiryId/nearby-providers", requirePermission("requirements.view"), c.nearbyProviders);
 router.get("/:enquiryId/providers", requirePermission("requirements.view"), c.providerStatuses);
 router.get("/:enquiryId/providers/:providerLeadUnlockId", requirePermission("requirements.view"), c.providerStatus);
+router.get("/:enquiryId/validation", requirePermission("requirements.view"), c.validation);
+router.post("/:enquiryId/validation/preview", requirePermission("requirements.manage"), c.validationPreview);
 router.get("/:enquiryId/qualification", requirePermission("requirements.view"), c.qualification);
 router.post("/:enquiryId/qualification/preview", requirePermission("requirements.manage"), c.qualificationPreview);
 router.post("/:enquiryId/qualification", requirePermission("requirements.manage"), c.saveQualification);
