@@ -29,7 +29,10 @@ function validCoordinate(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
-async function enrichProviderLocation(provider = {}, { pincodeChanged = false } = {}) {
+async function enrichProviderLocation(
+  provider = {},
+  { pincodeChanged = false, previousProvider = {} } = {},
+) {
   const providerId = cleanText(provider.providerId || provider.id, 128);
   const pincode = cleanText(provider.servicePincode, 6);
   if (!providerId || !/^[1-9]\d{5}$/.test(pincode)) return provider;
@@ -42,12 +45,22 @@ async function enrichProviderLocation(provider = {}, { pincodeChanged = false } 
     const city = cleanText(location?.city || location?.locality || location?.district, 100);
     const state = cleanText(location?.state, 100);
     const formattedAddress = cleanText(location?.formattedAddress, 500);
+    const previousAddress = cleanText(previousProvider?.serviceAddress, 500);
+    const previousAreas = cleanLocalities(previousProvider?.serviceAreas);
+    const providerAreas = cleanLocalities(provider?.serviceAreas);
+
     if (city && (pincodeChanged || !cleanText(provider.city, 100))) update.city = city;
     if (state && (pincodeChanged || !cleanText(provider.state, 100))) update.state = state;
-    if (formattedAddress && (pincodeChanged || !cleanText(provider.serviceAddress, 500))) {
+    if (
+      formattedAddress
+      && (pincodeChanged || (!cleanText(provider.serviceAddress, 500) && !previousAddress))
+    ) {
       update.serviceAddress = formattedAddress;
     }
-    if (postcodeLocalities.length && (pincodeChanged || !Array.isArray(provider.serviceAreas) || !provider.serviceAreas.length)) {
+    if (
+      postcodeLocalities.length
+      && (pincodeChanged || (!providerAreas.length && !previousAreas.length))
+    ) {
       update.serviceAreas = postcodeLocalities;
     }
 
