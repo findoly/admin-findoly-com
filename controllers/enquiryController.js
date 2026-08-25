@@ -2,6 +2,7 @@ const service = require("../services/enquiry/enquiry-service");
 const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
+const enquiryLocationService = require("../services/location/enquiry-location-service");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 function withEffectiveLocation(data) {
@@ -43,9 +44,11 @@ async function get(req, res, next) {
 
 async function create(req, res, next) {
   try {
+    const createdLead = await service.create(req.body, req.admin?.email || "api");
+    await enquiryLocationService.attachCreatedLeadLocation(createdLead);
     res.status(201).json({
       success: true,
-      data: withEffectiveLocation(await service.create(req.body, req.admin?.email || "api")),
+      data: withEffectiveLocation(await service.get(createdLead.enquiryId)),
     });
   } catch (error) {
     next(error);

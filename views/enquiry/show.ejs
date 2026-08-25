@@ -30,6 +30,7 @@
               <div class="d-flex flex-wrap gap-2 mb-3">
                 <a class="btn btn-light" :href="'/enquiries/'+recordId+'/edit'">Edit</a>
                 <a class="btn btn-light" :href="providerJourneyUrl">Provider status</a>
+                <a x-show="['valid', 'invalid'].includes(lead.agentReferralValidation) || qualificationComplete" x-cloak class="btn btn-light" :href="'/enquiries/'+recordId+'/review'">View validation & qualification</a>
                 <a class="btn btn-light" :href="'/follow-ups/new?enquiryId='+recordId">Add follow-up</a>
                 <a class="btn btn-light" :href="'/communications/new?enquiryId='+recordId">Log communication</a>
                 <a class="btn btn-light" :href="'/communications/send?enquiryId='+recordId">Send message</a>
