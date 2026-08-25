@@ -88,12 +88,13 @@ async function update(req, res, next) {
       req.params.enquiryId,
       req.body,
     );
+    const previousLead = await service.get(req.params.enquiryId);
     const updatedLead = await service.update(
       req.params.enquiryId,
       req.body,
       req.admin?.email || "admin",
     );
-    await enquiryLocationService.syncLeadLocation(updatedLead);
+    await enquiryLocationService.syncLeadLocation(updatedLead, { previousLead });
     const refreshedLead = await service.get(updatedLead.enquiryId);
     const verifiedLead = await customerVerificationService.ensureApprovedCustomerMobileVerified(refreshedLead);
     res.json({
