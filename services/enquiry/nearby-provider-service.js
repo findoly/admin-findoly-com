@@ -3,6 +3,7 @@
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
+const enquiryLocationService = require("../location/enquiry-location-service");
 const { identifierValue, numberValue } = require("../../utils/validation");
 const { resolveRequirementLocation } = require("../../utils/requirement-location");
 
@@ -118,6 +119,14 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
     || String(left.businessName || left.name).localeCompare(String(right.businessName || right.name)));
 }
 
+function canonicalLocationPincodeMismatch(lead = {}) {
+  const pincode = String(lead.pincode || "").trim();
+  const locationPincode = String(lead.locationPincode || "").trim();
+  return /^[1-9]\d{5}$/.test(pincode)
+    && /^[1-9]\d{5}$/.test(locationPincode)
+    && pincode !== locationPincode;
+}
+
 async function listNearbyProviders(enquiryId, options = {}) {
   const value = identifierValue(enquiryId, { label: "Lead Reference ID" });
   const lead = await Enquiry.findOne({ $or: [{ enquiryId: value }, { id: value }] })
@@ -136,7 +145,10 @@ async function listNearbyProviders(enquiryId, options = {}) {
       locationLongitude: 1,
       locationPincode: 1,
       locationLocality: 1,
+      locationDistrict: 1,
       locationState: 1,
+      locationCountry: 1,
+      locationVerifiedAt: 1,
       locationSource: 1,
       additionalDetails: 1,
       metadata: 1,
@@ -151,10 +163,16 @@ async function listNearbyProviders(enquiryId, options = {}) {
     .lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
 
-  const fallbackRadiusKm = defaultRadiusKmForLead(lead);
+  let workingLead = lead;
+  if (!resolveRequirementLocation(lead) || canonicalLocationPincodeMismatch(lead)) {
+    const syncedLocation = await enquiryLocationService.syncLeadLocation(lead);
+    if (syncedLocation) workingLead = { ...lead, ...syncedLocation };
+  }
+
+  const fallbackRadiusKm = defaultRadiusKmForLead(workingLead);
   const radiusKm = normalizeRadiusKm(options.radiusKm, fallbackRadiusKm);
-  const presentedLead = presentLead(lead);
-  if (!resolveRequirementLocation(lead)) {
+  const presentedLead = presentLead(workingLead);
+  if (!resolveRequirementLocation(workingLead)) {
     return {
       lead: presentedLead,
       radiusKm,
@@ -166,7 +184,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
 
   const providers = await Provider.find({
     status: "active",
-    categorySlugs: lead.categorySlug,
+    categorySlugs: workingLead.categorySlug,
     serviceLatitude: { $ne: null },
     serviceLongitude: { $ne: null },
   })
@@ -186,7 +204,7 @@ async function listNearbyProviders(enquiryId, options = {}) {
     })
     .lean();
 
-  const data = buildNearbyProviderRows(lead, providers, radiusKm);
+  const data = buildNearbyProviderRows(workingLead, providers, radiusKm);
   return {
     lead: presentedLead,
     radiusKm,
