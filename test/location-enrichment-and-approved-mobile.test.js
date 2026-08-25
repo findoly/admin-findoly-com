@@ -100,6 +100,32 @@ test("manual provider coordinates are excluded from nearby tables and WhatsApp a
   assert.match(alerts, /serviceLocationSource:\s*1/);
 });
 
+test("lower-level provider and marketplace services retry manual PIN states safely", () => {
+  const providerService = source("services/provider/provider-service.js");
+  const enquiryService = source("services/enquiry/enquiry-service.js");
+
+  assert.match(
+    providerService,
+    /const sameLocation = pincode === String\(current\.servicePincode \|\| ""\)[\s\S]*?serviceLocationSource[\s\S]*?!== "manual_pincode"/,
+  );
+  assert.match(
+    providerService,
+    /function manualLocation\(data\)[\s\S]*?serviceLatitude:\s*null[\s\S]*?serviceLongitude:\s*null[\s\S]*?serviceLocality:\s*""[\s\S]*?serviceDistrict:\s*""[\s\S]*?serviceLocationSource:\s*"manual_pincode"/,
+  );
+  assert.match(
+    enquiryService,
+    /const alreadyVerified = pincode === String\(enquiry\.locationPincode \|\| ""\)[\s\S]*?locationSource[\s\S]*?!== "manual_pincode"/,
+  );
+  assert.match(
+    enquiryService,
+    /locationLatitude:\s*null[\s\S]*?locationLongitude:\s*null[\s\S]*?locationLocality:\s*""[\s\S]*?locationDistrict:\s*""[\s\S]*?locationVerifiedAt:\s*null[\s\S]*?locationSource:\s*"manual_pincode"/,
+  );
+  assert.match(
+    enquiryService,
+    /\$set:\s*\{[\s\S]*?locationLatitude:[\s\S]*?locationLongitude:[\s\S]*?locationPincode:[\s\S]*?locationLocality:[\s\S]*?locationDistrict:[\s\S]*?locationVerifiedAt:[\s\S]*?locationSource:/,
+  );
+});
+
 test("requirement location resolver rejects stale or unverified coordinates", () => {
   assert.equal(resolveRequirementLocation({
     pincode: "400095",
