@@ -196,7 +196,7 @@ async function geocodePincode(value, options = {}) {
     city: componentValue(components, ["locality", "administrative_area_level_3", "administrative_area_level_2"]),
     state: componentValue(components, ["administrative_area_level_1"]),
     country: componentValue(components, ["country"]) || "India",
-    formattedAddress: String(result?.formatted_address || `${pincode}, India`).trim().slice(0, 500),
+    formattedAddress: String(result?.formatted_address || "").trim().slice(0, 500),
     postcodeLocalities: cleanTextList(result?.postcode_localities),
     source: "google_geocoding",
     enrichmentVersion: LOCATION_ENRICHMENT_VERSION,
