@@ -4,6 +4,7 @@ const customerVerificationService = require("../services/enquiry/customer-verifi
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
 const enquiryLocationService = require("../services/location/enquiry-location-service");
+const { resolveLeadStatusTransition } = require("../utils/lead-journey");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 function normalizeApprovedMobileVerification(data) {
@@ -94,7 +95,11 @@ async function update(req, res, next) {
       req.body,
       req.admin?.email || "admin",
     );
-    await enquiryLocationService.syncLeadLocation(updatedLead, { previousLead });
+    const publishAlreadyFailedGeocoding = updatedLead.journeyStatus === "approved"
+      && String(updatedLead.locationSource || "").toLowerCase() === "manual_pincode";
+    if (!publishAlreadyFailedGeocoding) {
+      await enquiryLocationService.syncLeadLocation(updatedLead, { previousLead });
+    }
     const refreshedLead = await service.get(updatedLead.enquiryId);
     const verifiedLead = await customerVerificationService.ensureApprovedCustomerMobileVerified(refreshedLead);
     res.json({
@@ -107,8 +112,19 @@ async function update(req, res, next) {
 }
 
 async function status(req, res, next) {
+  let verificationPreparation = null;
   try {
     await leadQualificationService.assertJourneyTransitionAllowed(req.params.enquiryId, req.body);
+    const currentLead = await service.get(req.params.enquiryId);
+    const transition = resolveLeadStatusTransition(
+      currentLead.status || currentLead.journeyStatus,
+      req.body,
+      currentLead.metadata || {},
+    );
+    if (transition.toStatus === "approved") {
+      verificationPreparation = await customerVerificationService.prepareApprovalCustomerMobileVerification(currentLead);
+    }
+
     const changedLead = await service.updateStatus(
       req.params.enquiryId,
       req.body,
@@ -120,6 +136,11 @@ async function status(req, res, next) {
       data: withEffectiveLocation(verifiedLead),
     });
   } catch (error) {
+    if (verificationPreparation) {
+      await customerVerificationService.rollbackPreparedApprovalCustomerMobileVerification(
+        verificationPreparation,
+      );
+    }
     next(error);
   }
 }
