@@ -50,6 +50,15 @@ test("lead detail runtime mounts the questionnaire and visibly gates qualificati
   assert.match(ui, /Override reason/);
 });
 
+test("validation questionnaire supports both enquiry and requirement detail aliases", () => {
+  const runtime = source("public/js/crm-ui-runtime.js");
+  const ui = source("public/js/lead-validation-ui.js");
+  const head = source("views/partials/head.ejs");
+  assert.match(runtime, /\(\?:enquiries\|requirements\)/);
+  assert.match(ui, /\(\?:enquiries\|requirements\)/);
+  assert.match(head, /crm-ui-runtime\.js\?v=20260825-1/);
+});
+
 test("approved validation wording and selectable customer-interest answers remain fixed", () => {
   const validation = source("utils/lead-validation.js");
   assert.match(validation, /After speaking with the customer, what is their current interest in getting this service\?/);
