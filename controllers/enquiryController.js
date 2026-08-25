@@ -1,5 +1,7 @@
 const service = require("../services/enquiry/enquiry-service");
 const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
+const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
+const leadValidationService = require("../services/lead-validation/lead-validation-service");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
 
 function withEffectiveLocation(data) {
@@ -63,6 +65,10 @@ async function createPublic(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    await leadQualificationService.assertDirectLeadValueEditAllowed(
+      req.params.enquiryId,
+      req.body,
+    );
     res.json({
       success: true,
       data: withEffectiveLocation(await service.update(
@@ -78,6 +84,7 @@ async function update(req, res, next) {
 
 async function status(req, res, next) {
   try {
+    await leadQualificationService.assertJourneyTransitionAllowed(req.params.enquiryId, req.body);
     res.json({
       success: true,
       data: withEffectiveLocation(await service.updateStatus(
@@ -91,9 +98,81 @@ async function status(req, res, next) {
   }
 }
 
+async function validation(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadValidationService.getValidation(req.params.enquiryId),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function validationPreview(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadValidationService.previewValidation(req.params.enquiryId, req.body),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function qualification(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadQualificationService.getQualification(req.params.enquiryId),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function qualificationPreview(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await leadQualificationService.previewQualification(req.params.enquiryId, req.body),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function saveQualification(req, res, next) {
+  try {
+    const result = await leadQualificationService.saveQualification(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    res.json({
+      success: true,
+      data: {
+        qualification: result.qualification,
+        lead: withEffectiveLocation(result.lead),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function referralValidation(req, res, next) {
   try {
-    res.json({ success: true, data: withEffectiveLocation(await service.updateAgentReferralValidation(req.params.enquiryId, req.body, req.admin?.email || "admin")) });
+    const result = await leadValidationService.saveValidation(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    res.json({
+      success: true,
+      data: withEffectiveLocation(result.lead),
+      validation: result.validation,
+    });
   } catch (error) { next(error); }
 }
 
@@ -195,6 +274,11 @@ module.exports = {
   createPublic,
   update,
   status,
+  validation,
+  validationPreview,
+  qualification,
+  qualificationPreview,
+  saveQualification,
   referralValidation,
   saleConversion,
   note,

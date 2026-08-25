@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const mongoose = require("mongoose");
 
 const {
@@ -72,18 +74,18 @@ const journeyCases = [
 for (const [name, fn] of journeyCases) test(name, fn);
 
 const paginationCases = [
-  ["pagination default limit is twenty", () => assert.equal(DEFAULT_LIMIT, 20)],
+  ["pagination default limit is one hundred", () => assert.equal(DEFAULT_LIMIT, 100)],
   ["pagination maximum limit is one hundred", () => assert.equal(MAX_LIMIT, 100)],
-  ["pagination returns default for missing limit", () => assert.equal(normalizeLimit(undefined), 20)],
-  ["pagination returns default for zero", () => assert.equal(normalizeLimit(0), 20)],
-  ["pagination returns default for negative limit", () => assert.equal(normalizeLimit(-1), 20)],
-  ["pagination returns default for decimal limit", () => assert.equal(normalizeLimit(1.5), 20)],
-  ["pagination returns default for nonnumeric limit", () => assert.equal(normalizeLimit("many"), 20)],
+  ["pagination returns default for missing limit", () => assert.equal(normalizeLimit(undefined), 100)],
+  ["pagination returns default for zero", () => assert.equal(normalizeLimit(0), 100)],
+  ["pagination returns default for negative limit", () => assert.equal(normalizeLimit(-1), 100)],
+  ["pagination returns default for decimal limit", () => assert.equal(normalizeLimit(1.5), 100)],
+  ["pagination returns default for nonnumeric limit", () => assert.equal(normalizeLimit("many"), 100)],
   ["pagination accepts a valid limit", () => assert.equal(normalizeLimit("50"), 50)],
   ["pagination caps a large limit", () => assert.equal(normalizeLimit(500), 100)],
   ["pagination uses a safe custom fallback", () => assert.equal(normalizeLimit(undefined, 25), 25)],
   ["pagination caps a large custom fallback", () => assert.equal(normalizeLimit(undefined, 500), 100)],
-  ["pagination replaces an invalid custom fallback", () => assert.equal(normalizeLimit(undefined, -1), 20)],
+  ["pagination replaces an invalid custom fallback", () => assert.equal(normalizeLimit(undefined, -1), 100)],
   ["pagination normalizes ascending direction", () => assert.deepEqual(normalizeSort({ name: 1 }), { name: 1, _id: 1 })],
   ["pagination normalizes other directions to descending", () => assert.deepEqual(normalizeSort({ name: 20 }), { name: -1, _id: -1 })],
   ["pagination retains explicit ID direction", () => assert.deepEqual(normalizeSort({ createdAt: -1, _id: 1 }), { createdAt: -1, _id: 1 })],
@@ -129,6 +131,7 @@ const paginationCases = [
   ["pagination merge keeps base query without cursor", () => assert.deepEqual(mergeQuery({ active: true }, null), { active: true })],
   ["pagination merge returns cursor for empty base query", () => assert.deepEqual(mergeQuery({}, { $or: [{ id: { $lt: 1 } }] }), { $or: [{ id: { $lt: 1 } }] })],
   ["pagination merge combines both conditions", () => assert.deepEqual(mergeQuery({ active: true }, { $or: [{ id: { $lt: 1 } }] }), { $and: [{ active: true }, { $or: [{ id: { $lt: 1 } }] }] })],
+  ["pagination query parser defaults missing limit to one hundred", () => assert.deepEqual(getPagination({}), { limit: 100, cursor: "" })],
   ["pagination query parser preserves a valid cursor", () => assert.deepEqual(getPagination({ limit: "25", cursor: "abc_123" }), { limit: 25, cursor: "abc_123" })],
   ["pagination query parser rejects oversized cursor before database access", () => expectStatus(() => getPagination({ cursor: "a".repeat(MAX_CURSOR_LENGTH + 1) }), 400, /Invalid pagination cursor/)],
 ];
@@ -155,6 +158,17 @@ test("cursor pagination fetches only limit plus one and emits next cursor", asyn
   assert.equal(result.data.length, 3);
   assert.equal(result.pagination.hasNext, true);
   assert.ok(result.pagination.nextCursor);
+});
+
+test("cursor pagination defaults to one hundred rows", async () => {
+  const calls = {};
+  const builder = {
+    sort() { return this; },
+    limit(value) { calls.limit = value; return this; },
+    async lean() { return []; },
+  };
+  await cursorPaginate({ find() { return builder; } }, {});
+  assert.equal(calls.limit, 101);
 });
 
 test("cursor pagination omits next cursor on final page", async () => {
@@ -184,6 +198,16 @@ test("cursor pagination rejects invalid model", async () => {
 test("cursor pagination rejects a non-array database response", async () => {
   const builder = { sort() { return this; }, limit() { return this; }, async lean() { return null; } };
   await assert.rejects(cursorPaginate({ find() { return builder; } }, {}), (error) => error.status === 500 && /invalid result/.test(error.message));
+});
+
+test("shared table pagination uses 100 rows and numbered navigation", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../views/partials/scripts.ejs"), "utf8");
+  assert.match(source, /function createCursorPagination\(limit = 100\)/);
+  assert.match(source, /requestedLimit === 20 \? 100 : requestedLimit/);
+  assert.match(source, /function cursorGoToPage\(/);
+  assert.match(source, /knownCursorPageItems/);
+  assert.match(source, /data-crm-page-number/);
+  assert.match(source, /\.crm-pagination/);
 });
 
 const errorCases = [
