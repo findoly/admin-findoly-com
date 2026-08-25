@@ -72,15 +72,29 @@ async function enrichProviderLocation(
       update.serviceAreas = postcodeLocalities;
     }
 
-    if (validCoordinate(location?.latitude, -90, 90) && validCoordinate(location?.longitude, -180, 180)) {
-      update.serviceLatitude = Number(location.latitude);
-      update.serviceLongitude = Number(location.longitude);
-      update.serviceLocality = location.locality || "";
-      update.serviceDistrict = location.district || "";
-      update.serviceState = location.state || provider.serviceState || provider.state || "";
-      update.serviceCountry = location.country || "India";
-      update.serviceLocationVerifiedAt = location.verifiedAt || new Date();
-      update.serviceLocationSource = location.source || "google_geocoding";
+    const googleCoordinatesValid = validCoordinate(location?.latitude, -90, 90)
+      && validCoordinate(location?.longitude, -180, 180);
+    const providerCoordinatesValid = validCoordinate(provider.serviceLatitude, -90, 90)
+      && validCoordinate(provider.serviceLongitude, -180, 180);
+    if (googleCoordinatesValid) {
+      if (pincodeChanged || !providerCoordinatesValid) {
+        update.serviceLatitude = Number(location.latitude);
+        update.serviceLongitude = Number(location.longitude);
+        update.serviceLocationVerifiedAt = location.verifiedAt || new Date();
+        update.serviceLocationSource = location.source || "google_geocoding";
+      }
+      if (pincodeChanged || !cleanText(provider.serviceLocality, 120)) {
+        update.serviceLocality = location.locality || "";
+      }
+      if (pincodeChanged || !cleanText(provider.serviceDistrict, 120)) {
+        update.serviceDistrict = location.district || "";
+      }
+      if (pincodeChanged || !cleanText(provider.serviceState, 100)) {
+        update.serviceState = location.state || provider.serviceState || provider.state || "";
+      }
+      if (pincodeChanged || !cleanText(provider.serviceCountry, 100)) {
+        update.serviceCountry = location.country || "India";
+      }
     }
 
     if (!Object.keys(update).length) return provider;
