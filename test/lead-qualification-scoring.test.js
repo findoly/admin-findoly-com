@@ -5,9 +5,11 @@ const {
   QUALIFICATION_VERSION,
   QUESTIONS,
   PRICE_WEIGHTS,
+  PRICE_RISK_RULES,
   INTENT_WEIGHTS,
   PRIORITY_WEIGHTS,
   calculateQualification,
+  calculatePriceScore,
   calculateLeadPricePaise,
   roundScoreToTen,
   normalizeFinalSelection,
@@ -84,11 +86,17 @@ test("lead price uses the approved provider-value weights while intent and prior
   const total = (weights) => Object.values(weights).reduce((sum, value) => sum + value, 0);
   assert.deepEqual(PRICE_WEIGHTS, {
     readiness: 30,
-    timeline: 15,
+    timeline: 22,
     clarity: 10,
-    responsiveness: 20,
+    responsiveness: 18,
     expected_spend: 15,
-    genuine_confidence: 10,
+    genuine_confidence: 5,
+  });
+  assert.deepEqual(PRICE_RISK_RULES, {
+    readiness: { exploring: 60, information_only: 30 },
+    responsiveness: { difficult: 50 },
+    clarity: { unclear: 60 },
+    genuine_confidence: { low: 50 },
   });
   assert.equal(total(PRICE_WEIGHTS), 100);
   assert.equal(total(INTENT_WEIGHTS), 100);
@@ -137,9 +145,9 @@ test("a ready and responsive smaller-spend customer can still be a high-value le
     genuine_confidence: "very_high",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 85);
-  assert.equal(result.system.roundedPricePercent, 90);
-  assert.equal(result.system.leadPricePaise, 45000);
+  assert.equal(result.system.priceScorePercent, 83);
+  assert.equal(result.system.roundedPricePercent, 80);
+  assert.equal(result.system.leadPricePaise, 40000);
 });
 
 test("high expected spend cannot dominate a weak customer opportunity", () => {
@@ -152,9 +160,9 @@ test("high expected spend cannot dominate a weak customer opportunity", () => {
     genuine_confidence: "high",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 35);
-  assert.equal(result.system.roundedPricePercent, 40);
-  assert.equal(result.system.leadPricePaise, 20000);
+  assert.equal(result.system.priceScorePercent, 30);
+  assert.equal(result.system.roundedPricePercent, 30);
+  assert.equal(result.system.leadPricePaise, 15000);
 });
 
 test("expected spend affects lead price without automatically raising intent or priority", () => {
@@ -167,9 +175,9 @@ test("expected spend affects lead price without automatically raising intent or 
     genuine_confidence: "medium",
   };
   const result = calculateQualification(answers, 20000);
-  assert.equal(result.system.priceScorePercent, 50);
-  assert.equal(result.system.roundedPricePercent, 50);
-  assert.equal(result.system.leadPricePaise, 10000);
+  assert.equal(result.system.priceScorePercent, 56);
+  assert.equal(result.system.roundedPricePercent, 60);
+  assert.equal(result.system.leadPricePaise, 12000);
   assert.equal(result.system.intentScorePercent, 44);
   assert.equal(result.system.leadIntent, "low");
   assert.equal(result.system.priorityScorePercent, 42);
@@ -186,13 +194,15 @@ test("exploring customers cannot be classified above medium intent even when oth
     genuine_confidence: "very_high",
   };
   const result = calculateQualification(answers, 10000);
+  assert.equal(result.system.priceScorePercent, 60);
+  assert.equal(result.system.roundedPricePercent, 60);
   assert.equal(result.system.intentScorePercent, 74);
   assert.equal(result.system.leadIntent, "medium");
   assert.equal(result.system.priorityScorePercent, 87);
   assert.equal(result.system.priority, "urgent");
 });
 
-test("very-low genuine confidence caps price, intent and priority even when all other answers are strongest", () => {
+test("suspicious genuine confidence resets price to twenty percent while intent and priority keep their guardrails", () => {
   const answers = {
     readiness: "ready_now",
     timeline: "within_3_hours",
@@ -202,9 +212,9 @@ test("very-low genuine confidence caps price, intent and priority even when all 
     genuine_confidence: "very_low",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 40);
-  assert.equal(result.system.roundedPricePercent, 40);
-  assert.equal(result.system.leadPricePaise, 20000);
+  assert.equal(result.system.priceScorePercent, 20);
+  assert.equal(result.system.roundedPricePercent, 20);
+  assert.equal(result.system.leadPricePaise, 10000);
   assert.equal(result.system.intentScorePercent, 44);
   assert.equal(result.system.leadIntent, "low");
   assert.equal(result.system.priorityScorePercent, 69);
@@ -213,13 +223,114 @@ test("very-low genuine confidence caps price, intent and priority even when all 
 
 test("weak answers stay low while retaining a non-zero proportional price", () => {
   const result = calculateQualification(weakestAnswers, 20000);
-  assert.equal(result.system.priceScorePercent, 16);
+  assert.equal(result.system.priceScorePercent, 20);
   assert.equal(result.system.roundedPricePercent, 20);
   assert.equal(result.system.leadPricePaise, 4000);
   assert.equal(result.system.intentScorePercent, 14);
   assert.equal(result.system.leadIntent, "low");
   assert.equal(result.system.priorityScorePercent, 16);
   assert.equal(result.system.priority, "low");
+});
+
+
+test("pricing risk states apply one punishment only and the strictest active ceiling wins", () => {
+  const singleRisk = {
+    readiness: "comparing",
+    timeline: "later_or_unsure",
+    clarity: "partially_clear",
+    responsiveness: "difficult",
+    expected_spend: "up_to_800",
+    genuine_confidence: "medium",
+  };
+  assert.equal(calculatePriceScore(singleRisk), 45);
+
+  const multipleRisks = {
+    readiness: "exploring",
+    timeline: "within_3_hours",
+    clarity: "unclear",
+    responsiveness: "difficult",
+    expected_spend: "above_10000",
+    genuine_confidence: "low",
+  };
+  assert.equal(calculatePriceScore(multipleRisks), 50);
+});
+
+test("eleven marketplace pricing scenarios follow the approved risk-adjusted outcomes", () => {
+  const scenarios = [
+    {
+      name: "excellent small job",
+      answers: { readiness: "ready_now", timeline: "within_3_days", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "up_to_800", genuine_confidence: "high" },
+      priceScorePercent: 83,
+      roundedPricePercent: 80,
+    },
+    {
+      name: "huge information-only requirement",
+      answers: { readiness: "information_only", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_high" },
+      priceScorePercent: 30,
+      roundedPricePercent: 30,
+    },
+    {
+      name: "great answers but difficult to reach",
+      answers: { readiness: "ready_now", timeline: "within_3_hours", clarity: "exact", responsiveness: "difficult", expected_spend: "above_10000", genuine_confidence: "high" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "suspicious despite otherwise perfect answers",
+      answers: { readiness: "ready_now", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_low" },
+      priceScorePercent: 20,
+      roundedPricePercent: 20,
+    },
+    {
+      name: "exploring despite otherwise perfect answers",
+      answers: { readiness: "exploring", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_high" },
+      priceScorePercent: 60,
+      roundedPricePercent: 60,
+    },
+    {
+      name: "comparing but strong opportunity",
+      answers: { readiness: "comparing", timeline: "within_24_hours", clarity: "mostly_clear", responsiveness: "normally_responsive", expected_spend: "4001_to_10000", genuine_confidence: "high" },
+      priceScorePercent: 79,
+      roundedPricePercent: 80,
+    },
+    {
+      name: "ready but planned service",
+      answers: { readiness: "ready_now", timeline: "within_30_days", clarity: "mostly_clear", responsiveness: "normally_responsive", expected_spend: "2001_to_4000", genuine_confidence: "high" },
+      priceScorePercent: 74,
+      roundedPricePercent: 70,
+    },
+    {
+      name: "strong opportunity with unclear requirement",
+      answers: { readiness: "ready_now", timeline: "within_24_hours", clarity: "unclear", responsiveness: "normally_responsive", expected_spend: "4001_to_10000", genuine_confidence: "high" },
+      priceScorePercent: 60,
+      roundedPricePercent: 60,
+    },
+    {
+      name: "strong opportunity with low genuine confidence",
+      answers: { readiness: "ready_now", timeline: "within_3_days", clarity: "exact", responsiveness: "normally_responsive", expected_spend: "above_10000", genuine_confidence: "low" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "middling opportunity without hard risk state",
+      answers: { readiness: "comparing", timeline: "later_or_unsure", clarity: "partially_clear", responsiveness: "slow", expected_spend: "not_known", genuine_confidence: "medium" },
+      priceScorePercent: 46,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "multiple risk states use strictest ceiling",
+      answers: { readiness: "exploring", timeline: "within_3_hours", clarity: "unclear", responsiveness: "difficult", expected_spend: "above_10000", genuine_confidence: "low" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const result = calculateQualification(scenario.answers, 50000);
+    assert.equal(result.system.priceScorePercent, scenario.priceScorePercent, scenario.name);
+    assert.equal(result.system.roundedPricePercent, scenario.roundedPricePercent, scenario.name);
+    assert.equal(result.system.leadPricePaise, scenario.roundedPricePercent * 500, scenario.name);
+  }
 });
 
 test("score rounding uses the nearest ten percent", () => {
