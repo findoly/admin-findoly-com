@@ -1,6 +1,7 @@
 const DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE = 10000;
 const MAX_LEAD_PRICE_PAISE = 1_000_000_000;
 const PRICE_ROUNDING_PAISE = 1000;
+const QUALIFICATION_VERSION = 2;
 
 const QUESTIONS = Object.freeze([
   Object.freeze({
@@ -15,12 +16,14 @@ const QUESTIONS = Object.freeze([
   }),
   Object.freeze({
     id: "timeline",
-    prompt: "When does the customer need the service?",
+    prompt: "How urgently does the customer need the service?",
     options: Object.freeze([
-      Object.freeze({ id: "within_24_hours", label: "Within 24 hours", score: 100 }),
-      Object.freeze({ id: "within_7_days", label: "Within 7 days", score: 80 }),
-      Object.freeze({ id: "within_30_days", label: "Within 30 days", score: 55 }),
-      Object.freeze({ id: "later_or_unsure", label: "Later or unsure", score: 25 }),
+      Object.freeze({ id: "within_3_hours", label: "Emergency — Within 3 hours", score: 100 }),
+      Object.freeze({ id: "within_24_hours", label: "Very urgent — Within 24 hours", score: 90 }),
+      Object.freeze({ id: "within_3_days", label: "Urgent — Within 3 days", score: 75 }),
+      Object.freeze({ id: "within_7_days", label: "Soon — Within 7 days", score: 60 }),
+      Object.freeze({ id: "within_30_days", label: "Planned — Within 30 days", score: 40 }),
+      Object.freeze({ id: "later_or_unsure", label: "Flexible — Later or unsure", score: 20 }),
     ]),
   }),
   Object.freeze({
@@ -34,16 +37,6 @@ const QUESTIONS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "budget",
-    prompt: "What is the customer's budget status?",
-    options: Object.freeze([
-      Object.freeze({ id: "confirmed", label: "Budget confirmed", score: 100 }),
-      Object.freeze({ id: "range_known", label: "Budget range known", score: 80 }),
-      Object.freeze({ id: "willing_not_fixed", label: "Budget not fixed but willing to spend", score: 50 }),
-      Object.freeze({ id: "not_discussed", label: "No budget discussed", score: 15 }),
-    ]),
-  }),
-  Object.freeze({
     id: "responsiveness",
     prompt: "How responsive is the customer?",
     options: Object.freeze([
@@ -54,37 +47,53 @@ const QUESTIONS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "requirement_size",
-    prompt: "What is the approximate size or value of the requirement?",
+    id: "expected_spend",
+    prompt: "What is the customer's expected spend for this service?",
     options: Object.freeze([
-      Object.freeze({ id: "very_large", label: "Very large", score: 100 }),
-      Object.freeze({ id: "large", label: "Large", score: 80 }),
-      Object.freeze({ id: "medium", label: "Medium", score: 55 }),
-      Object.freeze({ id: "small", label: "Small", score: 30 }),
+      Object.freeze({ id: "not_known", label: "Not known / not discussed", score: 35 }),
+      Object.freeze({ id: "up_to_800", label: "₹0 – ₹800", score: 25 }),
+      Object.freeze({ id: "801_to_2000", label: "₹801 – ₹2,000", score: 45 }),
+      Object.freeze({ id: "2001_to_4000", label: "₹2,001 – ₹4,000", score: 65 }),
+      Object.freeze({ id: "4001_to_10000", label: "₹4,001 – ₹10,000", score: 85 }),
+      Object.freeze({ id: "above_10000", label: "Above ₹10,000", score: 100 }),
+    ]),
+  }),
+  Object.freeze({
+    id: "genuine_confidence",
+    prompt: "How confident are you that this is a genuine service requirement?",
+    options: Object.freeze([
+      Object.freeze({ id: "very_high", label: "Very high — Requirement verified and details are consistent", score: 100 }),
+      Object.freeze({ id: "high", label: "High — Requirement appears genuine and credible", score: 85 }),
+      Object.freeze({ id: "medium", label: "Medium — Appears genuine but some details are uncertain", score: 60 }),
+      Object.freeze({ id: "low", label: "Low — Some details are inconsistent or doubtful", score: 35 }),
+      Object.freeze({ id: "very_low", label: "Very low — Requirement appears suspicious", score: 10 }),
     ]),
   }),
 ]);
 
 const PRICE_WEIGHTS = Object.freeze({
-  readiness: 25,
-  timeline: 10,
+  readiness: 20,
+  timeline: 15,
   clarity: 15,
-  budget: 20,
   responsiveness: 10,
-  requirement_size: 20,
+  expected_spend: 25,
+  genuine_confidence: 15,
 });
 
 const INTENT_WEIGHTS = Object.freeze({
   readiness: 35,
   timeline: 15,
   clarity: 15,
-  budget: 20,
   responsiveness: 15,
+  genuine_confidence: 20,
 });
 
 const PRIORITY_WEIGHTS = Object.freeze({
-  timeline: 70,
-  readiness: 30,
+  timeline: 50,
+  readiness: 20,
+  responsiveness: 15,
+  genuine_confidence: 10,
+  clarity: 5,
 });
 
 function qualificationError(message) {
@@ -157,6 +166,26 @@ function weightedScore(answers, weights) {
   return clamp(Math.round(weightedTotal / weightTotal), 0, 100);
 }
 
+function applyPriceGuardrails(answers, score) {
+  if (answers.genuine_confidence === "very_low") return Math.min(score, 40);
+  return score;
+}
+
+function applyIntentGuardrails(answers, score) {
+  if (answers.readiness === "information_only" || answers.genuine_confidence === "very_low") {
+    return Math.min(score, 44);
+  }
+  if (answers.readiness === "exploring" || answers.genuine_confidence === "low") {
+    return Math.min(score, 74);
+  }
+  return score;
+}
+
+function applyPriorityGuardrails(answers, score) {
+  if (answers.genuine_confidence === "very_low") return Math.min(score, 69);
+  return score;
+}
+
 function roundScoreToTen(score) {
   return clamp(Math.round(Number(score || 0) / 10) * 10, 0, 100);
 }
@@ -167,8 +196,8 @@ function roundPricePaiseToTenRupees(value) {
 
 function leadIntentFromScore(score) {
   const value = clamp(Number(score || 0), 0, 100);
-  if (value >= 70) return "high";
-  if (value >= 40) return "medium";
+  if (value >= 75) return "high";
+  if (value >= 45) return "medium";
   return "low";
 }
 
@@ -176,7 +205,7 @@ function priorityFromScore(score) {
   const value = clamp(Number(score || 0), 0, 100);
   if (value >= 85) return "urgent";
   if (value >= 70) return "high";
-  if (value >= 40) return "normal";
+  if (value >= 45) return "normal";
   return "low";
 }
 
@@ -190,10 +219,10 @@ function calculateLeadPricePaise(maxLeadPricePaise, roundedPricePercent) {
 function calculateQualification(inputAnswers = {}, maxLeadPricePaise = DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE) {
   const answers = normalizeAnswers(inputAnswers);
   const maximum = normalizeCategoryMaxLeadPricePaise(maxLeadPricePaise);
-  const priceScorePercent = weightedScore(answers, PRICE_WEIGHTS);
+  const priceScorePercent = applyPriceGuardrails(answers, weightedScore(answers, PRICE_WEIGHTS));
   const roundedPricePercent = roundScoreToTen(priceScorePercent);
-  const intentScorePercent = weightedScore(answers, INTENT_WEIGHTS);
-  const priorityScorePercent = weightedScore(answers, PRIORITY_WEIGHTS);
+  const intentScorePercent = applyIntentGuardrails(answers, weightedScore(answers, INTENT_WEIGHTS));
+  const priorityScorePercent = applyPriorityGuardrails(answers, weightedScore(answers, PRIORITY_WEIGHTS));
   return {
     answers: answerDetails(answers),
     system: {
@@ -241,6 +270,7 @@ module.exports = {
   DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE,
   MAX_LEAD_PRICE_PAISE,
   PRICE_ROUNDING_PAISE,
+  QUALIFICATION_VERSION,
   QUESTIONS,
   PRICE_WEIGHTS,
   INTENT_WEIGHTS,
@@ -249,6 +279,9 @@ module.exports = {
   normalizeAnswers,
   normalizeCategoryMaxLeadPricePaise,
   weightedScore,
+  applyPriceGuardrails,
+  applyIntentGuardrails,
+  applyPriorityGuardrails,
   roundScoreToTen,
   roundPricePaiseToTenRupees,
   leadIntentFromScore,

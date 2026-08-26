@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  QUALIFICATION_VERSION,
   QUESTIONS,
   PRICE_WEIGHTS,
   INTENT_WEIGHTS,
@@ -14,37 +15,69 @@ const {
 
 const strongestAnswers = {
   readiness: "ready_now",
-  timeline: "within_24_hours",
+  timeline: "within_3_hours",
   clarity: "exact",
-  budget: "confirmed",
   responsiveness: "highly_responsive",
-  requirement_size: "very_large",
+  expected_spend: "above_10000",
+  genuine_confidence: "very_high",
 };
 
 const weakestAnswers = {
   readiness: "information_only",
   timeline: "later_or_unsure",
   clarity: "unclear",
-  budget: "not_discussed",
   responsiveness: "difficult",
-  requirement_size: "small",
+  expected_spend: "up_to_800",
+  genuine_confidence: "very_low",
 };
 
-test("qualification uses exactly six selectable questions with approved wording", () => {
+test("qualification V2 uses exactly six distinct questions with employee-friendly urgency labels", () => {
+  assert.equal(QUALIFICATION_VERSION, 2);
   assert.equal(QUESTIONS.length, 6);
-  assert.equal(QUESTIONS[0].prompt, "How ready is the customer to proceed with the service?");
-  const prompts = QUESTIONS.map((question) => question.prompt.toLowerCase()).join(" ");
-  assert.equal(prompts.includes("hiring decision"), false);
-  assert.equal(prompts.includes("how important is it"), false);
-  assert.equal(prompts.includes("hire"), false);
-  for (const question of QUESTIONS) {
-    assert.equal(question.options.length, 4);
-    for (const option of question.options) {
-      assert.ok(option.id);
-      assert.ok(option.label);
-      assert.ok(Number.isInteger(option.score));
-    }
-  }
+  assert.deepEqual(QUESTIONS.map((question) => question.id), [
+    "readiness",
+    "timeline",
+    "clarity",
+    "responsiveness",
+    "expected_spend",
+    "genuine_confidence",
+  ]);
+  assert.equal(QUESTIONS.some((question) => question.id === "budget"), false);
+  assert.equal(QUESTIONS.some((question) => question.id === "requirement_size"), false);
+
+  const urgency = QUESTIONS.find((question) => question.id === "timeline");
+  assert.equal(urgency.prompt, "How urgently does the customer need the service?");
+  assert.deepEqual(urgency.options.map((option) => [option.id, option.label, option.score]), [
+    ["within_3_hours", "Emergency — Within 3 hours", 100],
+    ["within_24_hours", "Very urgent — Within 24 hours", 90],
+    ["within_3_days", "Urgent — Within 3 days", 75],
+    ["within_7_days", "Soon — Within 7 days", 60],
+    ["within_30_days", "Planned — Within 30 days", 40],
+    ["later_or_unsure", "Flexible — Later or unsure", 20],
+  ]);
+});
+
+test("expected spend and genuine-confidence choices use the approved score bands", () => {
+  const spend = QUESTIONS.find((question) => question.id === "expected_spend");
+  assert.equal(spend.prompt, "What is the customer's expected spend for this service?");
+  assert.deepEqual(spend.options.map((option) => [option.id, option.score]), [
+    ["not_known", 35],
+    ["up_to_800", 25],
+    ["801_to_2000", 45],
+    ["2001_to_4000", 65],
+    ["4001_to_10000", 85],
+    ["above_10000", 100],
+  ]);
+
+  const genuine = QUESTIONS.find((question) => question.id === "genuine_confidence");
+  assert.equal(genuine.prompt, "How confident are you that this is a genuine service requirement?");
+  assert.deepEqual(genuine.options.map((option) => [option.id, option.score]), [
+    ["very_high", 100],
+    ["high", 85],
+    ["medium", 60],
+    ["low", 35],
+    ["very_low", 10],
+  ]);
 });
 
 test("all scoring weight groups total one hundred percent", () => {
@@ -52,9 +85,11 @@ test("all scoring weight groups total one hundred percent", () => {
   assert.equal(total(PRICE_WEIGHTS), 100);
   assert.equal(total(INTENT_WEIGHTS), 100);
   assert.equal(total(PRIORITY_WEIGHTS), 100);
+  assert.equal(Object.prototype.hasOwnProperty.call(INTENT_WEIGHTS, "expected_spend"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(PRIORITY_WEIGHTS, "expected_spend"), false);
 });
 
-test("a strongest qualification reaches the category maximum", () => {
+test("a strongest V2 qualification reaches the category maximum with high intent and urgent priority", () => {
   const result = calculateQualification(strongestAnswers, 15000);
   assert.equal(result.system.priceScorePercent, 100);
   assert.equal(result.system.roundedPricePercent, 100);
@@ -65,52 +100,87 @@ test("a strongest qualification reaches the category maximum", () => {
   assert.equal(result.system.priority, "urgent");
 });
 
-test("a 56 percent price score rounds to 60 percent and prices a ₹150 maximum at ₹90", () => {
+test("a strong but non-emergency lead produces independent price, intent and priority outputs", () => {
   const answers = {
     readiness: "ready_now",
-    timeline: "within_24_hours",
-    clarity: "partially_clear",
-    budget: "not_discussed",
-    responsiveness: "slow",
-    requirement_size: "small",
+    timeline: "within_3_days",
+    clarity: "mostly_clear",
+    responsiveness: "normally_responsive",
+    expected_spend: "4001_to_10000",
+    genuine_confidence: "high",
   };
-  const result = calculateQualification(answers, 15000);
-  assert.equal(result.system.priceScorePercent, 56);
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.priceScorePercent, 84);
+  assert.equal(result.system.roundedPricePercent, 80);
+  assert.equal(result.system.leadPricePaise, 40000);
+  assert.equal(result.system.intentScorePercent, 86);
+  assert.equal(result.system.leadIntent, "high");
+  assert.equal(result.system.priorityScorePercent, 81);
+  assert.equal(result.system.priority, "high");
+});
+
+test("expected spend affects lead price without automatically raising intent or priority", () => {
+  const answers = {
+    readiness: "exploring",
+    timeline: "within_30_days",
+    clarity: "partially_clear",
+    responsiveness: "slow",
+    expected_spend: "above_10000",
+    genuine_confidence: "medium",
+  };
+  const result = calculateQualification(answers, 20000);
+  assert.equal(result.system.priceScorePercent, 59);
   assert.equal(result.system.roundedPricePercent, 60);
-  assert.equal(result.system.leadPricePaise, 9000);
-  assert.equal(result.system.intentScorePercent, 67);
+  assert.equal(result.system.leadPricePaise, 12000);
+  assert.equal(result.system.intentScorePercent, 44);
+  assert.equal(result.system.leadIntent, "low");
+  assert.equal(result.system.priorityScorePercent, 42);
+  assert.equal(result.system.priority, "low");
+});
+
+test("exploring customers cannot be classified above medium intent even when other signals are strongest", () => {
+  const answers = {
+    readiness: "exploring",
+    timeline: "within_3_hours",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "above_10000",
+    genuine_confidence: "very_high",
+  };
+  const result = calculateQualification(answers, 10000);
+  assert.equal(result.system.intentScorePercent, 74);
   assert.equal(result.system.leadIntent, "medium");
-  assert.equal(result.system.priorityScorePercent, 100);
+  assert.equal(result.system.priorityScorePercent, 87);
   assert.equal(result.system.priority, "urgent");
 });
 
-test("price, intent and priority remain independent outputs from the same answers", () => {
+test("very-low genuine confidence caps price, intent and priority even when all other answers are strongest", () => {
   const answers = {
-    readiness: "comparing",
-    timeline: "within_7_days",
-    clarity: "mostly_clear",
-    budget: "range_known",
-    responsiveness: "normally_responsive",
-    requirement_size: "medium",
+    readiness: "ready_now",
+    timeline: "within_3_hours",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "above_10000",
+    genuine_confidence: "very_low",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 71);
-  assert.equal(result.system.roundedPricePercent, 70);
-  assert.equal(result.system.leadPricePaise, 35000);
-  assert.equal(result.system.intentScorePercent, 75);
-  assert.equal(result.system.leadIntent, "high");
-  assert.equal(result.system.priorityScorePercent, 77);
-  assert.equal(result.system.priority, "high");
+  assert.equal(result.system.priceScorePercent, 40);
+  assert.equal(result.system.roundedPricePercent, 40);
+  assert.equal(result.system.leadPricePaise, 20000);
+  assert.equal(result.system.intentScorePercent, 44);
+  assert.equal(result.system.leadIntent, "low");
+  assert.equal(result.system.priorityScorePercent, 69);
+  assert.equal(result.system.priority, "normal");
 });
 
 test("weak answers stay low while retaining a non-zero proportional price", () => {
   const result = calculateQualification(weakestAnswers, 20000);
-  assert.equal(result.system.priceScorePercent, 19);
+  assert.equal(result.system.priceScorePercent, 17);
   assert.equal(result.system.roundedPricePercent, 20);
   assert.equal(result.system.leadPricePaise, 4000);
-  assert.equal(result.system.intentScorePercent, 16);
+  assert.equal(result.system.intentScorePercent, 14);
   assert.equal(result.system.leadIntent, "low");
-  assert.equal(result.system.priorityScorePercent, 21);
+  assert.equal(result.system.priorityScorePercent, 16);
   assert.equal(result.system.priority, "low");
 });
 
