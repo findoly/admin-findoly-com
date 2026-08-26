@@ -80,8 +80,16 @@ test("expected spend and genuine-confidence choices use the approved score bands
   ]);
 });
 
-test("all scoring weight groups total one hundred percent", () => {
+test("lead price uses the approved provider-value weights while intent and priority remain independent", () => {
   const total = (weights) => Object.values(weights).reduce((sum, value) => sum + value, 0);
+  assert.deepEqual(PRICE_WEIGHTS, {
+    readiness: 30,
+    timeline: 15,
+    clarity: 10,
+    responsiveness: 20,
+    expected_spend: 15,
+    genuine_confidence: 10,
+  });
   assert.equal(total(PRICE_WEIGHTS), 100);
   assert.equal(total(INTENT_WEIGHTS), 100);
   assert.equal(total(PRIORITY_WEIGHTS), 100);
@@ -110,13 +118,43 @@ test("a strong but non-emergency lead produces independent price, intent and pri
     genuine_confidence: "high",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 84);
-  assert.equal(result.system.roundedPricePercent, 80);
-  assert.equal(result.system.leadPricePaise, 40000);
+  assert.equal(result.system.priceScorePercent, 85);
+  assert.equal(result.system.roundedPricePercent, 90);
+  assert.equal(result.system.leadPricePaise, 45000);
   assert.equal(result.system.intentScorePercent, 86);
   assert.equal(result.system.leadIntent, "high");
   assert.equal(result.system.priorityScorePercent, 81);
   assert.equal(result.system.priority, "high");
+});
+
+test("a ready and responsive smaller-spend customer can still be a high-value lead", () => {
+  const answers = {
+    readiness: "ready_now",
+    timeline: "within_3_days",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "up_to_800",
+    genuine_confidence: "very_high",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.priceScorePercent, 85);
+  assert.equal(result.system.roundedPricePercent, 90);
+  assert.equal(result.system.leadPricePaise, 45000);
+});
+
+test("high expected spend cannot dominate a weak customer opportunity", () => {
+  const answers = {
+    readiness: "information_only",
+    timeline: "later_or_unsure",
+    clarity: "unclear",
+    responsiveness: "difficult",
+    expected_spend: "above_10000",
+    genuine_confidence: "high",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.priceScorePercent, 35);
+  assert.equal(result.system.roundedPricePercent, 40);
+  assert.equal(result.system.leadPricePaise, 20000);
 });
 
 test("expected spend affects lead price without automatically raising intent or priority", () => {
@@ -129,9 +167,9 @@ test("expected spend affects lead price without automatically raising intent or 
     genuine_confidence: "medium",
   };
   const result = calculateQualification(answers, 20000);
-  assert.equal(result.system.priceScorePercent, 59);
-  assert.equal(result.system.roundedPricePercent, 60);
-  assert.equal(result.system.leadPricePaise, 12000);
+  assert.equal(result.system.priceScorePercent, 50);
+  assert.equal(result.system.roundedPricePercent, 50);
+  assert.equal(result.system.leadPricePaise, 10000);
   assert.equal(result.system.intentScorePercent, 44);
   assert.equal(result.system.leadIntent, "low");
   assert.equal(result.system.priorityScorePercent, 42);
@@ -175,7 +213,7 @@ test("very-low genuine confidence caps price, intent and priority even when all 
 
 test("weak answers stay low while retaining a non-zero proportional price", () => {
   const result = calculateQualification(weakestAnswers, 20000);
-  assert.equal(result.system.priceScorePercent, 17);
+  assert.equal(result.system.priceScorePercent, 16);
   assert.equal(result.system.roundedPricePercent, 20);
   assert.equal(result.system.leadPricePaise, 4000);
   assert.equal(result.system.intentScorePercent, 14);
