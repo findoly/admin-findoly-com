@@ -311,7 +311,7 @@ async function applyCategoryMaxLeadPrice(category = {}, input = {}) {
       $set: { maxLeadPricePaise, updatedAt: new Date() },
     });
     if (result.matchedCount !== 1) {
-      throw qualificationError("Category not found", 404, "LEAD_CATEGORY_NOT_FOUND");
+      throw qualificationError("Category not found", 404, "CATEGORY_NOT_FOUND");
     }
   }
   return { ...category, maxLeadPricePaise };
