@@ -96,6 +96,22 @@ const PRICE_RISK_RULES = Object.freeze({
   }),
 });
 
+const PRICE_RISK_SCORE_SUBSTITUTIONS = Object.freeze({
+  readiness: Object.freeze({
+    exploring: "comparing",
+    information_only: "exploring",
+  }),
+  responsiveness: Object.freeze({
+    difficult: "slow",
+  }),
+  clarity: Object.freeze({
+    unclear: "partially_clear",
+  }),
+  genuine_confidence: Object.freeze({
+    low: "medium",
+  }),
+});
+
 const INTENT_WEIGHTS = Object.freeze({
   readiness: 35,
   timeline: 15,
@@ -195,12 +211,12 @@ function applyPriceGuardrails(answers, score) {
 
 function calculatePriceScore(answers) {
   if (answers.genuine_confidence === "very_low") return 20;
-  const effectiveWeights = {};
-  for (const [questionId, weight] of Object.entries(PRICE_WEIGHTS)) {
-    const riskCap = PRICE_RISK_RULES[questionId]?.[answers[questionId]];
-    if (!Number.isFinite(riskCap)) effectiveWeights[questionId] = weight;
+  const adjustedAnswers = { ...answers };
+  for (const [questionId, substitutions] of Object.entries(PRICE_RISK_SCORE_SUBSTITUTIONS)) {
+    const replacementAnswerId = substitutions[answers[questionId]];
+    if (replacementAnswerId) adjustedAnswers[questionId] = replacementAnswerId;
   }
-  return applyPriceGuardrails(answers, weightedScore(answers, effectiveWeights));
+  return applyPriceGuardrails(answers, weightedScore(adjustedAnswers, PRICE_WEIGHTS));
 }
 
 function applyIntentGuardrails(answers, score) {
@@ -306,6 +322,7 @@ module.exports = {
   QUESTIONS,
   PRICE_WEIGHTS,
   PRICE_RISK_RULES,
+  PRICE_RISK_SCORE_SUBSTITUTIONS,
   INTENT_WEIGHTS,
   PRIORITY_WEIGHTS,
   publicQuestions,
