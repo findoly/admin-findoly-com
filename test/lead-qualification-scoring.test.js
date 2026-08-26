@@ -86,11 +86,11 @@ test("expected spend and genuine-confidence choices use the approved score bands
 test("lead price uses the approved provider-value weights while intent and priority remain independent", () => {
   const total = (weights) => Object.values(weights).reduce((sum, value) => sum + value, 0);
   assert.deepEqual(PRICE_WEIGHTS, {
-    readiness: 30,
-    timeline: 22,
+    readiness: 25,
+    timeline: 20,
     clarity: 10,
-    responsiveness: 18,
-    expected_spend: 15,
+    responsiveness: 20,
+    expected_spend: 20,
     genuine_confidence: 5,
   });
   assert.deepEqual(PRICE_RISK_RULES, {
@@ -133,9 +133,9 @@ test("a strong but non-emergency lead produces independent price, intent and pri
     genuine_confidence: "high",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 85);
-  assert.equal(result.system.roundedPricePercent, 90);
-  assert.equal(result.system.leadPricePaise, 45000);
+  assert.equal(result.system.priceScorePercent, 84);
+  assert.equal(result.system.roundedPricePercent, 80);
+  assert.equal(result.system.leadPricePaise, 40000);
   assert.equal(result.system.intentScorePercent, 86);
   assert.equal(result.system.leadIntent, "high");
   assert.equal(result.system.priorityScorePercent, 81);
@@ -152,7 +152,7 @@ test("a ready and responsive smaller-spend customer can still be a high-value le
     genuine_confidence: "very_high",
   };
   const result = calculateQualification(answers, 50000);
-  assert.equal(result.system.priceScorePercent, 83);
+  assert.equal(result.system.priceScorePercent, 80);
   assert.equal(result.system.roundedPricePercent, 80);
   assert.equal(result.system.leadPricePaise, 40000);
 });
@@ -249,7 +249,7 @@ test("pricing risk states apply one punishment only and the strictest active cei
     expected_spend: "up_to_800",
     genuine_confidence: "medium",
   };
-  assert.equal(calculatePriceScore(singleRisk), 44);
+  assert.equal(calculatePriceScore(singleRisk), 43);
 
   const multipleRisks = {
     readiness: "exploring",
@@ -267,7 +267,7 @@ test("eleven marketplace pricing scenarios follow the approved risk-adjusted out
     {
       name: "excellent small job",
       answers: { readiness: "ready_now", timeline: "within_3_days", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "up_to_800", genuine_confidence: "high" },
-      priceScorePercent: 83,
+      priceScorePercent: 79,
       roundedPricePercent: 80,
     },
     {
@@ -303,7 +303,7 @@ test("eleven marketplace pricing scenarios follow the approved risk-adjusted out
     {
       name: "ready but planned service",
       answers: { readiness: "ready_now", timeline: "within_30_days", clarity: "mostly_clear", responsiveness: "normally_responsive", expected_spend: "2001_to_4000", genuine_confidence: "high" },
-      priceScorePercent: 74,
+      priceScorePercent: 73,
       roundedPricePercent: 70,
     },
     {
@@ -321,7 +321,7 @@ test("eleven marketplace pricing scenarios follow the approved risk-adjusted out
     {
       name: "middling opportunity without hard risk state",
       answers: { readiness: "comparing", timeline: "later_or_unsure", clarity: "partially_clear", responsiveness: "slow", expected_spend: "not_known", genuine_confidence: "medium" },
-      priceScorePercent: 46,
+      priceScorePercent: 45,
       roundedPricePercent: 50,
     },
     {
