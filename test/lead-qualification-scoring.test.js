@@ -6,6 +6,7 @@ const {
   QUESTIONS,
   PRICE_WEIGHTS,
   PRICE_RISK_RULES,
+  PRICE_RISK_SCORE_SUBSTITUTIONS,
   INTENT_WEIGHTS,
   PRIORITY_WEIGHTS,
   calculateQualification,
@@ -97,6 +98,12 @@ test("lead price uses the approved provider-value weights while intent and prior
     responsiveness: { difficult: 50 },
     clarity: { unclear: 60 },
     genuine_confidence: { low: 50 },
+  });
+  assert.deepEqual(PRICE_RISK_SCORE_SUBSTITUTIONS, {
+    readiness: { exploring: "comparing", information_only: "exploring" },
+    responsiveness: { difficult: "slow" },
+    clarity: { unclear: "partially_clear" },
+    genuine_confidence: { low: "medium" },
   });
   assert.equal(total(PRICE_WEIGHTS), 100);
   assert.equal(total(INTENT_WEIGHTS), 100);
@@ -242,7 +249,7 @@ test("pricing risk states apply one punishment only and the strictest active cei
     expected_spend: "up_to_800",
     genuine_confidence: "medium",
   };
-  assert.equal(calculatePriceScore(singleRisk), 45);
+  assert.equal(calculatePriceScore(singleRisk), 44);
 
   const multipleRisks = {
     readiness: "exploring",
