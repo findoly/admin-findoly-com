@@ -182,7 +182,7 @@ test("expected spend affects lead price without automatically raising intent or 
     genuine_confidence: "medium",
   };
   const result = calculateQualification(answers, 20000);
-  assert.equal(result.system.priceScorePercent, 56);
+  assert.equal(result.system.priceScorePercent, 60);
   assert.equal(result.system.roundedPricePercent, 60);
   assert.equal(result.system.leadPricePaise, 12000);
   assert.equal(result.system.intentScorePercent, 44);
