@@ -73,11 +73,43 @@ const QUESTIONS = Object.freeze([
 
 const PRICE_WEIGHTS = Object.freeze({
   readiness: 30,
-  timeline: 15,
+  timeline: 22,
   clarity: 10,
-  responsiveness: 20,
+  responsiveness: 18,
   expected_spend: 15,
-  genuine_confidence: 10,
+  genuine_confidence: 5,
+});
+
+const PRICE_RISK_RULES = Object.freeze({
+  readiness: Object.freeze({
+    exploring: 60,
+    information_only: 30,
+  }),
+  responsiveness: Object.freeze({
+    difficult: 50,
+  }),
+  clarity: Object.freeze({
+    unclear: 60,
+  }),
+  genuine_confidence: Object.freeze({
+    low: 50,
+  }),
+});
+
+const PRICE_RISK_SCORE_SUBSTITUTIONS = Object.freeze({
+  readiness: Object.freeze({
+    exploring: "comparing",
+    information_only: "exploring",
+  }),
+  responsiveness: Object.freeze({
+    difficult: "slow",
+  }),
+  clarity: Object.freeze({
+    unclear: "partially_clear",
+  }),
+  genuine_confidence: Object.freeze({
+    low: "medium",
+  }),
 });
 
 const INTENT_WEIGHTS = Object.freeze({
@@ -167,8 +199,24 @@ function weightedScore(answers, weights) {
 }
 
 function applyPriceGuardrails(answers, score) {
-  if (answers.genuine_confidence === "very_low") return Math.min(score, 40);
-  return score;
+  if (answers.genuine_confidence === "very_low") return 20;
+  const caps = [];
+  for (const [questionId, rules] of Object.entries(PRICE_RISK_RULES)) {
+    const cap = rules[answers[questionId]];
+    if (Number.isFinite(cap)) caps.push(cap);
+  }
+  if (!caps.length) return score;
+  return Math.min(score, ...caps);
+}
+
+function calculatePriceScore(answers) {
+  if (answers.genuine_confidence === "very_low") return 20;
+  const adjustedAnswers = { ...answers };
+  for (const [questionId, substitutions] of Object.entries(PRICE_RISK_SCORE_SUBSTITUTIONS)) {
+    const replacementAnswerId = substitutions[answers[questionId]];
+    if (replacementAnswerId) adjustedAnswers[questionId] = replacementAnswerId;
+  }
+  return applyPriceGuardrails(answers, weightedScore(adjustedAnswers, PRICE_WEIGHTS));
 }
 
 function applyIntentGuardrails(answers, score) {
@@ -219,7 +267,7 @@ function calculateLeadPricePaise(maxLeadPricePaise, roundedPricePercent) {
 function calculateQualification(inputAnswers = {}, maxLeadPricePaise = DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE) {
   const answers = normalizeAnswers(inputAnswers);
   const maximum = normalizeCategoryMaxLeadPricePaise(maxLeadPricePaise);
-  const priceScorePercent = applyPriceGuardrails(answers, weightedScore(answers, PRICE_WEIGHTS));
+  const priceScorePercent = calculatePriceScore(answers);
   const roundedPricePercent = roundScoreToTen(priceScorePercent);
   const intentScorePercent = applyIntentGuardrails(answers, weightedScore(answers, INTENT_WEIGHTS));
   const priorityScorePercent = applyPriorityGuardrails(answers, weightedScore(answers, PRIORITY_WEIGHTS));
@@ -273,6 +321,8 @@ module.exports = {
   QUALIFICATION_VERSION,
   QUESTIONS,
   PRICE_WEIGHTS,
+  PRICE_RISK_RULES,
+  PRICE_RISK_SCORE_SUBSTITUTIONS,
   INTENT_WEIGHTS,
   PRIORITY_WEIGHTS,
   publicQuestions,
@@ -280,6 +330,7 @@ module.exports = {
   normalizeCategoryMaxLeadPricePaise,
   weightedScore,
   applyPriceGuardrails,
+  calculatePriceScore,
   applyIntentGuardrails,
   applyPriorityGuardrails,
   roundScoreToTen,
