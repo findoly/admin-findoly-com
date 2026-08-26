@@ -4,6 +4,7 @@ const uuid = require("../../utils/uuid");
 const { canonicalLeadStatus, LEAD_JOURNEY } = require("../../utils/lead-journey");
 const {
   DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE,
+  QUALIFICATION_VERSION,
   publicQuestions,
   normalizeCategoryMaxLeadPricePaise,
   calculateQualification,
@@ -106,7 +107,7 @@ function qualificationPayload(lead, categoryMaxLeadPricePaise) {
     categoryMaxLeadPricePaise,
     completedAt: current?.completedAt || null,
     completedBy: current?.completedBy || "",
-    version: current?.version || 1,
+    version: current ? (current.version || 1) : QUALIFICATION_VERSION,
   };
 }
 
@@ -155,7 +156,7 @@ async function saveQualification(enquiryId, input = {}, actor = "admin") {
   const now = new Date();
   const requalifying = Boolean(lead.leadQualification?.completed);
   const snapshot = {
-    version: 1,
+    version: QUALIFICATION_VERSION,
     completed: true,
     categorySlug: String(lead.categorySlug || ""),
     answers: calculated.answers,
