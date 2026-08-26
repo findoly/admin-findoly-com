@@ -72,12 +72,12 @@ const QUESTIONS = Object.freeze([
 ]);
 
 const PRICE_WEIGHTS = Object.freeze({
-  readiness: 20,
+  readiness: 30,
   timeline: 15,
-  clarity: 15,
-  responsiveness: 10,
-  expected_spend: 25,
-  genuine_confidence: 15,
+  clarity: 10,
+  responsiveness: 20,
+  expected_spend: 15,
+  genuine_confidence: 10,
 });
 
 const INTENT_WEIGHTS = Object.freeze({
