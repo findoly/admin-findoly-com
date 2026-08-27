@@ -382,9 +382,31 @@ function presentRequirement(lead = {}) {
 }
 
 async function generateRequirement(enquiryId, input = {}, actor = "admin", options = {}) {
-  const lead = await getLead(enquiryId);
+  let lead = await getLead(enquiryId);
   assertPrerequisites(lead);
   const raw = rawRequirement(input.customerRequirementRaw);
+  const rawChanged = raw !== String(lead.customerRequirementRaw || "").trim();
+  const rawUpdate = {
+    customerRequirementRaw: raw,
+    updatedAt: new Date(),
+  };
+  if (rawChanged) {
+    Object.assign(rawUpdate, {
+      requirementAiStatus: "",
+      requirementAiClarificationReason: "",
+      requirementAiClarificationMessage: "",
+      requirementAiProviderTitle: "",
+      requirementAiProviderDetails: "",
+      requirementAiSourceHash: "",
+      requirementAiGeneratedAt: null,
+    });
+  }
+  const rawSave = await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: rawUpdate });
+  if (rawSave.matchedCount !== 1) {
+    throw requirementError("Lead requirement changed while it was being saved", 409, "LEAD_REQUIREMENT_CONCURRENT_UPDATE");
+  }
+  lead = { ...lead, ...rawUpdate };
+
   const generated = await requestOpenAi(lead, raw, options);
   const result = generated.result;
   const now = new Date();
