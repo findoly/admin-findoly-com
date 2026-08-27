@@ -37,6 +37,7 @@ function effectiveStatus(row, now = new Date()) {
   const startsAt = row?.subscription?.startsAt || row?.startsAt;
   const expiresAt = row?.subscription?.expiresAt || row?.expiresAt;
   if (["cancelled", "failed"].includes(status)) return status;
+  if (!row?.subscription && !startsAt && !expiresAt) return "completed";
   if (expiresAt && new Date(expiresAt) <= now) return "expired";
   if (startsAt && new Date(startsAt) > now) return "scheduled";
   return "active";
@@ -167,6 +168,10 @@ function pipelineLookups() {
             branches: [
               { case: { $eq: ["$purpose", "credit_purchase"] }, then: "completed" },
               { case: { $in: ["$subscription.status", ["cancelled", "failed"]] }, then: "$subscription.status" },
+              {
+                case: { $eq: [{ $ifNull: ["$subscription.providerSubscriptionId", ""] }, ""] },
+                then: "completed",
+              },
               {
                 case: {
                   $and: [
