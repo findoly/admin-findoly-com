@@ -76,8 +76,12 @@ function redactContactDetails(value) {
 function containsRestrictedContact(value) {
   const text = String(value || "");
   if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) return true;
-  const digits = text.replace(/\D/g, "");
-  return /[6-9]\d{9}/.test(digits);
+  return /(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9}\b/.test(text);
+}
+
+function containsRestrictedBudget(value) {
+  const text = String(value || "");
+  return /₹|\b(?:budget|expected\s+spend|rupees?|inr)\b|\brs\.?\s*\d/i.test(text);
 }
 
 function validateProviderText(title, details) {
@@ -96,6 +100,9 @@ function validateProviderText(title, details) {
   }
   if (containsRestrictedContact(providerTitle) || containsRestrictedContact(providerDetails)) {
     throw requirementError("Provider requirement wording must not contain a customer mobile number or email address");
+  }
+  if (containsRestrictedBudget(providerTitle) || containsRestrictedBudget(providerDetails)) {
+    throw requirementError("Provider requirement wording must not contain budget or expected-spend information");
   }
   return { providerTitle, providerDetails };
 }
