@@ -784,6 +784,10 @@ async function update(enquiryId, input = {}, actor = "admin") {
       requirementAiClarificationMessage: "",
       requirementAiProviderTitle: "",
       requirementAiProviderDetails: "",
+      providerRequirementTitle: "",
+      providerRequirementDetails: "",
+      requirementAiApprovedAt: null,
+      requirementAiApprovedBy: "",
       requirementAiSourceHash: "",
       requirementAiGeneratedAt: null,
     });
