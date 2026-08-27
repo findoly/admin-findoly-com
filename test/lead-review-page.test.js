@@ -24,7 +24,7 @@ test("requirement detail links saved review data to the separate page", () => {
   assert.match(view, /qualificationComplete/);
 });
 
-test("review page reads existing validation and qualification data without write actions", () => {
+test("review page reads validation, qualification and AI requirement history without write actions", () => {
   const view = source("views/enquiry/review.ejs");
   assert.match(view, /\/validation'/);
   assert.match(view, /\/qualification'/);
@@ -32,6 +32,13 @@ test("review page reads existing validation and qualification data without write
   assert.match(view, /Final decision/);
   assert.match(view, /System calculation/);
   assert.match(view, /Final qualification/);
+  assert.match(view, /Customer requirement & AI review/);
+  assert.match(view, /AI generation history/);
+  assert.match(view, /AI corrected title/);
+  assert.match(view, /AI corrected description/);
+  assert.match(view, /Final approved requirement/);
+  assert.match(view, /requirement_ai_generated/);
+  assert.match(view, /requirement_ai_clarification/);
   assert.match(view, /answerLabel\(question, validation\.answers\)/);
   assert.match(view, /answerLabel\(question, qualification\.answers\)/);
   assert.doesNotMatch(view, /method:\s*['"]POST['"]/);
