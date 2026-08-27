@@ -39,6 +39,20 @@ test("requirement AI clarification output contains no provider wording", () => {
   assert.equal(result.providerDetails, null);
 });
 
+test("saved clarification response preserves null provider fields", () => {
+  const result = requirementAi.presentRequirement({
+    customerRequirementRaw: "Need help",
+    requirementAiStatus: "clarify",
+    requirementAiClarificationReason: "missing_core_requirement",
+    requirementAiClarificationMessage: "Please clarify what product or service the customer needs.",
+    requirementAiProviderTitle: "",
+    requirementAiProviderDetails: "",
+  });
+  assert.equal(result.status, "clarify");
+  assert.equal(result.providerTitle, null);
+  assert.equal(result.providerDetails, null);
+});
+
 test("requirement AI rejects provider wording over the approved limits", () => {
   assert.throws(() => requirementAi.validateAiResult({
     schemaVersion: 1,
