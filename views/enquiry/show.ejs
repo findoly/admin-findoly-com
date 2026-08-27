@@ -252,19 +252,31 @@
                         <div x-show="requirementForm.status === 'ready'" x-cloak>
                           <div class="alert alert-success mb-3">
                             <div class="fw-semibold">AI wording is ready for employee review</div>
-                            <div class="small mt-1">You may correct the wording before approval, but do not add facts the customer did not provide.</div>
+                            <div class="small mt-1">The AI suggestion stays visible below. Edit only the final provider wording if a correction is required.</div>
                           </div>
 
                           <div class="mb-3">
-                            <label class="form-label">WhatsApp requirement <span class="text-muted">(maximum 20 words)</span></label>
+                            <label class="form-label">AI corrected title</label>
+                            <input class="form-control" :value="requirementForm.aiTitle" readonly>
+                            <div class="form-text">Read-only snapshot of the latest AI suggestion.</div>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">AI corrected description</label>
+                            <textarea class="form-control" rows="4" :value="requirementForm.aiDetails" readonly></textarea>
+                            <div class="form-text">Read-only snapshot of the latest AI suggestion.</div>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Final WhatsApp requirement <span class="text-muted">(maximum 20 words)</span></label>
                             <input class="form-control" maxlength="300" x-model="requirementForm.providerTitle" :disabled="requirementApproving">
                             <div class="form-text"><span x-text="requirementTitleWords"></span> / 20 words · used in the provider Meta alert.</div>
                           </div>
 
                           <div class="mb-3">
-                            <label class="form-label">Provider requirement details <span class="text-muted">(maximum 100 words)</span></label>
+                            <label class="form-label">Final provider description <span class="text-muted">(maximum 100 words)</span></label>
                             <textarea class="form-control" rows="4" maxlength="2000" x-model="requirementForm.providerDetails" :disabled="requirementApproving"></textarea>
-                            <div class="form-text"><span x-text="requirementDetailsWords"></span> / 100 words · shown after the provider opens the enquiry.</div>
+                            <div class="form-text"><span x-text="requirementDetailsWords"></span> / 100 words · approved provider-facing description.</div>
                           </div>
 
                           <button class="btn btn-primary w-100" @click="approveRequirement()" :disabled="requirementApproving || requirementGenerating || !requirementReadyToApprove">
@@ -472,6 +484,8 @@
                     status: '',
                     clarificationReason: '',
                     clarificationMessage: '',
+                    aiTitle: '',
+                    aiDetails: '',
                     providerTitle: '',
                     providerDetails: '',
                     generatedAt: null,
@@ -595,15 +609,22 @@
                     return text ? text.split(/\s+/).length : 0;
                   },
                   applyRequirement(data = {}) {
+                    const approvedAt = data.approvedAt ?? data.requirementAiApprovedAt ?? this.lead.requirementAiApprovedAt ?? null;
+                    const aiTitle = data.providerTitle ?? data.requirementAiProviderTitle ?? this.lead.requirementAiProviderTitle ?? '';
+                    const aiDetails = data.providerDetails ?? data.requirementAiProviderDetails ?? this.lead.requirementAiProviderDetails ?? '';
+                    const approvedTitle = data.approvedProviderTitle ?? data.providerRequirementTitle ?? this.lead.providerRequirementTitle ?? '';
+                    const approvedDetails = data.approvedProviderDetails ?? data.providerRequirementDetails ?? this.lead.providerRequirementDetails ?? '';
                     this.requirementForm = {
                       raw: data.customerRequirementRaw ?? data.raw ?? this.lead.customerRequirementRaw ?? '',
                       status: data.status ?? data.requirementAiStatus ?? this.lead.requirementAiStatus ?? '',
                       clarificationReason: data.clarificationReason ?? data.requirementAiClarificationReason ?? this.lead.requirementAiClarificationReason ?? '',
                       clarificationMessage: data.clarificationMessage ?? data.requirementAiClarificationMessage ?? this.lead.requirementAiClarificationMessage ?? '',
-                      providerTitle: data.providerTitle ?? data.requirementAiProviderTitle ?? data.approvedProviderTitle ?? this.lead.requirementAiProviderTitle ?? this.lead.providerRequirementTitle ?? '',
-                      providerDetails: data.providerDetails ?? data.requirementAiProviderDetails ?? data.approvedProviderDetails ?? this.lead.requirementAiProviderDetails ?? this.lead.providerRequirementDetails ?? '',
+                      aiTitle,
+                      aiDetails,
+                      providerTitle: approvedAt ? (approvedTitle || aiTitle) : aiTitle,
+                      providerDetails: approvedAt ? (approvedDetails || aiDetails) : aiDetails,
                       generatedAt: data.generatedAt ?? data.requirementAiGeneratedAt ?? this.lead.requirementAiGeneratedAt ?? null,
-                      approvedAt: data.approvedAt ?? data.requirementAiApprovedAt ?? this.lead.requirementAiApprovedAt ?? null
+                      approvedAt
                     };
                     this.requirementGeneratedRaw = this.requirementForm.status ? this.requirementForm.raw : '';
                   },
@@ -613,6 +634,8 @@
                     this.requirementForm.status = '';
                     this.requirementForm.clarificationReason = '';
                     this.requirementForm.clarificationMessage = '';
+                    this.requirementForm.aiTitle = '';
+                    this.requirementForm.aiDetails = '';
                     this.requirementForm.providerTitle = '';
                     this.requirementForm.providerDetails = '';
                     this.requirementForm.generatedAt = null;
