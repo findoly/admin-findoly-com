@@ -195,7 +195,6 @@ function successMessage(result = {}) {
   if (lead.customerEmail) lines.push(`Email: ${lead.customerEmail}`);
   const location = joinLocation(lead);
   if (location) lines.push(`Location: ${location}`);
-
   const qualification = Array.isArray(context.qualification) ? context.qualification : [];
   if (qualification.length) {
     lines.push("");

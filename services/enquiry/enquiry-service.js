@@ -768,6 +768,35 @@ async function update(enquiryId, input = {}, actor = "admin") {
   }
 
   const data = await normalizeInput(input, presentEnquiry(existing));
+  const existingServiceTypes = (Array.isArray(existing.serviceTypes) ? existing.serviceTypes : [])
+    .map((item) => String(item?.serviceTypeId || item?.id || item?.slug || item?.name || item || "").trim())
+    .filter(Boolean);
+  const nextServiceTypes = (Array.isArray(data.serviceTypes) ? data.serviceTypes : [])
+    .map((item) => String(item?.serviceTypeId || item?.id || item?.slug || item?.name || item || "").trim())
+    .filter(Boolean);
+  const requirementContextChanged = String(existing.categorySlug || "") !== String(data.categorySlug || "")
+    || String(existing.category || "") !== String(data.category || "")
+    || JSON.stringify(existingServiceTypes) !== JSON.stringify(nextServiceTypes);
+  const requirementStillEditable = canonicalLeadStatus(existing.status) !== "approved"
+    && existing.marketplaceAvailable !== true
+    && String(existing.marketplaceStatus || "").toLowerCase() !== "published"
+    && Number(existing.unlockedCount || 0) === 0
+    && Number(existing.reservedUnlockCount || 0) === 0;
+  if (requirementContextChanged && requirementStillEditable) {
+    Object.assign(data, {
+      requirementAiStatus: "",
+      requirementAiClarificationReason: "",
+      requirementAiClarificationMessage: "",
+      requirementAiProviderTitle: "",
+      requirementAiProviderDetails: "",
+      providerRequirementTitle: "",
+      providerRequirementDetails: "",
+      requirementAiApprovedAt: null,
+      requirementAiApprovedBy: "",
+      requirementAiSourceHash: "",
+      requirementAiGeneratedAt: null,
+    });
+  }
   data.status = existing.status;
   data.statusUpdatedAt = existing.statusUpdatedAt || null;
   data.statusUpdatedBy = existing.statusUpdatedBy || "";
@@ -814,6 +843,16 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
 
   const metadata = { ...(existing.metadata || {}) };
   const transition = resolveLeadStatusTransition(existing.status, input, metadata);
+  if (transition.toStatus === "approved") {
+    const requirementApproved = Boolean(
+      existing.requirementAiApprovedAt
+      && String(existing.providerRequirementTitle || "").trim()
+      && String(existing.providerRequirementDetails || "").trim()
+    );
+    if (!requirementApproved) {
+      throw validationError("Approve the customer requirement before approving this lead");
+    }
+  }
   const now = new Date();
   if (transition.action === "reject") {
     metadata.rejectedFromStatus = transition.fromStatus;

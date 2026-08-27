@@ -196,9 +196,88 @@
                       </div>
                     </article>
 
-                    <article class="crm-lead-action-card crm-journey-action" :class="{'is-required': validationReady && qualificationComplete && !providerControlled && !isRejected, 'is-locked': !validationReady || !qualificationComplete || providerControlled}">
+                    <article class="crm-lead-action-card crm-requirement-action" :class="{'is-required': validationReady && qualificationComplete && !requirementApproved && !providerControlled && !isRejected, 'is-complete': requirementApproved, 'is-locked': !validationReady || !qualificationComplete || providerControlled || isRejected}">
                       <div class="crm-action-heading">
                         <span class="crm-action-step">3</span>
+                        <div>
+                          <h3>Customer requirement</h3>
+                          <p>Capture the customer's need, then use AI to prepare clear provider-facing wording.</p>
+                        </div>
+                        <span class="crm-status ms-auto" :class="requirementApproved ? 'status-approved' : 'status-pending'" x-text="requirementApproved ? 'Approved' : (providerControlled ? 'Not captured' : (requirementForm.status === 'ready' ? 'Ready' : (requirementForm.status === 'clarify' ? 'Clarify' : 'Pending')))"></span>
+                      </div>
+
+                      <div x-show="providerControlled" x-cloak class="crm-action-lock">
+                        <strong x-text="requirementApproved ? 'Customer requirement approved' : 'AI requirement was not captured for this existing approved lead'"></strong>
+                        <span x-show="!requirementApproved">The lead remains approved and existing provider access is unchanged.</span>
+                        <span x-show="lead.providerRequirementTitle" x-text="lead.providerRequirementTitle"></span>
+                        <span x-show="lead.providerRequirementDetails" x-text="lead.providerRequirementDetails"></span>
+                      </div>
+
+                      <div x-show="!validationReady && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Complete lead validation first</strong>
+                        <span>Mark the lead Valid before preparing the customer requirement.</span>
+                      </div>
+                      <div x-show="validationReady && !qualificationComplete && !providerControlled && !isRejected" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Complete lead qualification first</strong>
+                        <span>Save all six qualification answers before preparing provider-facing requirement wording.</span>
+                      </div>
+                      <div x-show="validationReady && isRejected && !providerControlled" x-cloak class="crm-action-lock crm-action-lock-warning">
+                        <strong>Restore the rejected lead first</strong>
+                        <span>The customer requirement can only be approved for an active lead.</span>
+                      </div>
+
+                      <div x-show="validationReady && qualificationComplete && !providerControlled && !isRejected" x-cloak>
+                        <label class="form-label">Customer requirement</label>
+                        <textarea
+                          class="form-control mb-2"
+                          rows="4"
+                          maxlength="5000"
+                          x-model="requirementForm.raw"
+                          @input="requirementInputChanged()"
+                          :disabled="requirementGenerating || requirementApproving"
+                          placeholder="Write what the customer wants to buy, obtain, repair, install, rent, source or get done."
+                        ></textarea>
+                        <div class="form-text mb-2">Enter the customer's actual need in your own words. AI performs only a low-level clarity check and must not invent missing facts.</div>
+
+                        <button class="btn btn-light w-100 mb-3" @click="generateRequirement()" :disabled="requirementGenerating || requirementApproving || !requirementForm.raw.trim()">
+                          <span x-text="requirementGenerating ? 'Checking with AI…' : (requirementForm.status ? 'Generate again' : 'Check with AI')"></span>
+                        </button>
+
+                        <div x-show="requirementForm.status === 'clarify'" x-cloak class="alert alert-warning mb-3">
+                          <div class="fw-semibold">Please clarify the requirement</div>
+                          <div class="small mt-1" x-text="requirementForm.clarificationMessage"></div>
+                          <div class="small mt-2">Update the customer requirement above and check again.</div>
+                        </div>
+
+                        <div x-show="requirementForm.status === 'ready'" x-cloak>
+                          <div class="alert alert-success mb-3">
+                            <div class="fw-semibold">AI wording is ready for employee review</div>
+                            <div class="small mt-1">You may correct the wording before approval, but do not add facts the customer did not provide.</div>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">WhatsApp requirement <span class="text-muted">(maximum 20 words)</span></label>
+                            <input class="form-control" maxlength="300" x-model="requirementForm.providerTitle" :disabled="requirementApproving">
+                            <div class="form-text"><span x-text="requirementTitleWords"></span> / 20 words · used in the provider Meta alert.</div>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Provider requirement details <span class="text-muted">(maximum 100 words)</span></label>
+                            <textarea class="form-control" rows="4" maxlength="2000" x-model="requirementForm.providerDetails" :disabled="requirementApproving"></textarea>
+                            <div class="form-text"><span x-text="requirementDetailsWords"></span> / 100 words · shown after the provider opens the enquiry.</div>
+                          </div>
+
+                          <button class="btn btn-primary w-100" @click="approveRequirement()" :disabled="requirementApproving || requirementGenerating || !requirementReadyToApprove">
+                            <span x-text="requirementApproving ? 'Approving…' : 'Approve requirement & lead'"></span>
+                          </button>
+                          <p class="crm-action-help mb-0 mt-2">Approval saves both provider texts and moves this lead to Approved using the existing marketplace publication flow.</p>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="crm-lead-action-card crm-journey-action" :class="{'is-locked': !validationReady || !qualificationComplete || providerControlled}">
+                      <div class="crm-action-heading">
+                        <span class="crm-action-step">4</span>
                         <div>
                           <h3>Journey status</h3>
                           <p>Move one stage at a time with a recorded note.</p>
@@ -237,7 +316,7 @@
 
                     <article class="crm-lead-action-card crm-conversion-action" :class="{'is-complete': lead.providerSaleConversionStatus === 'converted'}">
                       <div class="crm-action-heading">
-                        <span class="crm-action-step">4</span>
+                        <span class="crm-action-step">5</span>
                         <div>
                           <h3>Sale conversion</h3>
                           <p>Read-only and calculated from unlocked providers.</p>
@@ -388,12 +467,25 @@
                   qualification: { questions: [], answers: {}, system: null, final: null, completed: false, locked: false, categoryMaxLeadPricePaise: 10000 },
                   qualificationAnswers: {},
                   qualificationFinal: { leadPriceRupees: 0, leadIntent: '', priority: '' },
+                  requirementForm: {
+                    raw: '',
+                    status: '',
+                    clarificationReason: '',
+                    clarificationMessage: '',
+                    providerTitle: '',
+                    providerDetails: '',
+                    generatedAt: null,
+                    approvedAt: null
+                  },
+                  requirementGeneratedRaw: '',
                   loading: true,
                   statusSaving: false,
                   referralSaving: false,
                   qualificationLoading: false,
                   qualificationPreviewing: false,
                   qualificationSaving: false,
+                  requirementGenerating: false,
+                  requirementApproving: false,
                   noteSaving: false,
                   stateSaving: false,
                   journeySteps: ['new', 'verification', 'approved'],
@@ -419,6 +511,26 @@
                     const questions = Array.isArray(this.qualification?.questions) ? this.qualification.questions : [];
                     return questions.length === 6 && questions.every((question) => Boolean(this.qualificationAnswers?.[question.id]));
                   },
+                  get requirementApproved() {
+                    return Boolean(
+                      this.lead.requirementAiApprovedAt
+                      && this.lead.providerRequirementTitle
+                      && this.lead.providerRequirementDetails
+                    );
+                  },
+                  get requirementTitleWords() {
+                    return this.wordCount(this.requirementForm.providerTitle);
+                  },
+                  get requirementDetailsWords() {
+                    return this.wordCount(this.requirementForm.providerDetails);
+                  },
+                  get requirementReadyToApprove() {
+                    return this.requirementForm.status === 'ready'
+                      && Boolean(this.requirementForm.providerTitle.trim())
+                      && Boolean(this.requirementForm.providerDetails.trim())
+                      && this.requirementTitleWords <= 20
+                      && this.requirementDetailsWords <= 100;
+                  },
                   get journeyBaseStatus() {
                     return this.isRejected ? (this.lead.metadata?.rejectedFromStatus || 'new') : this.currentStatus;
                   },
@@ -427,6 +539,7 @@
                   },
                   get canNext() {
                     if (this.providerControlled || !this.validationReady || !this.qualificationComplete || this.isRejected) return false;
+                    if (this.journeyBaseStatus === 'verification' && !this.requirementApproved) return false;
                     const employeeSteps = this.journeySteps;
                     const index = employeeSteps.indexOf(this.journeyBaseStatus);
                     return index >= 0 && index < employeeSteps.length - 1;
@@ -477,6 +590,33 @@
                   notify(message, type = 'success') {
                     showCrmToast(message, type);
                   },
+                  wordCount(value) {
+                    const text = String(value || '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+                    return text ? text.split(/\s+/).length : 0;
+                  },
+                  applyRequirement(data = {}) {
+                    this.requirementForm = {
+                      raw: data.customerRequirementRaw ?? data.raw ?? this.lead.customerRequirementRaw ?? '',
+                      status: data.status ?? data.requirementAiStatus ?? this.lead.requirementAiStatus ?? '',
+                      clarificationReason: data.clarificationReason ?? data.requirementAiClarificationReason ?? this.lead.requirementAiClarificationReason ?? '',
+                      clarificationMessage: data.clarificationMessage ?? data.requirementAiClarificationMessage ?? this.lead.requirementAiClarificationMessage ?? '',
+                      providerTitle: data.providerTitle ?? data.requirementAiProviderTitle ?? data.approvedProviderTitle ?? this.lead.requirementAiProviderTitle ?? this.lead.providerRequirementTitle ?? '',
+                      providerDetails: data.providerDetails ?? data.requirementAiProviderDetails ?? data.approvedProviderDetails ?? this.lead.requirementAiProviderDetails ?? this.lead.providerRequirementDetails ?? '',
+                      generatedAt: data.generatedAt ?? data.requirementAiGeneratedAt ?? this.lead.requirementAiGeneratedAt ?? null,
+                      approvedAt: data.approvedAt ?? data.requirementAiApprovedAt ?? this.lead.requirementAiApprovedAt ?? null
+                    };
+                    this.requirementGeneratedRaw = this.requirementForm.status ? this.requirementForm.raw : '';
+                  },
+                  requirementInputChanged() {
+                    if (!this.requirementForm.status) return;
+                    if (String(this.requirementForm.raw || '').trim() === String(this.requirementGeneratedRaw || '').trim()) return;
+                    this.requirementForm.status = '';
+                    this.requirementForm.clarificationReason = '';
+                    this.requirementForm.clarificationMessage = '';
+                    this.requirementForm.providerTitle = '';
+                    this.requirementForm.providerDetails = '';
+                    this.requirementForm.generatedAt = null;
+                  },
                   stepClass(step) {
                     const stepIndex = this.journeySteps.indexOf(step);
                     const currentIndex = this.journeySteps.indexOf(this.journeyBaseStatus);
@@ -494,6 +634,9 @@
                     if (event.type === 'lead_qualification') return 'Lead qualification completed';
                     if (event.type === 'lead_requalified') return 'Lead qualification updated';
                     if (['agent_referral_validation', 'lead_validation'].includes(event.type)) return 'Lead validation updated';
+                    if (event.type === 'requirement_ai_generated') return 'Customer requirement prepared';
+                    if (event.type === 'requirement_ai_clarification') return 'Customer requirement needs clarification';
+                    if (event.type === 'customer_requirement_approved') return 'Customer requirement approved';
                     if (event.type === 'created') return 'Lead created';
                     if (event.type === 'note') return 'Note added';
                     if (event.type === 'deactivated') return 'Lead deactivated';
@@ -591,7 +734,7 @@
                       })).data || {};
                       if (data.lead) this.lead = data.lead;
                       if (data.qualification) this.applyQualification(data.qualification);
-                      this.notify(this.qualificationComplete ? 'Lead qualification saved. Journey actions are available.' : 'Lead qualification saved.', 'success');
+                      this.notify(this.qualificationComplete ? 'Lead qualification saved. Customer requirement step is available.' : 'Lead qualification saved.', 'success');
                     } catch (error) {
                       this.notify(error.message, 'error');
                     } finally {
@@ -602,6 +745,7 @@
                     this.loading = true;
                     try {
                       this.lead = (await apiFetch('/api/enquiry/' + this.recordId)).data;
+                      this.applyRequirement(this.lead);
                       const validation = this.lead.agentReferralValidation || 'pending';
                       this.referralForm.status = ['valid', 'invalid'].includes(validation) ? validation : '';
                       this.referralForm.method = this.lead.leadValidationMethod || '';
@@ -636,6 +780,10 @@
                       this.notify('Complete lead qualification before moving the journey forward.', 'error');
                       return;
                     }
+                    if (action === 'next' && this.journeyBaseStatus === 'verification' && !this.requirementApproved) {
+                      this.notify('Approve the customer requirement before approving this lead.', 'error');
+                      return;
+                    }
                     if ((this.lead.agentId || action === 'reject') && !this.statusNote.trim()) {
                       this.notify(this.lead.agentId ? 'Enter a mandatory note before changing this Agent Portal requirement.' : 'Enter a rejection reason before rejecting the lead.', 'error');
                       return;
@@ -655,6 +803,58 @@
                       this.notify(error.message, 'error');
                     } finally {
                       this.statusSaving = false;
+                    }
+                  },
+                  async generateRequirement() {
+                    if (this.requirementGenerating || this.requirementApproving) return;
+                    if (!this.requirementForm.raw.trim()) {
+                      this.notify('Enter the customer requirement first.', 'error');
+                      return;
+                    }
+                    this.requirementGenerating = true;
+                    try {
+                      const data = (await apiFetch('/api/enquiry/' + this.recordId + '/requirement/generate', {
+                        method: 'POST',
+                        body: JSON.stringify({ customerRequirementRaw: this.requirementForm.raw })
+                      })).data || {};
+                      if (data.lead) this.lead = data.lead;
+                      this.applyRequirement(data.requirement || data.lead || {});
+                      if (this.requirementForm.status === 'clarify') {
+                        this.notify('AI needs one clarification before this requirement can be approved.', 'warning');
+                      } else {
+                        this.notify('Provider-facing requirement wording is ready for review.', 'success');
+                      }
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.requirementGenerating = false;
+                    }
+                  },
+                  async approveRequirement() {
+                    if (this.requirementApproving || this.requirementGenerating) return;
+                    if (!this.requirementReadyToApprove) {
+                      this.notify('Keep the WhatsApp requirement within 20 words and provider details within 100 words.', 'error');
+                      return;
+                    }
+                    if (!window.confirm('Approve this customer requirement and publish the lead to providers?')) return;
+                    this.requirementApproving = true;
+                    try {
+                      const data = (await apiFetch('/api/enquiry/' + this.recordId + '/requirement/approve', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          providerTitle: this.requirementForm.providerTitle,
+                          providerDetails: this.requirementForm.providerDetails
+                        })
+                      })).data || {};
+                      if (data.lead) this.lead = data.lead;
+                      this.applyRequirement(data.requirement || data.lead || {});
+                      this.notify('Customer requirement approved. Lead is now Approved.', 'success');
+                      await this.loadQualification();
+                      await this.loadCommunications();
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.requirementApproving = false;
                     }
                   },
                   async saveReferralValidation() {

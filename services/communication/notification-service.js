@@ -146,7 +146,7 @@ const variablesFor = function (context) {
   const values = {
     customer_name: lead.name || "Customer",
     lead_id: lead.enquiryId || lead.id || "",
-    requirement_title: lead.requirementTitle || lead.serviceType || "",
+    requirement_title: lead.providerRequirementTitle || lead.requirementTitle || lead.serviceType || "",
     service_type: lead.serviceType || "",
     service_types: Array.isArray(lead.serviceTypes) ? lead.serviceTypes.map((item) => item?.name || item).filter(Boolean).join(", ") : (lead.serviceType || ""),
     priority: lead.priority || "normal",
@@ -232,7 +232,7 @@ const variablesFor = function (context) {
     values.provider_name = provider.name || provider.businessName || "Provider";
     values.service_name = serviceName;
     values.lead_location = leadLocation;
-    values.requirement_title = lead.requirementTitle || lead.serviceType || "New customer requirement";
+    values.requirement_title = lead.providerRequirementTitle || lead.requirementTitle || lead.serviceType || "New customer requirement";
     values.lead_url = leadUrl;
     values.lead_url_suffix = urlSuffix(leadUrl);
     values["1"] = values.provider_name;

@@ -128,6 +128,7 @@ function validateRuntimeConfig(env = process.env) {
     ["PUBLIC_INTAKE_RATE_WINDOW_MS", 60000, 86400000],
     ["CRM_PROVIDER_ACTION_API_TIMEOUT_MS", 3000, 30000],
     ["CRM_WHATSAPP_ACTION_EXPIRY_MINUTES", 5, 10080],
+    ["CRM_OPENAI_TIMEOUT_MS", 1500, 30000],
   ];
   for (const [key, min, max] of integerSettings) {
     const message = integerSettingError(env, key, { min, max });
@@ -176,6 +177,13 @@ function validateRuntimeConfig(env = process.env) {
   }
   if (production && !present(env.CUSTOMER_PORTAL_API_TOKEN)) {
     warnings.push("CUSTOMER_PORTAL_API_TOKEN is not configured; customer portal APIs will return 503");
+  }
+
+  if (present(env.CRM_OPENAI_API_KEY) && !strongToken(env.CRM_OPENAI_API_KEY, 32)) {
+    errors.push("CRM_OPENAI_API_KEY must be a non-placeholder key of at least 32 characters when configured");
+  }
+  if (!present(env.CRM_OPENAI_API_KEY)) {
+    warnings.push("CRM_OPENAI_API_KEY is not configured; AI-assisted customer requirement approval will be unavailable");
   }
 
   if (production) {
