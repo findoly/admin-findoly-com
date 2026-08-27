@@ -377,13 +377,19 @@ async function requestOpenAi(lead, raw, options = {}) {
 }
 
 function presentRequirement(lead = {}) {
+  const status = lead.requirementAiStatus || "";
+  const needsClarification = status === "clarify";
   return {
     customerRequirementRaw: lead.customerRequirementRaw || "",
-    status: lead.requirementAiStatus || "",
+    status,
     clarificationReason: lead.requirementAiClarificationReason || null,
     clarificationMessage: lead.requirementAiClarificationMessage || null,
-    providerTitle: lead.requirementAiProviderTitle || lead.providerRequirementTitle || "",
-    providerDetails: lead.requirementAiProviderDetails || lead.providerRequirementDetails || "",
+    providerTitle: needsClarification
+      ? null
+      : (lead.requirementAiProviderTitle || lead.providerRequirementTitle || ""),
+    providerDetails: needsClarification
+      ? null
+      : (lead.requirementAiProviderDetails || lead.providerRequirementDetails || ""),
     approvedProviderTitle: lead.providerRequirementTitle || "",
     approvedProviderDetails: lead.providerRequirementDetails || "",
     schemaVersion: Number(lead.requirementAiSchemaVersion || 0),
