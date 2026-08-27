@@ -79,6 +79,17 @@ test("requirement AI rejects mobile numbers and email addresses from provider wo
   }), /mobile number or email address/);
 });
 
+test("requirement AI rejects budget information from provider wording", () => {
+  assert.throws(() => requirementAi.validateAiResult({
+    schemaVersion: 1,
+    status: "ready",
+    clarificationReason: null,
+    clarificationMessage: null,
+    providerTitle: "CCTV repair required with ₹5,000 budget",
+    providerDetails: "Customer needs CCTV repair and has an expected budget of ₹5,000.",
+  }), /budget or expected-spend information/);
+});
+
 test("requirement AI source context excludes expected spend from provider wording input", () => {
   const payload = requirementAi.sourcePayload({
     category: "CCTV",
