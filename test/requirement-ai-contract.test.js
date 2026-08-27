@@ -147,6 +147,12 @@ test("lead approval is hard-gated by the approved customer requirement", () => {
   assert.match(source, /providerRequirementDetails/);
 });
 
+test("CRM keeps legacy approved leads clearly backward compatible", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../views/enquiry/show.ejs"), "utf8");
+  assert.match(source, /AI requirement was not captured for this existing approved lead/);
+  assert.match(source, /existing provider access is unchanged/);
+});
+
 test("CRM exposes dedicated generate and approve requirement routes", () => {
   const source = fs.readFileSync(path.join(__dirname, "../routes/enquiry.js"), "utf8");
   assert.match(source, /requirement\/generate/);
