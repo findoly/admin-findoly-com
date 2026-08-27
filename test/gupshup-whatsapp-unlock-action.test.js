@@ -485,7 +485,13 @@ test("provider-facing WhatsApp action responses use enquiry wording and never me
         category: "Painting",
         customerName: "Customer",
         customerMobile: "9999999999",
-        providerRequirementDetails: "Do not include this customer requirement in WhatsApp.",
+        customerEmail: "customer@example.com",
+        customerAddress: "Mumbai, Maharashtra 400095, India",
+        city: "Mumbai",
+        state: "Maharashtra",
+        pincode: "400095",
+        customerRequirementRaw: "Never expose this raw employee-entered requirement.",
+        providerRequirementDetails: "Customer needs interior painting for a two-bedroom home and wants the work completed this week.",
         chargedCredits: 10,
       },
       provider: { availableCredits: 90 },
@@ -499,6 +505,12 @@ test("provider-facing WhatsApp action responses use enquiry wording and never me
   ];
   messages.forEach((message) => assert.doesNotMatch(message, /unlock/i));
   assert.match(messages[0], /enquiry details are now available/i);
-  assert.doesNotMatch(messages[0], /Do not include this customer requirement in WhatsApp\./);
+  assert.match(messages[0], /Service: Painting/);
+  assert.match(messages[0], /Description: Customer needs interior painting for a two-bedroom home and wants the work completed this week\./);
+  assert.match(messages[0], /Area: Mumbai, Maharashtra 400095, India/);
+  assert.doesNotMatch(messages[0], /Mumbai[\s\S]*Mumbai/);
+  assert.doesNotMatch(messages[0], /Never expose this raw employee-entered requirement\./);
+  assert.doesNotMatch(messages[0], /Lead details|Readiness|Lead quality/);
+  assert.match(messages[0], /Balance: 90 credits/);
   assert.match(messages.at(-1), /could not open this enquiry from WhatsApp/i);
 });

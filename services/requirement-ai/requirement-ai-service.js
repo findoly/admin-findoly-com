@@ -450,6 +450,7 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
   const result = generated.result;
   const now = new Date();
   const hash = sourceHash(lead, raw);
+  const generationNumber = Number(lead.requirementAiGenerationCount || 0) + 1;
 
   const update = await Enquiry.updateOne({
     $and: [
@@ -479,6 +480,14 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
           message: result.status === "ready"
             ? "AI prepared provider-facing customer requirement wording"
             : result.clarificationMessage,
+          generationNumber,
+          aiStatus: result.status,
+          customerRequirementRaw: raw,
+          providerTitle: result.providerTitle || "",
+          providerDetails: result.providerDetails || "",
+          clarificationReason: result.clarificationReason || "",
+          clarificationMessage: result.clarificationMessage || "",
+          model: generated.model,
           actor: String(actor || "admin").slice(0, 254),
           createdAt: now,
         }],
