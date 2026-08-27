@@ -19,6 +19,7 @@ router.post("/communications/events/:event", communicationEventAccess, communica
 router.use("/customer-portal", require("./customer-portal"));
 router.use(apiAuth);
 router.use("/dashboard", require("./dashboard"));
+router.use("/reports", require("./report"));
 router.use("/employee", require("./employee"));
 router.use("/employees", require("./employee"));
 router.use("/role", require("./role"));

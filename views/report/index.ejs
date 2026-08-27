@@ -10,80 +10,250 @@
           <div class="page-header page-header-light crm-page-header">
             <div class="page-header-content crm-page-heading">
               <div>
-                <div class="crm-page-eyebrow">Analytics</div>
-                <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Review CRM activity and operational totals.</p>
+                <div class="crm-page-eyebrow">Reports</div>
+                <h1 class="page-title mb-1">Requirement Report</h1>
+                <p class="crm-page-subtitle mb-0">Track requirement volume, unlocks, value and conversion.</p>
               </div>
-              
             </div>
           </div>
-          <div class="content">
-            <div
-              x-show="shellError"
-              x-cloak
-              class="alert alert-danger"
-              x-text="shellError"
-            ></div>
-            <div x-data="reportPage()" x-init="load()">
+
+          <div class="content" x-data="requirementReport()" x-init="load()">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+            <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+            <section class="card crm-filter-card mb-3">
+              <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <button type="button" class="btn btn-sm" :class="filters.preset === 'today' ? 'btn-primary' : 'btn-light'" @click="setPreset('today')">Today</button>
+                  <button type="button" class="btn btn-sm" :class="filters.preset === 'yesterday' ? 'btn-primary' : 'btn-light'" @click="setPreset('yesterday')">Yesterday</button>
+                  <button type="button" class="btn btn-sm" :class="filters.preset === '7d' ? 'btn-primary' : 'btn-light'" @click="setPreset('7d')">Last 7 days</button>
+                  <button type="button" class="btn btn-sm" :class="filters.preset === '30d' ? 'btn-primary' : 'btn-light'" @click="setPreset('30d')">Last 30 days</button>
+                  <button type="button" class="btn btn-sm" :class="filters.preset === 'custom' ? 'btn-primary' : 'btn-light'" @click="filters.preset='custom'">Custom</button>
+                  <span class="badge bg-light text-dark ms-lg-auto">Testing category excluded</span>
+                </div>
+
+                <div class="row g-2 mt-2" x-show="filters.preset === 'custom'" x-cloak>
+                  <div class="col-md-4">
+                    <label class="form-label">From</label>
+                    <input type="date" class="form-control" x-model="filters.from">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">To</label>
+                    <input type="date" class="form-control" x-model="filters.to">
+                  </div>
+                  <div class="col-md-4 d-flex align-items-end">
+                    <button type="button" class="btn btn-primary w-100" @click="load()" :disabled="loading || !filters.from || !filters.to">Apply custom range</button>
+                  </div>
+                  <div class="col-12">
+                    <div class="form-text">Custom report range is limited to 6 months.</div>
+                  </div>
+                </div>
+
+                <div class="text-muted fs-sm mt-2" x-show="data.period">
+                  Showing <strong x-text="data.period?.from || '—'"></strong> to <strong x-text="data.period?.to || '—'"></strong>
+                </div>
+              </div>
+            </section>
+
+            <div x-show="loading" class="card mb-3">
+              <div class="card-body text-muted">Loading requirement report…</div>
+            </div>
+
+            <div x-show="!loading" x-cloak>
               <div class="row g-3">
-                <template x-for="item in cards" :key="item.label"
-                  ><div class="col-md-4">
-                    <div class="card">
+                <template x-for="card in cards" :key="card.label">
+                  <div class="col-6 col-lg-3">
+                    <div class="card h-100">
                       <div class="card-body">
-                        <div class="text-muted" x-text="item.label"></div>
-                        <div class="crm-stat-value" x-text="item.value"></div>
+                        <div class="text-muted fs-sm" x-text="card.label"></div>
+                        <div class="crm-stat-value mt-1" x-text="card.value"></div>
+                        <div class="text-muted fs-sm mt-1" x-show="card.note" x-text="card.note"></div>
                       </div>
-                    </div></div
-                ></template>
+                    </div>
+                  </div>
+                </template>
               </div>
-              <div class="card mt-3">
-                <div class="card-header">
-                  <h5 class="mb-0">Status summary</h5>
+
+              <div class="row g-3 mt-1">
+                <div class="col-lg-7">
+                  <section class="card h-100">
+                    <div class="card-header crm-card-heading">
+                      <div>
+                        <h5 class="mb-1">Requirement trend</h5>
+                        <p class="text-muted mb-0">Requirements received by day.</p>
+                      </div>
+                    </div>
+                    <div class="card-body">
+                      <div x-show="trendHasValues">
+                        <svg viewBox="0 0 600 190" class="w-100 text-primary" role="img" aria-label="Requirement trend line chart">
+                          <line x1="18" y1="165" x2="582" y2="165" stroke="currentColor" opacity=".12"></line>
+                          <line x1="18" y1="95" x2="582" y2="95" stroke="currentColor" opacity=".08"></line>
+                          <line x1="18" y1="25" x2="582" y2="25" stroke="currentColor" opacity=".08"></line>
+                          <polyline :points="trendPoints" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                          <template x-for="(item,index) in data.trend || []" :key="item.date">
+                            <circle :cx="trendX(index)" :cy="trendY(item.requirements)" r="4" fill="currentColor">
+                              <title x-text="item.label + ': ' + item.requirements"></title>
+                            </circle>
+                          </template>
+                        </svg>
+                        <div class="d-flex justify-content-between text-muted fs-sm">
+                          <span x-text="trendLabels[0] || ''"></span>
+                          <span x-text="trendLabels[1] || ''"></span>
+                          <span x-text="trendLabels[2] || ''"></span>
+                        </div>
+                      </div>
+                      <div x-show="!trendHasValues" class="text-center text-muted py-5">No requirements in this period.</div>
+                    </div>
+                  </section>
                 </div>
-                <div class="card-body">
-                  <template
-                    x-for="(count,status) in data.statusCounts||{}"
-                    :key="status"
-                    ><div class="d-flex border-bottom py-2">
-                      <span x-text="humanize(status)"></span
-                      ><strong class="ms-auto" x-text="count"></strong></div
-                  ></template>
+
+                <div class="col-lg-5">
+                  <section class="card h-100">
+                    <div class="card-header crm-card-heading">
+                      <div>
+                        <h5 class="mb-1">Requirement status</h5>
+                        <p class="text-muted mb-0">Current requirement funnel counts.</p>
+                      </div>
+                    </div>
+                    <div class="card-body">
+                      <template x-for="item in statusBars" :key="item.label">
+                        <div class="mb-3">
+                          <div class="d-flex justify-content-between mb-1">
+                            <span x-text="item.label"></span>
+                            <strong x-text="formatNumber(item.value)"></strong>
+                          </div>
+                          <div class="progress" style="height: 10px;">
+                            <div class="progress-bar" role="progressbar" :style="'width:'+statusPercent(item.value)+'%'" :aria-valuenow="item.value" aria-valuemin="0" :aria-valuemax="statusMax"></div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
-            <script>
-              function reportPage() {
-                return {
-                  data: {},
-                  get cards() {
-                    return [
-                      {
-                        label: "Requirements",
-                        value: this.data.totalLeads || 0,
-                      },
-                      {
-                        label: "Provider offers",
-                        value: this.data.offered || 0,
-                      },
-                      {
-                        label: "Unlocked leads",
-                        value: this.data.unlocked || 0,
-                      },
-                      { label: "Providers", value: this.data.providers || 0 },
-                      {
-                        label: "Follow-ups",
-                        value: this.data.openFollowUps || 0,
-                      },
-                      { label: "Invoices", value: this.data.invoices || 0 },
-                    ];
-                  },
-                  async load() {
-                    this.data = (await apiFetch("/api/dashboard")).data;
-                  },
-                };
-              }
-            </script>
           </div>
+
+          <script>
+            function requirementReport() {
+              return {
+                data: { summary: {}, status: {}, trend: [] },
+                loading: false,
+                error: '',
+                filters: { preset: 'today', from: '', to: '' },
+
+                formatNumber(value) {
+                  return Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                },
+
+                formatMoney(value) {
+                  return new Intl.NumberFormat('en-IN', {
+                    style: 'currency',
+                    currency: 'INR',
+                    maximumFractionDigits: 0
+                  }).format(Number(value || 0));
+                },
+
+                get cards() {
+                  const s = this.data.summary || {};
+                  return [
+                    { label: 'Requirements received', value: this.formatNumber(s.requirementsReceived) },
+                    { label: 'New', value: this.formatNumber(s.new) },
+                    { label: 'Approved', value: this.formatNumber(s.approved) },
+                    { label: 'Rejected', value: this.formatNumber(s.rejected) },
+                    { label: 'Requirements unlocked', value: this.formatNumber(s.requirementsUnlocked) },
+                    { label: 'Total provider unlocks', value: this.formatNumber(s.totalProviderUnlocks) },
+                    {
+                      label: 'Unlock value',
+                      value: this.formatMoney(s.unlockValueRupees),
+                      note: this.formatNumber(s.unlockCredits) + ' credits consumed'
+                    },
+                    { label: 'Approved but not unlocked', value: this.formatNumber(s.notUnlocked) },
+                    {
+                      label: 'Estimated missed opportunity',
+                      value: this.formatMoney(s.estimatedMissedOpportunityRupees)
+                    },
+                    { label: 'Taken / converted', value: this.formatNumber(s.takenConverted) }
+                  ];
+                },
+
+                get statusBars() {
+                  const s = this.data.status || {};
+                  return [
+                    { label: 'New', value: Number(s.new || 0) },
+                    { label: 'Verification', value: Number(s.verification || 0) },
+                    { label: 'Approved', value: Number(s.approved || 0) },
+                    { label: 'Rejected', value: Number(s.rejected || 0) },
+                    { label: 'Unlocked', value: Number(s.unlocked || 0) },
+                    { label: 'Taken', value: Number(s.taken || 0) }
+                  ];
+                },
+
+                get statusMax() {
+                  return Math.max(1, ...this.statusBars.map((item) => item.value));
+                },
+
+                statusPercent(value) {
+                  return Math.max(0, Math.min(100, (Number(value || 0) / this.statusMax) * 100));
+                },
+
+                get trendMax() {
+                  return Math.max(1, ...(this.data.trend || []).map((item) => Number(item.requirements || 0)));
+                },
+
+                get trendHasValues() {
+                  return (this.data.trend || []).some((item) => Number(item.requirements || 0) > 0);
+                },
+
+                trendX(index) {
+                  const items = this.data.trend || [];
+                  if (items.length <= 1) return 300;
+                  return 18 + (Number(index || 0) * (564 / (items.length - 1)));
+                },
+
+                trendY(value) {
+                  return 165 - ((Number(value || 0) / this.trendMax) * 140);
+                },
+
+                get trendPoints() {
+                  return (this.data.trend || [])
+                    .map((item, index) => this.trendX(index) + ',' + this.trendY(item.requirements))
+                    .join(' ');
+                },
+
+                get trendLabels() {
+                  const items = this.data.trend || [];
+                  if (!items.length) return ['', '', ''];
+                  const middle = items[Math.floor((items.length - 1) / 2)];
+                  return [items[0]?.label || '', middle?.label || '', items[items.length - 1]?.label || ''];
+                },
+
+                setPreset(preset) {
+                  this.filters.preset = preset;
+                  if (preset !== 'custom') this.load();
+                },
+
+                async load() {
+                  this.loading = true;
+                  this.error = '';
+                  try {
+                    const query = new URLSearchParams({ preset: this.filters.preset });
+                    if (this.filters.preset === 'custom') {
+                      query.set('from', this.filters.from || '');
+                      query.set('to', this.filters.to || '');
+                    }
+                    const body = await apiFetch('/api/reports/requirements?' + query.toString());
+                    this.data = body.data || { summary: {}, status: {}, trend: [] };
+                  } catch (error) {
+                    this.error = error.message;
+                  } finally {
+                    this.loading = false;
+                  }
+                }
+              };
+            }
+          </script>
+
           <%- include('../partials/footer') %>
         </div>
       </div>
