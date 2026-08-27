@@ -70,13 +70,21 @@ function rawRequirement(value) {
 function redactContactDetails(value) {
   return String(value || "")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted contact]")
-    .replace(/(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9}\b/g, "[redacted contact]");
+    .replace(/(?:\+?91[\s().-]*)?[6-9](?:[\s().-]*\d){9}\b/g, "[redacted contact]");
+}
+
+function redactBudgetAmounts(value) {
+  return String(value || "")
+    .replace(/₹\s*[\d,]+(?:\.\d+)?/gi, "[redacted budget]")
+    .replace(/\b(?:rs\.?|inr)\s*[\d,]+(?:\.\d+)?\b/gi, "[redacted budget]")
+    .replace(/\b[\d,]+(?:\.\d+)?\s*(?:rupees?|inr)\b/gi, "[redacted budget]")
+    .replace(/\b(?:budget|expected\s+spend)\s*(?:is|of|:|-)??\s*[\d,]+(?:\.\d+)?\b/gi, "[redacted budget]");
 }
 
 function containsRestrictedContact(value) {
   const text = String(value || "");
   if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) return true;
-  return /(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9}\b/.test(text);
+  return /(?:\+?91[\s().-]*)?[6-9](?:[\s().-]*\d){9}\b/.test(text);
 }
 
 function containsRestrictedBudget(value) {
@@ -248,7 +256,8 @@ function sourceHash(lead = {}, raw = lead.customerRequirementRaw || "") {
 }
 
 function aiInput(lead, raw) {
-  const payload = sourcePayload(lead, redactContactDetails(raw));
+  const safeRaw = redactBudgetAmounts(redactContactDetails(raw));
+  const payload = sourcePayload(lead, safeRaw);
   return JSON.stringify({
     customerRequirement: payload.raw,
     category: payload.category,
