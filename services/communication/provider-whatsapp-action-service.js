@@ -195,6 +195,11 @@ function successMessage(result = {}) {
   if (lead.customerEmail) lines.push(`Email: ${lead.customerEmail}`);
   const location = joinLocation(lead);
   if (location) lines.push(`Location: ${location}`);
+  if (lead.providerRequirementDetails) {
+    lines.push("");
+    lines.push("Customer requirement");
+    lines.push(String(lead.providerRequirementDetails).trim());
+  }
 
   const qualification = Array.isArray(context.qualification) ? context.qualification : [];
   if (qualification.length) {
