@@ -133,10 +133,31 @@ test("nearby provider alert resolves the approved short requirement first", () =
   assert.match(source, /lead\.providerRequirementTitle \|\| lead\.requirementTitle/);
 });
 
-test("WhatsApp unlock response includes the approved detailed requirement", () => {
+test("WhatsApp View Enquiry keeps the service title and uses the approved provider description", () => {
   const source = fs.readFileSync(path.join(__dirname, "../services/communication/provider-whatsapp-action-service.js"), "utf8");
-  assert.match(source, /lead\.providerRequirementDetails/);
-  assert.match(source, /Customer requirement/);
+  assert.match(source, /lead\.serviceType \|\| lead\.category/);
+  assert.match(source, /providerRequirementDetails/);
+  assert.match(source, /Description:/);
+  assert.doesNotMatch(source, /customerRequirementRaw/);
+});
+
+test("requirement AI timeline snapshots preserve each generated suggestion", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../services/requirement-ai/requirement-ai-service.js"), "utf8");
+  assert.match(source, /generationNumber/);
+  assert.match(source, /customerRequirementRaw: raw/);
+  assert.match(source, /providerTitle: result\.providerTitle/);
+  assert.match(source, /providerDetails: result\.providerDetails/);
+  assert.match(source, /model: generated\.model/);
+});
+
+test("requirement form separates read-only AI suggestions from editable final provider wording", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../views/enquiry/show.ejs"), "utf8");
+  assert.match(source, /AI corrected title/);
+  assert.match(source, /AI corrected description/);
+  assert.match(source, /requirementForm\.aiTitle/);
+  assert.match(source, /requirementForm\.aiDetails/);
+  assert.match(source, /Final WhatsApp requirement/);
+  assert.match(source, /Final provider description/);
 });
 
 
