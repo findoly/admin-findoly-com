@@ -46,6 +46,10 @@ test("custom requirement report range is limited to six months", () => {
     () => resolvePeriod({ preset: "custom", from: "2026-01-01", to: "2026-08-01" }),
     /cannot exceed 6 months/i,
   );
+  assert.throws(
+    () => resolvePeriod({ preset: "custom", from: "2026-02-31", to: "2026-03-01" }),
+    /valid From and To dates/i,
+  );
 });
 
 test("trend fills days with zero requirements", () => {
