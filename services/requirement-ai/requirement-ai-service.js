@@ -397,6 +397,10 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
       requirementAiClarificationMessage: "",
       requirementAiProviderTitle: "",
       requirementAiProviderDetails: "",
+      providerRequirementTitle: "",
+      providerRequirementDetails: "",
+      requirementAiApprovedAt: null,
+      requirementAiApprovedBy: "",
       requirementAiSourceHash: "",
       requirementAiGeneratedAt: null,
     });
