@@ -146,7 +146,7 @@ const variablesFor = function (context) {
   const values = {
     customer_name: lead.name || "Customer",
     lead_id: lead.enquiryId || lead.id || "",
-    requirement_title: lead.requirementTitle || lead.serviceType || "",
+    requirement_title: lead.providerRequirementTitle || lead.requirementTitle || lead.serviceType || "",
     service_type: lead.serviceType || "",
     service_types: Array.isArray(lead.serviceTypes) ? lead.serviceTypes.map((item) => item?.name || item).filter(Boolean).join(", ") : (lead.serviceType || ""),
     priority: lead.priority || "normal",
