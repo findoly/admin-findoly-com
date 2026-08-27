@@ -33,6 +33,19 @@ function enquiryQuery(enquiryId) {
   return { $or: [{ enquiryId: value }, { id: value }] };
 }
 
+function editableRequirementQuery(enquiryId) {
+  return {
+    $and: [
+      enquiryQuery(enquiryId),
+      { status: { $ne: "approved" } },
+      { marketplaceAvailable: { $ne: true } },
+      { marketplaceStatus: { $ne: "published" } },
+      { $or: [{ unlockedCount: 0 }, { unlockedCount: null }, { unlockedCount: { $exists: false } }] },
+      { $or: [{ reservedUnlockCount: 0 }, { reservedUnlockCount: null }, { reservedUnlockCount: { $exists: false } }] },
+    ],
+  };
+}
+
 function compactText(value) {
   return String(value || "")
     .replace(/[\r\n\t]+/g, " ")
@@ -405,7 +418,7 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
       requirementAiGeneratedAt: null,
     });
   }
-  const rawSave = await Enquiry.updateOne(enquiryQuery(enquiryId), { $set: rawUpdate });
+  const rawSave = await Enquiry.updateOne(editableRequirementQuery(enquiryId), { $set: rawUpdate });
   if (rawSave.matchedCount !== 1) {
     throw requirementError("Lead requirement changed while it was being saved", 409, "LEAD_REQUIREMENT_CONCURRENT_UPDATE");
   }
@@ -416,7 +429,12 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
   const now = new Date();
   const hash = sourceHash(lead, raw);
 
-  const update = await Enquiry.updateOne(enquiryQuery(enquiryId), {
+  const update = await Enquiry.updateOne({
+    $and: [
+      editableRequirementQuery(enquiryId),
+      { customerRequirementRaw: raw },
+    ],
+  }, {
     $set: {
       customerRequirementRaw: raw,
       requirementAiStatus: result.status,
@@ -505,9 +523,10 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
   const save = await Enquiry.updateOne(
     {
       $and: [
-        enquiryQuery(enquiryId),
-        { status: { $ne: "approved" } },
-        { marketplaceAvailable: { $ne: true } },
+        editableRequirementQuery(enquiryId),
+        { customerRequirementRaw: lead.customerRequirementRaw || "" },
+        { requirementAiSourceHash: lead.requirementAiSourceHash },
+        { requirementAiStatus: "ready" },
       ],
     },
     {
