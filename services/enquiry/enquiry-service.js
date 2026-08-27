@@ -838,6 +838,16 @@ async function updateStatus(enquiryId, input = {}, actor = "admin") {
 
   const metadata = { ...(existing.metadata || {}) };
   const transition = resolveLeadStatusTransition(existing.status, input, metadata);
+  if (transition.toStatus === "approved") {
+    const requirementApproved = Boolean(
+      existing.requirementAiApprovedAt
+      && String(existing.providerRequirementTitle || "").trim()
+      && String(existing.providerRequirementDetails || "").trim()
+    );
+    if (!requirementApproved) {
+      throw validationError("Approve the customer requirement before approving this lead");
+    }
+  }
   const now = new Date();
   if (transition.action === "reject") {
     metadata.rejectedFromStatus = transition.fromStatus;
