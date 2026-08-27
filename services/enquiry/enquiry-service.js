@@ -777,7 +777,12 @@ async function update(enquiryId, input = {}, actor = "admin") {
   const requirementContextChanged = String(existing.categorySlug || "") !== String(data.categorySlug || "")
     || String(existing.category || "") !== String(data.category || "")
     || JSON.stringify(existingServiceTypes) !== JSON.stringify(nextServiceTypes);
-  if (requirementContextChanged && !existing.requirementAiApprovedAt) {
+  const requirementStillEditable = canonicalLeadStatus(existing.status) !== "approved"
+    && existing.marketplaceAvailable !== true
+    && String(existing.marketplaceStatus || "").toLowerCase() !== "published"
+    && Number(existing.unlockedCount || 0) === 0
+    && Number(existing.reservedUnlockCount || 0) === 0;
+  if (requirementContextChanged && requirementStillEditable) {
     Object.assign(data, {
       requirementAiStatus: "",
       requirementAiClarificationReason: "",
