@@ -257,6 +257,10 @@ test("nearby lead template contains only safe marketplace details", () => {
   assert.match(templates, /Location: \{\{3\}\}/);
   assert.match(templates, /Requirement: \{\{4\}\}/);
   assert.match(notifications, /const whatsappOnly = rule\.event === "nearby_lead_available"/);
+  assert.match(
+    notifications,
+    /values\.requirement_title = lead\.providerRequirementTitle \|\| lead\.requirementTitle \|\| lead\.serviceType \|\| "New customer requirement"/,
+  );
   assert.match(rules, /const whatsappOnly = event === "nearby_lead_available"/);
   assert.doesNotMatch(templates, /Customer phone|Customer email|Exact address/i);
 });
