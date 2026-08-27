@@ -768,6 +768,26 @@ async function update(enquiryId, input = {}, actor = "admin") {
   }
 
   const data = await normalizeInput(input, presentEnquiry(existing));
+  const existingServiceTypes = (Array.isArray(existing.serviceTypes) ? existing.serviceTypes : [])
+    .map((item) => String(item?.serviceTypeId || item?.id || item?.slug || item?.name || item || "").trim())
+    .filter(Boolean);
+  const nextServiceTypes = (Array.isArray(data.serviceTypes) ? data.serviceTypes : [])
+    .map((item) => String(item?.serviceTypeId || item?.id || item?.slug || item?.name || item || "").trim())
+    .filter(Boolean);
+  const requirementContextChanged = String(existing.categorySlug || "") !== String(data.categorySlug || "")
+    || String(existing.category || "") !== String(data.category || "")
+    || JSON.stringify(existingServiceTypes) !== JSON.stringify(nextServiceTypes);
+  if (requirementContextChanged && !existing.requirementAiApprovedAt) {
+    Object.assign(data, {
+      requirementAiStatus: "",
+      requirementAiClarificationReason: "",
+      requirementAiClarificationMessage: "",
+      requirementAiProviderTitle: "",
+      requirementAiProviderDetails: "",
+      requirementAiSourceHash: "",
+      requirementAiGeneratedAt: null,
+    });
+  }
   data.status = existing.status;
   data.statusUpdatedAt = existing.statusUpdatedAt || null;
   data.statusUpdatedBy = existing.statusUpdatedBy || "";
