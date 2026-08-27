@@ -203,11 +203,12 @@
                           <h3>Customer requirement</h3>
                           <p>Capture the customer's need, then use AI to prepare clear provider-facing wording.</p>
                         </div>
-                        <span class="crm-status ms-auto" :class="requirementApproved ? 'status-approved' : (requirementForm.status === 'clarify' ? 'status-pending' : 'status-pending')" x-text="requirementApproved ? 'Approved' : (requirementForm.status === 'ready' ? 'Ready' : (requirementForm.status === 'clarify' ? 'Clarify' : 'Pending'))"></span>
+                        <span class="crm-status ms-auto" :class="requirementApproved ? 'status-approved' : 'status-pending'" x-text="requirementApproved ? 'Approved' : (providerControlled ? 'Not captured' : (requirementForm.status === 'ready' ? 'Ready' : (requirementForm.status === 'clarify' ? 'Clarify' : 'Pending')))"></span>
                       </div>
 
                       <div x-show="providerControlled" x-cloak class="crm-action-lock">
-                        <strong>Customer requirement approved</strong>
+                        <strong x-text="requirementApproved ? 'Customer requirement approved' : 'AI requirement was not captured for this existing approved lead'"></strong>
+                        <span x-show="!requirementApproved">The lead remains approved and existing provider access is unchanged.</span>
                         <span x-show="lead.providerRequirementTitle" x-text="lead.providerRequirementTitle"></span>
                         <span x-show="lead.providerRequirementDetails" x-text="lead.providerRequirementDetails"></span>
                       </div>
