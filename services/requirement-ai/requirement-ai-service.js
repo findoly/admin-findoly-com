@@ -78,7 +78,7 @@ function redactBudgetAmounts(value) {
     .replace(/₹\s*[\d,]+(?:\.\d+)?/gi, "[redacted budget]")
     .replace(/\b(?:rs\.?|inr)\s*[\d,]+(?:\.\d+)?\b/gi, "[redacted budget]")
     .replace(/\b[\d,]+(?:\.\d+)?\s*(?:rupees?|inr)\b/gi, "[redacted budget]")
-    .replace(/\b(?:budget|expected\s+spend)\s*(?:is|of|:|-)??\s*[\d,]+(?:\.\d+)?\b/gi, "[redacted budget]");
+    .replace(/\b(?:budget|expected\s+spend)\s*(?:is|of|:|-)?\s*[\d,]+(?:\.\d+)?\b/gi, "[redacted budget]");
 }
 
 function containsRestrictedContact(value) {
