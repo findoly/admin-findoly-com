@@ -245,6 +245,14 @@ function isForwardTransition(lead = {}, input = {}) {
   return currentIndex >= 0 && targetIndex > currentIndex;
 }
 
+function isProviderRequirementApproved(lead = {}) {
+  return Boolean(
+    lead.requirementAiApprovedAt
+    && String(lead.providerRequirementTitle || "").trim()
+    && String(lead.providerRequirementDetails || "").trim()
+  );
+}
+
 async function assertJourneyTransitionAllowed(enquiryId, input = {}) {
   const lead = await getLead(enquiryId);
   if (!isForwardTransition(lead, input)) return;
@@ -260,6 +268,13 @@ async function assertJourneyTransitionAllowed(enquiryId, input = {}) {
       "Complete lead qualification before moving the journey forward",
       400,
       "LEAD_QUALIFICATION_REQUIRED",
+    );
+  }
+  if (canonicalLeadStatus(lead.status) === "verification" && !isProviderRequirementApproved(lead)) {
+    throw qualificationError(
+      "Approve the AI-assisted customer requirement before approving this lead",
+      400,
+      "LEAD_CUSTOMER_REQUIREMENT_REQUIRED",
     );
   }
 }
@@ -327,5 +342,6 @@ module.exports = {
   getCategoryMaxLeadPricePaise,
   isQualificationComplete,
   isValidationQuestionnaireComplete,
+  isProviderRequirementApproved,
   isProviderControlled,
 };
