@@ -485,6 +485,7 @@ test("provider-facing WhatsApp action responses use enquiry wording and never me
         category: "Painting",
         customerName: "Customer",
         customerMobile: "9999999999",
+        providerRequirementDetails: "Do not include this customer requirement in WhatsApp.",
         chargedCredits: 10,
       },
       provider: { availableCredits: 90 },
@@ -498,5 +499,6 @@ test("provider-facing WhatsApp action responses use enquiry wording and never me
   ];
   messages.forEach((message) => assert.doesNotMatch(message, /unlock/i));
   assert.match(messages[0], /enquiry details are now available/i);
+  assert.doesNotMatch(messages[0], /Do not include this customer requirement in WhatsApp\./);
   assert.match(messages.at(-1), /could not open this enquiry from WhatsApp/i);
 });

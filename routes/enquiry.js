@@ -12,6 +12,8 @@ router.post("/:enquiryId/validation/preview", requirePermission("requirements.ma
 router.get("/:enquiryId/qualification", requirePermission("requirements.view"), c.qualification);
 router.post("/:enquiryId/qualification/preview", requirePermission("requirements.manage"), c.qualificationPreview);
 router.post("/:enquiryId/qualification", requirePermission("requirements.manage"), c.saveQualification);
+router.post("/:enquiryId/requirement/generate", requirePermission("requirements.manage"), c.generateRequirement);
+router.post("/:enquiryId/requirement/approve", requirePermission("requirements.manage"), c.approveRequirement);
 router.post("/:enquiryId/deactivate", requirePermission("requirements.manage"), c.deactivate);
 router.post("/:enquiryId/reactivate", requirePermission("requirements.manage"), c.reactivate);
 router.post("/:enquiryId/status", requirePermission("requirements.manage"), c.status);

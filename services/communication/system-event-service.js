@@ -196,7 +196,7 @@ function variablesFor(context) {
   const agent = context.agent || {};
   const joinRequest = context.providerJoinRequest || {};
   const title = clean(
-    lead.requirementTitle || lead.leadTitle || lead.serviceType || unlock.leadTitle || unlock.serviceType || "Service requirement",
+    lead.providerRequirementTitle || lead.requirementTitle || lead.leadTitle || lead.serviceType || unlock.leadTitle || unlock.serviceType || "Service requirement",
   );
   const category = clean(
     lead.category || lead.categorySlug || unlock.category || unlock.categorySlug || joinRequest.categoryNameSnapshot || joinRequest.categorySlug || "Not specified",
