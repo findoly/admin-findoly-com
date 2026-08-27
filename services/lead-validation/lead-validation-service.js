@@ -197,7 +197,17 @@ async function saveValidation(enquiryId, input = {}, actor = "admin") {
   }
 
   const update = await Enquiry.updateOne(enquiryQuery(enquiryId), {
-    $set: { leadValidationDecision: snapshot, updatedAt: now },
+    $set: {
+      leadValidationDecision: snapshot,
+      requirementAiStatus: "",
+      requirementAiClarificationReason: "",
+      requirementAiClarificationMessage: "",
+      requirementAiProviderTitle: "",
+      requirementAiProviderDetails: "",
+      requirementAiSourceHash: "",
+      requirementAiGeneratedAt: null,
+      updatedAt: now,
+    },
     $push: push,
   });
   if (update.matchedCount !== 1) {
