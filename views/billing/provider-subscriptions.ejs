@@ -6,33 +6,33 @@
     <div class="page-content">
       <%- include('../partials/sidebar') %>
       <div class="content-wrapper"><div class="content-inner">
-        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Billing</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Read-only subscription history synced from the Provider Portal shared database.</p></div><a href="/billing" class="btn btn-light crm-primary-action">Invoices</a></div></div>
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Billing</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Read-only Provider subscriptions and Lead Credit Pack purchase history from the shared Provider Portal billing data.</p></div><a href="/billing" class="btn btn-light crm-primary-action">Invoices</a></div></div>
         <div class="content" x-data="subscriptionList()" x-init="load()">
           <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
           <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
           <section class="card crm-filter-card mb-3"><form class="crm-filter-bar" @submit.prevent="search()">
-            <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="filters.q" maxlength="100" placeholder="Provider, plan or subscription ID" aria-label="Search provider subscriptions"></label>
-            <label class="crm-filter-field"><span>Status</span><select x-model="filters.status"><option value="">All statuses</option><option value="active">Active</option><option value="scheduled">Scheduled</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option></select></label>
+            <label class="crm-search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" x-model="filters.q" maxlength="100" placeholder="Provider, package, plan or reference ID" aria-label="Search provider purchases"></label>
+            <label class="crm-filter-field"><span>Status</span><select x-model="filters.status"><option value="">All statuses</option><option value="completed">Completed</option><option value="active">Active</option><option value="scheduled">Scheduled</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option></select></label>
             <label class="crm-filter-field"><span>Date</span><select x-model="filters.dateField"><option value="purchasedAt">Purchase date</option><option value="startsAt">Start date</option><option value="expiresAt">Expiry date</option><option value="updatedAt">Updated date</option></select></label>
             <label class="crm-filter-field crm-filter-date"><span>From</span><input class="form-control" type="date" x-model="filters.startDate"></label>
             <label class="crm-filter-field crm-filter-date"><span>To</span><input class="form-control" type="date" x-model="filters.endDate"></label>
             <label class="crm-filter-field"><span>Sort</span><select x-model="filters.sortOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
             <div class="crm-filter-actions"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-light" type="button" @click="reset()">Clear</button></div>
           </form></section>
-          <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Provider subscriptions</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> records on this page</p></div></div>
-            <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Provider</th><th>Plan</th><th>Status</th><th>Credits</th><th>Amount</th><th>Purchased</th><th>Validity</th><th>Reference</th></tr></thead><tbody>
+          <section class="card crm-data-card"><div class="card-header crm-card-heading"><div><h5 class="mb-1">Provider purchases</h5><p class="text-muted mb-0"><span x-text="rows.length"></span> records on this page</p></div></div>
+            <div class="table-responsive"><table class="table crm-table mb-0"><thead><tr><th>Provider</th><th>Package / plan</th><th>Status</th><th>Credits</th><th>Amount</th><th>Purchased</th><th>Validity</th><th>Reference</th></tr></thead><tbody>
               <template x-if="loading"><tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
-              <template x-for="row in rows" :key="row.providerSubscriptionId"><tr>
+              <template x-for="row in rows" :key="row.recordId"><tr>
                 <td><a class="fw-semibold" :href="'/providers/'+row.providerId" x-text="row.provider?.businessName || row.provider?.name || row.providerId"></a><div class="crm-record-id" x-text="row.providerId"></div></td>
-                <td><div class="fw-semibold" x-text="row.planName"></div><div class="text-muted fs-sm" x-text="humanize(row.billingCycle)"></div></td>
+                <td><div class="fw-semibold" x-text="row.planName || row.planCode || '—'"></div><div class="text-muted fs-sm" x-text="row.recordType === 'credit_package' ? 'Lead Credit Pack' : (humanize(row.billingCycle) + ' · Legacy subscription')"></div></td>
                 <td><span class="crm-status" :class="statusClass(row.status)" x-text="humanize(row.status)"></span></td>
-                <td><div class="fw-semibold" x-text="Number(row.totalCredits||0).toLocaleString('en-IN')"></div><div class="text-muted fs-sm" x-text="Number(row.baseCredits||0)+' base + '+Number(row.bonusCredits||0)+' bonus'"></div></td>
+                <td><div class="fw-semibold" x-text="Number(row.totalCredits||0).toLocaleString('en-IN')"></div><div class="text-muted fs-sm" x-text="row.recordType === 'credit_package' ? (row.remainingCredits === null ? 'Non-expiring credits' : Number(row.remainingCredits||0).toLocaleString('en-IN')+' remaining') : Number(row.baseCredits||0)+' base + '+Number(row.bonusCredits||0)+' bonus'"></div></td>
                 <td><div class="fw-semibold" x-text="money(row.totalAmountPaise)"></div><div class="text-muted fs-sm" x-text="'GST '+money(row.gstAmountPaise)"></div></td>
                 <td x-text="formatDate(row.purchasedAt || row.createdAt)"></td>
-                <td><div x-text="formatDateOnly(row.startsAt)"></div><div class="text-muted fs-sm" x-text="'to '+formatDateOnly(row.expiresAt)"></div></td>
-                <td><div class="crm-record-id" x-text="row.providerSubscriptionId"></div><div class="text-muted fs-sm" x-text="row.paymentOrderId"></div></td>
+                <td><template x-if="row.recordType === 'credit_package'"><div><div class="fw-semibold">Never expires</div><div class="text-muted fs-sm">Lead Credit Pack</div></div></template><template x-if="row.recordType !== 'credit_package'"><div><div x-text="formatDateOnly(row.startsAt)"></div><div class="text-muted fs-sm" x-text="'to '+formatDateOnly(row.expiresAt)"></div></div></template></td>
+                <td><div class="crm-record-id" x-text="row.recordId"></div><div class="text-muted fs-sm" x-show="row.providerSubscriptionId && row.providerSubscriptionId !== row.recordId" x-text="row.paymentOrderId"></div></td>
               </tr></template>
-              <tr x-show="!loading && !rows.length"><td colspan="8" class="text-center text-muted py-4">No provider subscriptions found</td></tr>
+              <tr x-show="!loading && !rows.length"><td colspan="8" class="text-center text-muted py-4">No provider purchases found</td></tr>
             </tbody></table></div>
             <div class="crm-table-footer"><div class="text-muted">Page <strong x-text="pagination.page"></strong></div><div class="crm-pagination"><button :disabled="pagination.page<=1 || loading" @click="previous()">Previous</button><span x-text="pagination.page"></span><button :disabled="!pagination.hasNext || loading" @click="next()">Next</button></div></div>
           </section>
