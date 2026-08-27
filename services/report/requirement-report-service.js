@@ -26,8 +26,10 @@ function addDays(dateOnly, days) {
 }
 
 function validDateOnly(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))
-    && !Number.isNaN(dateBoundary(String(value), false).getTime());
+  const normalized = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return false;
+  const parsed = dateBoundary(normalized, false);
+  return !Number.isNaN(parsed.getTime()) && dateOnlyInIndia(parsed) === normalized;
 }
 
 function rangeDays(startDate, endDate) {
