@@ -113,3 +113,17 @@ test("WhatsApp unlock response includes the approved detailed requirement", () =
   assert.match(source, /lead\.providerRequirementDetails/);
   assert.match(source, /Customer requirement/);
 });
+
+
+test("lead approval is hard-gated by the approved customer requirement", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../services/enquiry/enquiry-service.js"), "utf8");
+  assert.match(source, /Approve the customer requirement before approving this lead/);
+  assert.match(source, /providerRequirementTitle/);
+  assert.match(source, /providerRequirementDetails/);
+});
+
+test("CRM exposes dedicated generate and approve requirement routes", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../routes/enquiry.js"), "utf8");
+  assert.match(source, /requirement\/generate/);
+  assert.match(source, /requirement\/approve/);
+});
