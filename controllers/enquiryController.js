@@ -3,6 +3,7 @@ const nearbyProviderService = require("../services/enquiry/nearby-provider-servi
 const customerVerificationService = require("../services/enquiry/customer-verification-service");
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
+const requirementAiService = require("../services/requirement-ai/requirement-ai-service");
 const enquiryLocationService = require("../services/location/enquiry-location-service");
 const { resolveLeadStatusTransition } = require("../utils/lead-journey");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
@@ -223,6 +224,44 @@ async function referralValidation(req, res, next) {
   } catch (error) { next(error); }
 }
 
+async function generateRequirement(req, res, next) {
+  try {
+    const result = await requirementAiService.generateRequirement(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    res.json({
+      success: true,
+      data: {
+        lead: withEffectiveLocation(result.lead),
+        requirement: result.requirement,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function approveRequirement(req, res, next) {
+  try {
+    const result = await requirementAiService.approveRequirement(
+      req.params.enquiryId,
+      req.body,
+      req.admin?.email || "admin",
+    );
+    res.json({
+      success: true,
+      data: {
+        lead: withEffectiveLocation(result.lead),
+        requirement: result.requirement,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function saleConversion(req, res, next) {
   try {
     res.json({ success: true, data: withEffectiveLocation(await service.updateAgentSaleConversion(req.params.enquiryId, req.body, req.admin?.email || "admin")) });
@@ -327,6 +366,8 @@ module.exports = {
   qualificationPreview,
   saveQualification,
   referralValidation,
+  generateRequirement,
+  approveRequirement,
   saleConversion,
   note,
   deactivate,
