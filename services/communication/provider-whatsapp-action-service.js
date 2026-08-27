@@ -113,10 +113,16 @@ function redactedEvent(event, postbackText = "") {
 }
 
 function joinLocation(lead = {}) {
-  return [lead.customerAddress, lead.city, lead.state, lead.pincode]
-    .map((value) => String(value || "").trim())
+  const address = textFrom(lead.customerAddress);
+  const parts = address ? [address] : [];
+  const normalizedAddress = address.toLowerCase();
+  [lead.city, lead.state, lead.pincode]
+    .map(textFrom)
     .filter(Boolean)
-    .join(", ");
+    .forEach((part) => {
+      if (!normalizedAddress.includes(part.toLowerCase())) parts.push(part);
+    });
+  return parts.join(", ");
 }
 
 function qualificationAnswerLabel(snapshot = {}, questionId) {
@@ -151,6 +157,7 @@ function messageContextFromLead(lead = {}) {
     remainingUnlocks: Number(lead.remainingUnlocks || 0),
     providerConfirmedCount: Number(lead.providerConfirmedCount || 0),
     providerSaleConversionStatus: textFrom(lead.providerSaleConversionStatus),
+    providerRequirementDetails: textFrom(lead.providerRequirementDetails),
   };
 }
 
@@ -172,6 +179,7 @@ async function enrichResultForMessage(original = {}, result = {}) {
         remainingUnlocks: 1,
         providerConfirmedCount: 1,
         providerSaleConversionStatus: 1,
+        providerRequirementDetails: 1,
       })
       : query;
     const lead = typeof selected?.lean === "function" ? await selected.lean() : await selected;
@@ -186,35 +194,30 @@ function successMessage(result = {}) {
   const provider = result.provider || {};
   const context = result.messageContext || {};
   const lines = [
-    result.status === "already_unlocked" ? "This enquiry is already available in your account." : "The enquiry details are now available.",
+    result.status === "already_unlocked"
+      ? "This enquiry is already available in your account."
+      : "The enquiry details are now available.",
     "",
     `Service: ${lead.serviceType || lead.category || "Service"}`,
-    `Customer: ${lead.customerName || "Not provided"}`,
-    `Mobile: ${lead.customerMobile || "Not provided"}`,
   ];
+
+  const description = textFrom(context.providerRequirementDetails || lead.providerRequirementDetails);
+  if (description) lines.push(`Description: ${description}`);
+
+  lines.push("");
+  lines.push(`Customer: ${lead.customerName || "Not provided"}`);
+  lines.push(`Mobile: ${lead.customerMobile || "Not provided"}`);
   if (lead.customerEmail) lines.push(`Email: ${lead.customerEmail}`);
   const location = joinLocation(lead);
-  if (location) lines.push(`Location: ${location}`);
-  const qualification = Array.isArray(context.qualification) ? context.qualification : [];
-  if (qualification.length) {
-    lines.push("");
-    lines.push("Lead details");
-    qualification.forEach((item) => lines.push(`${item.label}: ${item.value}`));
-  }
-  const leadQuality = [
-    context.leadIntent ? `${humanize(context.leadIntent)} intent` : "",
-    context.priority ? `${humanize(context.priority)} priority` : "",
-  ].filter(Boolean);
-  if (leadQuality.length) lines.push(`Lead quality: ${leadQuality.join(" · ")}`);
+  if (location) lines.push(`Area: ${location}`);
 
   lines.push("");
   lines.push(`Credits used: ${Number(lead.chargedCredits || 0)}`);
-  lines.push(`Remaining balance: ${Number(provider.availableCredits ?? provider.walletCredits ?? 0)} credits`);
+  lines.push(`Balance: ${Number(provider.availableCredits ?? provider.walletCredits ?? 0)} credits`);
   lines.push("");
-  lines.push("Contact the customer promptly while the enquiry is active.");
+  lines.push("Contact the customer promptly.");
   return lines.join("\n");
 }
-
 function failureMessage(result = {}) {
   const status = String(result.status || "failed");
   if (status === "insufficient_credits") {
