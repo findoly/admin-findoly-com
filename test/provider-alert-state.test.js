@@ -22,24 +22,23 @@ function loadService(updateOne) {
   }
 }
 
-test("provider alert summary reports pending, sent, automatic, and unlocked states", () => {
+test("provider alert summary reports automatic primary delivery, sent history, and unlocked states", () => {
   const service = loadService(async () => ({ modifiedCount: 0 }));
   const base = {
     marketplaceAvailable: true,
     marketplaceStatus: "published",
     remainingUnlocks: 3,
     unlockedCount: 0,
-    automaticWhatsappLeadAlertsEnabled: false,
   };
 
   assert.deepEqual(
     service.providerAlertSummary(base),
     {
-      code: "alert_pending",
-      label: "Alert pending",
+      code: "automatic_enabled",
+      label: "Automatic alerts active",
       count: 0,
       canSend: true,
-      automatic: false,
+      automatic: true,
     },
   );
 
@@ -51,21 +50,20 @@ test("provider alert summary reports pending, sent, automatic, and unlocked stat
       mode: "manual",
     }],
   });
-  assert.equal(sent.code, "alert_sent");
-  assert.equal(sent.label, "Alert sent · 1 provider");
+  assert.equal(sent.code, "automatic_enabled");
+  assert.equal(sent.label, "Automatic alerts active · 1 provider alerted");
   assert.equal(sent.count, 1);
   assert.equal(sent.canSend, true);
 
   const automatic = service.providerAlertSummary({
     ...base,
-    automaticWhatsappLeadAlertsEnabled: true,
     providerWhatsappAlerts: [
       { providerId: "provider-1", alertedAt: new Date(), mode: "automatic" },
       { providerId: "provider-2", alertedAt: new Date(), mode: "automatic" },
     ],
   });
   assert.equal(automatic.code, "automatic_enabled");
-  assert.equal(automatic.label, "Automatic alerts enabled · 2 providers alerted");
+  assert.equal(automatic.label, "Automatic alerts active · 2 providers alerted");
   assert.equal(automatic.count, 2);
 
   const unlocked = service.providerAlertSummary({
