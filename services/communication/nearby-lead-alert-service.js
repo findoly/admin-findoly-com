@@ -100,10 +100,31 @@ function whatsappContact(provider = {}) {
     || "";
 }
 
-async function dispatchNearbyLeadAlerts(lead, actor = "system") {
+function normalizeTargetProviderIds(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw Object.assign(new Error("Provider selection must be a list"), { status: 400 });
+  }
+  if (value.length > 50) {
+    throw Object.assign(new Error("Select at most 50 providers for one WhatsApp alert action"), { status: 400 });
+  }
+  const ids = [];
+  for (const entry of value) {
+    const providerId = String(entry || "").trim();
+    if (!providerId || providerId.length > 120 || /[\0\r\n]/.test(providerId)) {
+      throw Object.assign(new Error("Provider selection contains an invalid provider ID"), { status: 400 });
+    }
+    if (!ids.includes(providerId)) ids.push(providerId);
+  }
+  return ids;
+}
+
+async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   const startedAt = process.hrtime.bigint();
   const leadId = String(lead?.enquiryId || "");
   const radiusKm = alertDistanceKmForLead(lead);
+  const targetProviderIds = normalizeTargetProviderIds(options.providerIds);
+  const targeted = targetProviderIds.length > 0;
   const resolvedLocation = resolveRequirementLocation(lead || {});
   const effectiveLead = resolvedLocation
     ? {
@@ -121,6 +142,8 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     serviceTypeIds: leadServiceTypeIds(lead || {}),
     remainingUnlocks: Number(lead?.remainingUnlocks || 0),
     radiusKm,
+    targeted,
+    requestedProviderCount: targetProviderIds.length,
     coordinatesAvailable: Boolean(resolvedLocation),
     coordinateSource: resolvedLocation?.source || "",
   });
@@ -157,6 +180,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
       { mobile: { $exists: true, $gt: "" } },
     ],
   };
+  if (targeted) query.providerId = { $in: targetProviderIds };
   const cursor = Provider.find(query)
     .select({
       providerId: 1, name: 1, businessName: 1, mobile: 1, normalizedMobile: 1,
@@ -175,6 +199,9 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   let invalidDistance = 0;
   let missingContactOrCoordinates = 0;
   let subcategoryMismatch = 0;
+  const seenProviderIds = new Set();
+  const alertedProviderIds = [];
+  const skippedProviderIds = new Set();
   const pending = [];
   const flush = async () => {
     const rows = pending.splice(0, pending.length);
@@ -191,16 +218,29 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
         idempotencySuffix: effectiveLead.marketplacePublishedAt || effectiveLead.updatedAt || effectiveLead.createdAt,
         skipSystemDispatch: true,
       }, actor);
-      return output.length > 0;
+      return {
+        providerId: String(provider.providerId || ""),
+        sent: output.length > 0,
+      };
     }));
-    alerted += results.filter(Boolean).length;
-    skipped += results.filter((value) => !value).length;
+    for (const result of results) {
+      if (result.sent) {
+        alerted += 1;
+        if (result.providerId) alertedProviderIds.push(result.providerId);
+      } else {
+        skipped += 1;
+        if (result.providerId) skippedProviderIds.add(result.providerId);
+      }
+    }
   };
 
   for await (const provider of cursor) {
     databaseCandidates += 1;
+    const providerId = String(provider.providerId || "");
+    if (providerId) seenProviderIds.add(providerId);
     if (!providerMatchesLeadPreference(provider, effectiveLead)) {
       subcategoryMismatch += 1;
+      if (providerId) skippedProviderIds.add(providerId);
       console.debug({
         event: "nearby_alert_provider_skipped",
         enquiryId: effectiveLead.enquiryId,
@@ -211,6 +251,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     }
     if (!whatsappContact(provider) || !hasVerifiedProviderCoordinates(provider)) {
       missingContactOrCoordinates += 1;
+      if (providerId) skippedProviderIds.add(providerId);
       console.debug({
         event: "nearby_alert_provider_skipped",
         enquiryId: effectiveLead.enquiryId,
@@ -227,10 +268,12 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     );
     if (distanceKm === null) {
       invalidDistance += 1;
+      if (providerId) skippedProviderIds.add(providerId);
       continue;
     }
     if (distanceKm > radiusKm) {
       outsideRadius += 1;
+      if (providerId) skippedProviderIds.add(providerId);
       continue;
     }
     eligible += 1;
@@ -238,6 +281,13 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     if (pending.length >= BATCH_SIZE) await flush();
   }
   if (pending.length) await flush();
+  if (targeted) {
+    for (const providerId of targetProviderIds) {
+      if (!seenProviderIds.has(providerId) && !alertedProviderIds.includes(providerId)) {
+        skippedProviderIds.add(providerId);
+      }
+    }
+  }
   const durationMs = Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2));
   const result = {
     eligible,
@@ -248,6 +298,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
     invalidDistance,
     missingContactOrCoordinates,
     subcategoryMismatch,
+    ...(targeted ? {
+      requested: targetProviderIds.length,
+      alertedProviderIds,
+      skippedProviderIds: [...skippedProviderIds],
+    } : {}),
   };
   console.info({
     event: "nearby_alert_provider_scan_completed",
@@ -265,6 +320,14 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system") {
   return result;
 }
 
+async function dispatchSelectedNearbyLeadAlerts(lead, providerIds, actor = "system") {
+  const normalizedProviderIds = normalizeTargetProviderIds(providerIds);
+  if (!normalizedProviderIds.length) {
+    throw Object.assign(new Error("Select at least one provider for WhatsApp alert"), { status: 400 });
+  }
+  return dispatchNearbyLeadAlerts(lead, actor, { providerIds: normalizedProviderIds });
+}
+
 module.exports = {
   MAX_ALERT_DISTANCE_KM,
   distanceKmExact,
@@ -274,5 +337,7 @@ module.exports = {
   providerMatchesLeadPreference,
   providerLeadUrl,
   whatsappContact,
+  normalizeTargetProviderIds,
   dispatchNearbyLeadAlerts,
+  dispatchSelectedNearbyLeadAlerts,
 };
