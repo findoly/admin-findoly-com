@@ -28,6 +28,24 @@ function loadNearbyProviderService() {
             * Math.sin(longitudeDelta / 2) ** 2;
           return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         },
+        whatsappContact(provider = {}) {
+          return provider.normalizedWhatsappNumber
+            || provider.whatsappNumber
+            || provider.normalizedMobile
+            || provider.mobile
+            || "";
+        },
+        providerMatchesLeadPreference(provider = {}) {
+          return provider.whatsappLeadAlertsEnabled !== false;
+        },
+        normalizeTargetProviderIds(value) {
+          return Array.isArray(value)
+            ? [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))]
+            : [];
+        },
+        async dispatchSelectedNearbyLeadAlerts() {
+          return { alerted: 1, requested: 1, alertedProviderIds: ["provider-near"], skippedProviderIds: [] };
+        },
       };
     }
     return originalLoad.call(this, request, parent, isMain);
@@ -39,16 +57,20 @@ function loadNearbyProviderService() {
   }
 }
 
-test("nearby provider routes are read-only and permission protected", () => {
+test("nearby provider discovery stays view-only while alert actions require manage permission", () => {
   const apiRoutes = source("routes/enquiry.js");
   const frontendRoutes = source("routes/frontend.js");
   const controller = source("controllers/enquiryController.js");
   const frontendController = source("controllers/frontendController.js");
 
   assert.match(apiRoutes, /router\.get\("\/:enquiryId\/nearby-providers", requirePermission\("requirements\.view"\), c\.nearbyProviders\)/);
+  assert.match(apiRoutes, /router\.post\("\/:enquiryId\/nearby-providers\/alerts", requirePermission\("requirements\.manage"\), c\.sendNearbyProviderAlerts\)/);
+  assert.match(apiRoutes, /router\.post\("\/:enquiryId\/nearby-providers\/automatic-alerts", requirePermission\("requirements\.manage"\), c\.automaticNearbyProviderAlerts\)/);
   assert.match(frontendRoutes, /\/enquiries\/:enquiryId\/nearby-providers/);
   assert.match(frontendRoutes, /\/requirements\/:enquiryId\/nearby-providers/);
   assert.match(controller, /nearbyProviderService\.listNearbyProviders/);
+  assert.match(controller, /nearbyProviderService\.sendSelectedProviderAlerts/);
+  assert.match(controller, /service\.setAutomaticWhatsappLeadAlerts/);
   assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby providers"\)/);
 });
 
@@ -67,7 +89,7 @@ test("requirement details nearby action shows the default-radius provider count"
   assert.match(leadView, /Lead action centre/);
 });
 
-test("nearby provider page is list-only and uses the saved default radius", () => {
+test("nearby provider page keeps list-only discovery and adds controlled WhatsApp actions", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
   assert.match(view, /Nearby provider list/);
@@ -77,6 +99,14 @@ test("nearby provider page is list-only and uses the saved default radius", () =
   assert.match(view, /provider\.distanceKm\.toFixed\(1\) \+ ' km'/);
   assert.match(view, /providerCountLabel/);
   assert.match(view, /within the saved ' \+ this\.radiusKm \+ ' km radius'/);
+  assert.match(view, /provider\.walletBalanceCredits/);
+  assert.match(view, /Send alert to selected/);
+  assert.match(view, />Send alert<\/button>/);
+  assert.match(view, /Enable automatic alerts/);
+  assert.match(view, /automaticWhatsappLeadAlertsEnabled/);
+  assert.match(view, /can\('requirements\.manage'\)/);
+  assert.match(view, /nearby-providers\/alerts/);
+  assert.match(view, /nearby-providers\/automatic-alerts/);
   assert.match(view, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(this\.leadId\) \+ '\/nearby-providers'\)/);
   assert.doesNotMatch(view, /radiusKm=/);
   assert.doesNotMatch(view, /id="nearby-provider-map"/);
@@ -165,6 +195,46 @@ test("nearby provider list uses nested requirement coordinates and formatted add
   assert.ok(rows[0].distanceKm < 20);
 });
 
+test("nearby provider rows expose credits and WhatsApp alert eligibility without hiding opted-out providers", () => {
+  const service = loadNearbyProviderService();
+  const lead = {
+    categorySlug: "painting",
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+  };
+  const rows = service.buildNearbyProviderRows(lead, [
+    {
+      providerId: "provider-ready",
+      name: "Ready Provider",
+      portalAccessEnabled: true,
+      whatsappLeadAlertsEnabled: true,
+      normalizedWhatsappNumber: "9876543210",
+      walletBalancePaise: 8450,
+      serviceLatitude: 19.08,
+      serviceLongitude: 72.8777,
+    },
+    {
+      providerId: "provider-opted-out",
+      name: "Opted Out Provider",
+      portalAccessEnabled: true,
+      whatsappLeadAlertsEnabled: false,
+      normalizedWhatsappNumber: "9876543211",
+      walletBalancePaise: 0,
+      serviceLatitude: 19.081,
+      serviceLongitude: 72.8777,
+    },
+  ], 20);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].providerId, "provider-ready");
+  assert.equal(rows[0].walletBalanceCredits, 84.5);
+  assert.equal(rows[0].whatsappAlertEligible, true);
+  assert.equal(rows[1].providerId, "provider-opted-out");
+  assert.equal(rows[1].walletBalanceCredits, 0);
+  assert.equal(rows[1].whatsappAlertEligible, false);
+  assert.equal(rows[1].whatsappAlertReason, "provider_alerts_disabled");
+});
+
 test("nearby provider rows exclude outside or invalid locations and sort nearest first", () => {
   const service = loadNearbyProviderService();
   const lead = {
@@ -218,5 +288,8 @@ test("database discovery is restricted to active providers in the requirement ca
   assert.match(serviceSource, /categorySlugs:\s*lead\.categorySlug/);
   assert.match(serviceSource, /serviceLatitude:\s*\{ \$ne: null \}/);
   assert.match(serviceSource, /serviceLongitude:\s*\{ \$ne: null \}/);
-  assert.doesNotMatch(serviceSource, /whatsappLeadAlertsEnabled:\s*\{ \$ne: false \}/);
+  assert.doesNotMatch(serviceSource, /Provider\.find\(\{[\s\S]*whatsappLeadAlertsEnabled:\s*\{ \$ne: false \}/);
+  assert.match(serviceSource, /walletBalancePaise:\s*1/);
+  assert.match(serviceSource, /sendSelectedProviderAlerts/);
+  assert.match(serviceSource, /dispatchSelectedNearbyLeadAlerts/);
 });
