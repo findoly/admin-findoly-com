@@ -65,12 +65,12 @@ test("nearby provider discovery stays view-only while alert actions require mana
 
   assert.match(apiRoutes, /router\.get\("\/:enquiryId\/nearby-providers", requirePermission\("requirements\.view"\), c\.nearbyProviders\)/);
   assert.match(apiRoutes, /router\.post\("\/:enquiryId\/nearby-providers\/alerts", requirePermission\("requirements\.manage"\), c\.sendNearbyProviderAlerts\)/);
-  assert.match(apiRoutes, /router\.post\("\/:enquiryId\/nearby-providers\/automatic-alerts", requirePermission\("requirements\.manage"\), c\.automaticNearbyProviderAlerts\)/);
+  assert.doesNotMatch(apiRoutes, /nearby-providers\/automatic-alerts/);
   assert.match(frontendRoutes, /\/enquiries\/:enquiryId\/nearby-providers/);
   assert.match(frontendRoutes, /\/requirements\/:enquiryId\/nearby-providers/);
   assert.match(controller, /nearbyProviderService\.listNearbyProviders/);
   assert.match(controller, /nearbyProviderService\.sendSelectedProviderAlerts/);
-  assert.match(controller, /service\.setAutomaticWhatsappLeadAlerts/);
+  assert.doesNotMatch(controller, /setAutomaticWhatsappLeadAlerts/);
   assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby Provider Alerts"\)/);
 });
 
@@ -107,14 +107,15 @@ test("nearby provider page keeps list-only discovery and adds controlled WhatsAp
   assert.match(view, /provider\.walletBalanceCredits/);
   assert.match(view, /Send alert to selected/);
   assert.match(view, /provider\.alertAlreadySent \? 'Alert sent' : 'Send alert'/);
-  assert.match(view, /Enable automatic alerts/);
-  assert.match(view, /automaticWhatsappLeadAlertsEnabled/);
+  assert.match(view, /Automatic WhatsApp alerts are sent to eligible nearby providers/);
+  assert.match(view, /manual send remains available for eligible providers/);
+  assert.doesNotMatch(view, /automaticWhatsappLeadAlertsEnabled/);
   assert.match(view, /Provider unlocked · Further provider WhatsApp alerts are stopped/);
   assert.match(view, /No eligible nearby providers/);
   assert.match(view, /formatAlertTime/);
   assert.match(view, /can\('requirements\.manage'\)/);
   assert.match(view, /nearby-providers\/alerts/);
-  assert.match(view, /nearby-providers\/automatic-alerts/);
+  assert.doesNotMatch(view, /nearby-providers\/automatic-alerts/);
   assert.match(view, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(this\.leadId\) \+ '\/nearby-providers'\)/);
   assert.doesNotMatch(view, /radiusKm=/);
   assert.doesNotMatch(view, /id="nearby-provider-map"/);
