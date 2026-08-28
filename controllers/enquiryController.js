@@ -339,6 +339,32 @@ async function nearbyProviders(req, res, next) {
   }
 }
 
+async function sendNearbyProviderAlerts(req, res, next) {
+  try {
+    const result = await nearbyProviderService.sendSelectedProviderAlerts(
+      req.params.enquiryId,
+      req.body || {},
+      req.admin?.email || "admin",
+    );
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function automaticNearbyProviderAlerts(req, res, next) {
+  try {
+    const result = await service.setAutomaticWhatsappLeadAlerts(
+      req.params.enquiryId,
+      req.body || {},
+      req.admin?.email || "admin",
+    );
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function providerStatus(req, res, next) {
   try {
     res.json({
@@ -374,5 +400,7 @@ module.exports = {
   reactivate,
   providerStatuses,
   nearbyProviders,
+  sendNearbyProviderAlerts,
+  automaticNearbyProviderAlerts,
   providerStatus,
 };
