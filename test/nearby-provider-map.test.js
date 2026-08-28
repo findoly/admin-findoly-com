@@ -71,28 +71,33 @@ test("nearby provider discovery stays view-only while alert actions require mana
   assert.match(controller, /nearbyProviderService\.listNearbyProviders/);
   assert.match(controller, /nearbyProviderService\.sendSelectedProviderAlerts/);
   assert.match(controller, /service\.setAutomaticWhatsappLeadAlerts/);
-  assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby providers"\)/);
+  assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby Provider Alerts"\)/);
 });
 
-test("requirement details nearby action shows the default-radius provider count", () => {
+test("requirement details provider-alert action is clearly named and shows nearby count", () => {
   const action = source("public/js/nearby-providers-action.js");
   const head = source("views/partials/head.ejs");
   const leadView = source("views/enquiry/show.ejs");
 
   assert.match(action, /Provider status/);
-  assert.match(action, /Nearby providers \(/);
+  assert.match(action, /Send Provider Alert/);
+  assert.match(action, /Provider Alerts/);
+  assert.match(action, /nearby\)/);
   assert.match(action, /body\.count/);
   assert.match(action, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(leadId\) \+ '\/nearby-providers'\)/);
   assert.match(head, /title === 'Requirement details'/);
-  assert.match(head, /nearby-providers-action\.js\?v=20260823-2/);
+  assert.match(head, /nearby-providers-action\.js\?v=20260828-alert-status-1/);
   assert.match(leadView, /Provider status/);
   assert.match(leadView, /Lead action centre/);
+  assert.match(leadView, /Provider alert/);
+  assert.match(leadView, /Select a nearby provider and send the WhatsApp alert/);
 });
 
 test("nearby provider page keeps list-only discovery and adds controlled WhatsApp actions", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
-  assert.match(view, /Nearby provider list/);
+  assert.match(view, /Providers available for alert/);
+  assert.match(view, /Provider alert status/);
   assert.match(view, /Find provider/);
   assert.match(view, /Nearest first/);
   assert.match(view, /Farthest first/);
@@ -101,9 +106,12 @@ test("nearby provider page keeps list-only discovery and adds controlled WhatsAp
   assert.match(view, /within the saved ' \+ this\.radiusKm \+ ' km radius'/);
   assert.match(view, /provider\.walletBalanceCredits/);
   assert.match(view, /Send alert to selected/);
-  assert.match(view, />Send alert<\/button>/);
+  assert.match(view, /provider\.alertAlreadySent \? 'Alert sent' : 'Send alert'/);
   assert.match(view, /Enable automatic alerts/);
   assert.match(view, /automaticWhatsappLeadAlertsEnabled/);
+  assert.match(view, /Provider unlocked · Further provider WhatsApp alerts are stopped/);
+  assert.match(view, /No eligible nearby providers/);
+  assert.match(view, /formatAlertTime/);
   assert.match(view, /can\('requirements\.manage'\)/);
   assert.match(view, /nearby-providers\/alerts/);
   assert.match(view, /nearby-providers\/automatic-alerts/);
@@ -235,6 +243,62 @@ test("nearby provider rows expose credits and WhatsApp alert eligibility without
   assert.equal(rows[1].whatsappAlertReason, "provider_alerts_disabled");
 });
 
+test("nearby provider rows show durable alert history and stop new alerts after unlock", () => {
+  const service = loadNearbyProviderService();
+  const baseLead = {
+    categorySlug: "painting",
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+    marketplaceAvailable: true,
+    marketplaceStatus: "published",
+    remainingUnlocks: 3,
+    unlockedCount: 0,
+    providerWhatsappAlerts: [{
+      providerId: "provider-alerted",
+      alertedAt: new Date("2026-08-28T10:30:00.000Z"),
+      mode: "manual",
+      actor: "employee@findoly.com",
+    }],
+  };
+  const providers = [
+    {
+      providerId: "provider-alerted",
+      name: "Already Alerted",
+      portalAccessEnabled: true,
+      whatsappLeadAlertsEnabled: true,
+      normalizedWhatsappNumber: "9876543210",
+      serviceLatitude: 19.08,
+      serviceLongitude: 72.8777,
+    },
+    {
+      providerId: "provider-ready",
+      name: "Ready",
+      portalAccessEnabled: true,
+      whatsappLeadAlertsEnabled: true,
+      normalizedWhatsappNumber: "9876543211",
+      serviceLatitude: 19.081,
+      serviceLongitude: 72.8777,
+    },
+  ];
+
+  const rows = service.buildNearbyProviderRows(baseLead, providers, 20);
+  const alerted = rows.find((row) => row.providerId === "provider-alerted");
+  const ready = rows.find((row) => row.providerId === "provider-ready");
+
+  assert.equal(alerted.alertAlreadySent, true);
+  assert.equal(alerted.whatsappAlertEligible, false);
+  assert.equal(alerted.whatsappAlertReason, "already_alerted");
+  assert.equal(alerted.alertMode, "manual");
+  assert.equal(String(alerted.alertedAt), String(baseLead.providerWhatsappAlerts[0].alertedAt));
+  assert.equal(ready.alertAlreadySent, false);
+  assert.equal(ready.whatsappAlertEligible, true);
+
+  const unlockedRows = service.buildNearbyProviderRows({ ...baseLead, unlockedCount: 1 }, providers, 20);
+  assert.ok(unlockedRows.every((row) => row.whatsappAlertEligible === false));
+  assert.ok(unlockedRows.every((row) => row.whatsappAlertReason === "provider_unlocked"));
+  assert.equal(service.presentLead({ ...baseLead, unlockedCount: 1 }).providerAlertStatus.code, "provider_unlocked");
+});
+
 test("nearby provider rows exclude outside or invalid locations and sort nearest first", () => {
   const service = loadNearbyProviderService();
   const lead = {
@@ -290,6 +354,10 @@ test("database discovery is restricted to active providers in the requirement ca
   assert.match(serviceSource, /serviceLongitude:\s*\{ \$ne: null \}/);
   assert.doesNotMatch(serviceSource, /Provider\.find\(\{[\s\S]*whatsappLeadAlertsEnabled:\s*\{ \$ne: false \}/);
   assert.match(serviceSource, /walletBalancePaise:\s*1/);
+  assert.match(serviceSource, /providerWhatsappAlerts:\s*1/);
+  assert.match(serviceSource, /unlockedCount:\s*1/);
   assert.match(serviceSource, /sendSelectedProviderAlerts/);
+  assert.match(serviceSource, /alreadyAlertedProviderIds/);
+  assert.match(serviceSource, /recordSuccessfulProviderAlerts/);
   assert.match(serviceSource, /dispatchSelectedNearbyLeadAlerts/);
 });
