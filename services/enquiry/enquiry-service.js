@@ -3,6 +3,7 @@ const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const catalogService = require("../catalog/catalog-service");
 const notificationService = require("../communication/notification-service");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
+const providerAlertStateService = require("./provider-alert-state-service");
 const uuid = require("../../utils/uuid");
 const { validateMobile } = require("../../utils/mobile");
 const {
@@ -295,6 +296,15 @@ function presentEnquiry(row = {}) {
   const remainingUnlocks = Number.isFinite(Number(row.remainingUnlocks))
     ? Math.max(0, Number(row.remainingUnlocks))
     : Math.max(0, maxProviderUnlocks - unlockedCount - reservedUnlockCount);
+  const providerWhatsappAlerts = providerAlertStateService.normalizedProviderAlerts(row);
+  const providerAlertStatus = providerAlertStateService.providerAlertSummary({
+    ...row,
+    unlockedCount,
+    reservedUnlockCount,
+    remainingUnlocks,
+    maxProviderUnlocks,
+    providerWhatsappAlerts,
+  });
 
   return {
     ...row,
@@ -325,6 +335,8 @@ function presentEnquiry(row = {}) {
       ? alertDistanceKm
       : 20,
     automaticWhatsappLeadAlertsEnabled: row.automaticWhatsappLeadAlertsEnabled === true,
+    providerWhatsappAlerts,
+    providerAlertStatus,
     serviceTypes: Array.isArray(row.serviceTypes)
       ? row.serviceTypes.map((item) => ({
           serviceTypeId: item.serviceTypeId || item.id || "",
@@ -527,13 +539,25 @@ async function publishMarketplace(enquiryId, actor = "system") {
     },
   });
 
-  const publishedLead = await get(enquiryId);
+  let publishedLead = await get(enquiryId);
   let alertSummary = publishedLead.automaticWhatsappLeadAlertsEnabled === true
     ? null
     : { eligible: 0, alerted: 0, skipped: 0, reason: "automatic_alerts_disabled" };
-  if (remainingUnlocks > 0 && publishedLead.automaticWhatsappLeadAlertsEnabled === true) {
+  if (
+    remainingUnlocks > 0
+    && Number(publishedLead.unlockedCount || 0) === 0
+    && publishedLead.automaticWhatsappLeadAlertsEnabled === true
+  ) {
     try {
       alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
+      if (Array.isArray(alertSummary.alertedProviderIds) && alertSummary.alertedProviderIds.length) {
+        await providerAlertStateService.recordSuccessfulProviderAlerts(
+          publishedLead.enquiryId,
+          alertSummary.alertedProviderIds,
+          { mode: "automatic", actor },
+        );
+        publishedLead = await get(enquiryId);
+      }
     } catch (error) {
       console.error({
         event: "nearby_alert_dispatch_failed",
@@ -573,6 +597,9 @@ async function setAutomaticWhatsappLeadAlerts(enquiryId, input = {}, actor = "ad
     label: "Automatic WhatsApp lead alerts",
   });
   const currentEnabled = existing.automaticWhatsappLeadAlertsEnabled === true;
+  if (enabled && Number(existing.unlockedCount || 0) > 0) {
+    throw Object.assign(new Error("Provider alerts are stopped because this requirement has already been unlocked"), { status: 409 });
+  }
   if (enabled === currentEnabled) {
     return {
       lead: presentEnquiry(existing),
@@ -600,16 +627,25 @@ async function setAutomaticWhatsappLeadAlerts(enquiryId, input = {}, actor = "ad
     },
   });
 
-  const lead = await get(enquiryId);
+  let lead = await get(enquiryId);
   let alertSummary = null;
   if (
     enabled
     && lead.marketplaceAvailable === true
     && lead.marketplaceStatus === "published"
     && Number(lead.remainingUnlocks || 0) > 0
+    && Number(lead.unlockedCount || 0) === 0
   ) {
     try {
       alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(lead, actor);
+      if (Array.isArray(alertSummary.alertedProviderIds) && alertSummary.alertedProviderIds.length) {
+        await providerAlertStateService.recordSuccessfulProviderAlerts(
+          lead.enquiryId,
+          alertSummary.alertedProviderIds,
+          { mode: "automatic", actor },
+        );
+        lead = await get(enquiryId);
+      }
     } catch (error) {
       console.error({
         event: "nearby_alert_manual_enable_dispatch_failed",
@@ -831,7 +867,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "timeline", "statusUpdatedAt", "statusUpdatedBy", "deactivatedAt", "deactivatedBy",
     "deactivationReason", "unlockedCount", "reservedUnlockCount", "remainingUnlocks",
     "marketplaceStatus", "marketplaceAvailable", "marketplaceClosureReason", "marketplacePublishedAt", "marketplaceExpiresAt",
-    "automaticWhatsappLeadAlertsEnabled",
+    "automaticWhatsappLeadAlertsEnabled", "providerWhatsappAlerts",
     "locationLatitude", "locationLongitude", "locationPincode", "locationVerifiedAt",
     "providerConfirmedCount", "providerSaleConversionStatus", "providerSaleConversionUpdatedAt",
     "providerSaleConvertedAt", "agentSaleConversion",
