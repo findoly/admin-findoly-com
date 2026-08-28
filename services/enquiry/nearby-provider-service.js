@@ -110,12 +110,6 @@ function presentLead(lead = {}) {
 
 function providerWhatsappAlertState(provider = {}, lead = {}) {
   const providerId = provider.providerId || provider.id || "";
-  if (Number(lead.unlockedCount || 0) > 0) {
-    return { eligible: false, reason: "provider_unlocked" };
-  }
-  if (providerAlertStateService.providerAlertFor(lead, providerId)) {
-    return { eligible: false, reason: "already_alerted" };
-  }
   if (provider.portalAccessEnabled === false) {
     return { eligible: false, reason: "portal_restricted" };
   }
@@ -302,9 +296,6 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
 
   let lead = await Enquiry.findOne({ $or: [{ enquiryId: value }, { id: value }] }).lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (Number(lead.unlockedCount || 0) > 0) {
-    throw Object.assign(new Error("Provider alerts are stopped because this requirement has already been unlocked"), { status: 409 });
-  }
   if (
     lead.marketplaceAvailable !== true
     || String(lead.marketplaceStatus || "").toLowerCase() !== "published"
@@ -315,11 +306,7 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
 
   const alreadyAlertedProviderIds = providerIds.filter((providerId) =>
     Boolean(providerAlertStateService.providerAlertFor(lead, providerId)));
-  const providerIdsToSend = providerIds.filter((providerId) =>
-    !alreadyAlertedProviderIds.includes(providerId));
-  if (!providerIdsToSend.length) {
-    throw Object.assign(new Error("The selected provider has already received this WhatsApp alert"), { status: 409 });
-  }
+  const providerIdsToSend = providerIds;
 
   if (!resolveRequirementLocation(lead) || canonicalLocationPincodeMismatch(lead)) {
     const syncedLocation = await enquiryLocationService.syncLeadLocation(lead, {
