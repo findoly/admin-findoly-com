@@ -113,7 +113,7 @@ function redactedEvent(event, postbackText = "") {
 }
 
 function joinLocation(lead = {}) {
-  const address = textFrom(lead.customerAddress);
+  const address = textFrom(lead.customerAddress || lead.addressLine);
   const parts = address ? [address] : [];
   const normalizedAddress = address.toLowerCase();
   [lead.city, lead.state, lead.pincode]
@@ -123,6 +123,29 @@ function joinLocation(lead = {}) {
       if (!normalizedAddress.includes(part.toLowerCase())) parts.push(part);
     });
   return parts.join(", ");
+}
+
+function coordinateValue(value, min, max) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
+}
+
+function providerLocation(lead = {}, context = {}) {
+  const latitude = coordinateValue(context.locationLatitude ?? lead.locationLatitude, -90, 90);
+  const longitude = coordinateValue(context.locationLongitude ?? lead.locationLongitude, -180, 180);
+  const address = textFrom(context.fullAddress) || joinLocation(lead);
+  const mapQuery = latitude !== null && longitude !== null
+    ? `${latitude},${longitude}`
+    : address;
+  return {
+    address,
+    latitude,
+    longitude,
+    mapUrl: mapQuery
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
+      : "",
+  };
 }
 
 function qualificationAnswerLabel(snapshot = {}, questionId) {
@@ -157,7 +180,17 @@ function messageContextFromLead(lead = {}) {
     remainingUnlocks: Number(lead.remainingUnlocks || 0),
     providerConfirmedCount: Number(lead.providerConfirmedCount || 0),
     providerSaleConversionStatus: textFrom(lead.providerSaleConversionStatus),
+    providerRequirementTitle: textFrom(lead.providerRequirementTitle || lead.requirementTitle),
     providerRequirementDetails: textFrom(lead.providerRequirementDetails),
+    unlockedCount: Math.max(0, Number(lead.unlockedCount || 0)),
+    fullAddress: joinLocation({
+      customerAddress: lead.addressLine || lead.customerAddress,
+      city: lead.city,
+      state: lead.state,
+      pincode: lead.pincode,
+    }),
+    locationLatitude: coordinateValue(lead.locationLatitude, -90, 90),
+    locationLongitude: coordinateValue(lead.locationLongitude, -180, 180),
   };
 }
 
@@ -179,7 +212,16 @@ async function enrichResultForMessage(original = {}, result = {}) {
         remainingUnlocks: 1,
         providerConfirmedCount: 1,
         providerSaleConversionStatus: 1,
+        providerRequirementTitle: 1,
         providerRequirementDetails: 1,
+        requirementTitle: 1,
+        unlockedCount: 1,
+        addressLine: 1,
+        city: 1,
+        state: 1,
+        pincode: 1,
+        locationLatitude: 1,
+        locationLongitude: 1,
       })
       : query;
     const lead = typeof selected?.lean === "function" ? await selected.lean() : await selected;
@@ -201,15 +243,49 @@ function successMessage(result = {}) {
     `Service: ${lead.serviceType || lead.category || "Service"}`,
   ];
 
+  const title = textFrom(
+    context.providerRequirementTitle
+      || lead.providerRequirementTitle
+      || lead.requirementTitle,
+  );
+  if (title) lines.push(`Title: ${title}`);
+
   const description = textFrom(context.providerRequirementDetails || lead.providerRequirementDetails);
   if (description) lines.push(`Description: ${description}`);
+
+  const intent = humanize(context.leadIntent || lead.leadIntent);
+  if (intent) lines.push(`Intent: ${intent}`);
+
+  const priority = humanize(context.priority || lead.priority);
+  if (priority) lines.push(`Priority: ${priority}`);
+
+  const unlockedCountValue = context.unlockedCount ?? lead.unlockedCount;
+  if (unlockedCountValue !== undefined && unlockedCountValue !== null && String(unlockedCountValue).trim() !== "") {
+    const unlockedCount = Number(unlockedCountValue);
+    if (Number.isFinite(unlockedCount) && unlockedCount >= 0) {
+      lines.push(`Providers unlocked: ${Math.trunc(unlockedCount)}`);
+    }
+  }
+
+  const qualification = Array.isArray(context.qualification) ? context.qualification : [];
+  qualification.forEach((field) => {
+    const label = textFrom(field?.label);
+    const value = textFrom(field?.value);
+    if (label && value) lines.push(`${label}: ${value}`);
+  });
 
   lines.push("");
   lines.push(`Customer: ${lead.customerName || "Not provided"}`);
   lines.push(`Mobile: ${lead.customerMobile || "Not provided"}`);
   if (lead.customerEmail) lines.push(`Email: ${lead.customerEmail}`);
-  const location = joinLocation(lead);
-  if (location) lines.push(`Area: ${location}`);
+
+  const location = providerLocation(lead, context);
+  if (location.address) lines.push(`Address: ${location.address}`);
+  if (location.mapUrl) {
+    lines.push("Location:");
+    lines.push("📍 Open in Google Maps");
+    lines.push(location.mapUrl);
+  }
 
   lines.push("");
   lines.push(`Credits used: ${Number(lead.chargedCredits || 0)}`);

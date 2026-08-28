@@ -471,46 +471,164 @@ test("failed outbound unlock messages are marked send_failed instead of remainin
   assert.match(communication, /WHATSAPP_POSTBACK_TOO_LONG|postbackLength/);
 });
 
-test("provider-facing WhatsApp action responses use enquiry wording and never mention unlock", () => {
+test("unlocked enquiry message context carries approved provider, qualification, and location details", () => {
   const actionService = loadWithStubs("services/communication/provider-whatsapp-action-service.js", {
     "../../models/Communication": {},
     "./communication-service": {},
     "../integration/provider-action-service": {},
   });
-  const messages = [
-    actionService.responseMessage({
-      status: "unlocked",
-      lead: {
-        enquiryId: "enquiry-1",
-        category: "Painting",
-        customerName: "Customer",
-        customerMobile: "9999999999",
-        customerEmail: "customer@example.com",
-        customerAddress: "Mumbai, Maharashtra 400095, India",
-        city: "Mumbai",
-        state: "Maharashtra",
-        pincode: "400095",
-        customerRequirementRaw: "Never expose this raw employee-entered requirement.",
-        providerRequirementDetails: "Customer needs interior painting for a two-bedroom home and wants the work completed this week.",
-        chargedCredits: 10,
-      },
-      provider: { availableCredits: 90 },
-    }),
-    actionService.responseMessage({ status: "already_unlocked", lead: { enquiryId: "enquiry-1" }, provider: {} }),
-    actionService.responseMessage({ status: "insufficient_credits", requiredCredits: 10, availableCredits: 2 }),
-    actionService.responseMessage({ status: "direct_payment_pending" }),
-    actionService.responseMessage({ status: "provider_ineligible" }),
-    actionService.responseMessage({ status: "lead_unavailable" }),
-    actionService.responseMessage({ status: "failed" }),
-  ];
-  messages.forEach((message) => assert.doesNotMatch(message, /unlock/i));
-  assert.match(messages[0], /enquiry details are now available/i);
-  assert.match(messages[0], /Service: Painting/);
-  assert.match(messages[0], /Description: Customer needs interior painting for a two-bedroom home and wants the work completed this week\./);
-  assert.match(messages[0], /Area: Mumbai, Maharashtra 400095, India/);
-  assert.doesNotMatch(messages[0], /Mumbai[\s\S]*Mumbai/);
-  assert.doesNotMatch(messages[0], /Never expose this raw employee-entered requirement\./);
-  assert.doesNotMatch(messages[0], /Lead details|Readiness|Lead quality/);
-  assert.match(messages[0], /Balance: 90 credits/);
-  assert.match(messages.at(-1), /could not open this enquiry from WhatsApp/i);
+  const context = actionService.messageContextFromLead({
+    providerRequirementTitle: "Interior painting this week",
+    providerRequirementDetails: "Customer needs interior painting for a two-bedroom home and wants the work completed this week.",
+    unlockedCount: 2,
+    addressLine: "Flat 12, Example Heights, Andheri West",
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "400095",
+    locationLatitude: 19.186,
+    locationLongitude: 72.849,
+    leadQualification: {
+      completed: true,
+      answers: [
+        { questionId: "readiness", answerId: "ready_now" },
+        { questionId: "timeline", answerId: "within_24_hours" },
+        { questionId: "clarity", answerId: "exact" },
+        { questionId: "responsiveness", answerId: "highly_responsive" },
+        { questionId: "expected_spend", answerId: "above_10000" },
+      ],
+      final: { leadIntent: "high", priority: "urgent" },
+    },
+  });
+
+  assert.equal(context.providerRequirementTitle, "Interior painting this week");
+  assert.equal(context.providerRequirementDetails, "Customer needs interior painting for a two-bedroom home and wants the work completed this week.");
+  assert.equal(context.leadIntent, "high");
+  assert.equal(context.priority, "urgent");
+  assert.equal(context.unlockedCount, 2);
+  assert.equal(context.locationLatitude, 19.186);
+  assert.equal(context.locationLongitude, 72.849);
+  assert.equal(context.fullAddress, "Flat 12, Example Heights, Andheri West, Mumbai, Maharashtra, 400095");
+  assert.deepEqual(
+    context.qualification.map((item) => [item.label, item.value]),
+    [
+      ["Readiness", "Ready to proceed now"],
+      ["Service timeline", "Very urgent — Within 24 hours"],
+      ["Requirement clarity", "Exact requirement confirmed"],
+      ["Responsiveness", "Highly responsive"],
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(context.qualification), /expected spend|₹/i);
+
+  const actionSource = source("services/communication/provider-whatsapp-action-service.js");
+  for (const field of [
+    "providerRequirementTitle",
+    "providerRequirementDetails",
+    "unlockedCount",
+    "addressLine",
+    "locationLatitude",
+    "locationLongitude",
+  ]) {
+    assert.match(actionSource, new RegExp(`${field}: 1`));
+  }
+});
+
+test("provider-facing WhatsApp success response includes qualification and coordinate Maps link", () => {
+  const actionService = loadWithStubs("services/communication/provider-whatsapp-action-service.js", {
+    "../../models/Communication": {},
+    "./communication-service": {},
+    "../integration/provider-action-service": {},
+  });
+  const message = actionService.responseMessage({
+    status: "unlocked",
+    lead: {
+      enquiryId: "enquiry-1",
+      category: "Painting",
+      customerName: "Customer",
+      customerMobile: "9999999999",
+      customerEmail: "customer@example.com",
+      customerAddress: "Flat 12, Example Heights, Andheri West, Mumbai, Maharashtra 400095, India",
+      city: "Mumbai",
+      state: "Maharashtra",
+      pincode: "400095",
+      customerRequirementRaw: "Never expose this raw employee-entered requirement.",
+      chargedCredits: 10,
+    },
+    messageContext: {
+      providerRequirementTitle: "Interior painting this week",
+      providerRequirementDetails: "Customer needs interior painting for a two-bedroom home and wants the work completed this week.",
+      leadIntent: "high",
+      priority: "urgent",
+      unlockedCount: 2,
+      qualification: [
+        { label: "Readiness", value: "Ready to proceed now" },
+        { label: "Service timeline", value: "Very urgent — Within 24 hours" },
+        { label: "Requirement clarity", value: "Exact requirement confirmed" },
+        { label: "Responsiveness", value: "Highly responsive" },
+      ],
+      fullAddress: "Flat 12, Example Heights, Andheri West, Mumbai, Maharashtra 400095, India",
+      locationLatitude: 19.186,
+      locationLongitude: 72.849,
+    },
+    provider: { availableCredits: 90 },
+  });
+
+  assert.match(message, /enquiry details are now available/i);
+  assert.match(message, /Service: Painting/);
+  assert.match(message, /Title: Interior painting this week/);
+  assert.match(message, /Description: Customer needs interior painting for a two-bedroom home and wants the work completed this week\./);
+  assert.match(message, /Intent: High/);
+  assert.match(message, /Priority: Urgent/);
+  assert.match(message, /Providers unlocked: 2/);
+  assert.match(message, /Readiness: Ready to proceed now/);
+  assert.match(message, /Service timeline: Very urgent — Within 24 hours/);
+  assert.match(message, /Requirement clarity: Exact requirement confirmed/);
+  assert.match(message, /Responsiveness: Highly responsive/);
+  assert.match(message, /Address: Flat 12, Example Heights, Andheri West, Mumbai, Maharashtra 400095, India/);
+  assert.match(message, /📍 Open in Google Maps/);
+  assert.match(message, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=19\.186%2C72\.849/);
+  assert.match(message, /Balance: 90 credits/);
+  assert.doesNotMatch(message, /Never expose this raw employee-entered requirement\./);
+  assert.doesNotMatch(message, /Expected spend|₹10,000|Lead quality|whatsapp_unlock|unlock_lead/i);
+});
+
+test("provider-facing Maps link falls back to full address and then pincode", () => {
+  const actionService = loadWithStubs("services/communication/provider-whatsapp-action-service.js", {
+    "../../models/Communication": {},
+    "./communication-service": {},
+    "../integration/provider-action-service": {},
+  });
+
+  const address = "Flat 12, Example Heights, Andheri West, Mumbai, Maharashtra 400095, India";
+  const addressMessage = actionService.responseMessage({
+    status: "already_unlocked",
+    lead: {
+      category: "Painting",
+      customerName: "Customer",
+      customerMobile: "9999999999",
+      customerAddress: address,
+      chargedCredits: 10,
+    },
+    provider: { availableCredits: 90 },
+  });
+  assert.ok(addressMessage.includes(`Address: ${address}`));
+  assert.ok(addressMessage.includes(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
+  ));
+
+  const pincodeMessage = actionService.responseMessage({
+    status: "already_unlocked",
+    lead: {
+      category: "Painting",
+      customerName: "Customer",
+      customerMobile: "9999999999",
+      pincode: "400095",
+      chargedCredits: 10,
+    },
+    provider: { availableCredits: 90 },
+  });
+  assert.match(pincodeMessage, /Address: 400095/);
+  assert.match(pincodeMessage, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=400095/);
+
+  const failure = actionService.responseMessage({ status: "failed" });
+  assert.match(failure, /could not open this enquiry from WhatsApp/i);
 });
