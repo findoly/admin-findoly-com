@@ -242,26 +242,19 @@ test("nearby lead alerts use the requirement radius with a 20 km legacy fallback
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
 });
 
-test("requirement automatic nearby WhatsApp alerts are default-off and explicitly gated", () => {
+test("requirement automatic nearby WhatsApp alerts are primary and not gated by a per-requirement toggle", () => {
   const enquiryModel = source("models/Enquiry.js");
   const enquiryService = source("services/enquiry/enquiry-service.js");
   const routes = source("routes/enquiry.js");
 
-  assert.match(
-    enquiryModel,
-    /automaticWhatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: false \}/,
-  );
+  assert.doesNotMatch(enquiryModel, /automaticWhatsappLeadAlertsEnabled/);
   assert.match(
     enquiryService,
-    /remainingUnlocks > 0[\s\S]*Number\(publishedLead\.unlockedCount \|\| 0\) === 0[\s\S]*publishedLead\.automaticWhatsappLeadAlertsEnabled === true/,
+    /remainingUnlocks > 0[\s\S]*Number\(publishedLead\.unlockedCount \|\| 0\) === 0[\s\S]*dispatchNearbyLeadAlerts\(publishedLead, actor\)/,
   );
   assert.match(enquiryService, /recordSuccessfulProviderAlerts/);
-  assert.match(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
-  assert.match(enquiryService, /"automaticWhatsappLeadAlertsEnabled"/);
-  assert.match(
-    routes,
-    /nearby-providers\/automatic-alerts", requirePermission\("requirements\.manage"\)/,
-  );
+  assert.doesNotMatch(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
+  assert.doesNotMatch(routes, /nearby-providers\/automatic-alerts/);
 });
 
 test("category defaults and requirement overrides expose validated alert distances", () => {
