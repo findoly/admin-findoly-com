@@ -122,6 +122,61 @@ test("selected nearby alerts target only requested eligible providers", async ()
   );
 });
 
+test("provider alerts stop after the first unlock and skip providers already alerted", async () => {
+  const notifications = [];
+  const queryCapture = { value: null };
+  const providers = [
+    {
+      providerId: "provider-near",
+      name: "Nearby Provider",
+      normalizedWhatsappNumber: "9876543210",
+      serviceLatitude: 19.076,
+      serviceLongitude: 72.8777,
+    },
+    {
+      providerId: "provider-other",
+      name: "Other Provider",
+      normalizedWhatsappNumber: "9876543211",
+      serviceLatitude: 19.08,
+      serviceLongitude: 72.8777,
+    },
+  ];
+  const service = loadNearbyService(providers, notifications, queryCapture);
+  const baseLead = {
+    enquiryId: "lead-alert-stop",
+    categorySlug: "painting",
+    category: "Painting",
+    remainingUnlocks: 2,
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+    marketplacePublishedAt: new Date("2026-08-28T10:00:00.000Z"),
+  };
+
+  const stopped = await service.dispatchNearbyLeadAlerts(
+    { ...baseLead, unlockedCount: 1 },
+    "employee@findoly.com",
+  );
+  assert.equal(stopped.reason, "provider_already_unlocked");
+  assert.deepEqual(stopped.alertedProviderIds, []);
+  assert.equal(notifications.length, 0);
+
+  const result = await service.dispatchNearbyLeadAlerts({
+    ...baseLead,
+    enquiryId: "lead-alert-skip",
+    unlockedCount: 0,
+    providerWhatsappAlerts: [{
+      providerId: "provider-near",
+      alertedAt: new Date("2026-08-28T09:30:00.000Z"),
+      mode: "manual",
+    }],
+  }, "employee@findoly.com");
+
+  assert.equal(result.alreadyAlerted, 1);
+  assert.equal(result.alerted, 1);
+  assert.deepEqual(result.alertedProviderIds, ["provider-other"]);
+  assert.deepEqual(notifications.map((item) => item.context.provider.providerId), ["provider-other"]);
+});
+
 test("nearby lead alerts use the requirement radius with a 20 km legacy fallback", async () => {
   const notifications = [];
   const queryCapture = { value: null };
@@ -187,25 +242,19 @@ test("nearby lead alerts use the requirement radius with a 20 km legacy fallback
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
 });
 
-test("requirement automatic nearby WhatsApp alerts are default-off and explicitly gated", () => {
+test("requirement automatic nearby WhatsApp alerts are primary and not gated by a per-requirement toggle", () => {
   const enquiryModel = source("models/Enquiry.js");
   const enquiryService = source("services/enquiry/enquiry-service.js");
   const routes = source("routes/enquiry.js");
 
-  assert.match(
-    enquiryModel,
-    /automaticWhatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: false \}/,
-  );
+  assert.doesNotMatch(enquiryModel, /automaticWhatsappLeadAlertsEnabled/);
   assert.match(
     enquiryService,
-    /remainingUnlocks > 0 && publishedLead\.automaticWhatsappLeadAlertsEnabled === true/,
+    /remainingUnlocks > 0[\s\S]*Number\(publishedLead\.unlockedCount \|\| 0\) === 0[\s\S]*dispatchNearbyLeadAlerts\(publishedLead, actor\)/,
   );
-  assert.match(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
-  assert.match(enquiryService, /"automaticWhatsappLeadAlertsEnabled"/);
-  assert.match(
-    routes,
-    /nearby-providers\/automatic-alerts", requirePermission\("requirements\.manage"\)/,
-  );
+  assert.match(enquiryService, /recordSuccessfulProviderAlerts/);
+  assert.doesNotMatch(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
+  assert.doesNotMatch(routes, /nearby-providers\/automatic-alerts/);
 });
 
 test("category defaults and requirement overrides expose validated alert distances", () => {
