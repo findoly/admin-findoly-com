@@ -109,7 +109,6 @@ function presentLead(lead = {}) {
 }
 
 function providerWhatsappAlertState(provider = {}, lead = {}) {
-  const providerId = provider.providerId || provider.id || "";
   if (provider.portalAccessEnabled === false) {
     return { eligible: false, reason: "portal_restricted" };
   }
