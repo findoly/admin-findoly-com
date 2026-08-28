@@ -352,19 +352,6 @@ async function sendNearbyProviderAlerts(req, res, next) {
   }
 }
 
-async function automaticNearbyProviderAlerts(req, res, next) {
-  try {
-    const result = await service.setAutomaticWhatsappLeadAlerts(
-      req.params.enquiryId,
-      req.body || {},
-      req.admin?.email || "admin",
-    );
-    res.json({ success: true, data: result });
-  } catch (error) {
-    next(error);
-  }
-}
-
 async function providerStatus(req, res, next) {
   try {
     res.json({
@@ -401,6 +388,5 @@ module.exports = {
   providerStatuses,
   nearbyProviders,
   sendNearbyProviderAlerts,
-  automaticNearbyProviderAlerts,
   providerStatus,
 };
