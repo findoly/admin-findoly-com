@@ -39,6 +39,26 @@ const enquirySchema = new mongoose.Schema(
     categorySlug: { type: String, required: true, trim: true, index: true, maxlength: 80, match: /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/ },
     alertDistanceKm: { type: Number, default: 20, min: 1, max: 100 },
     automaticWhatsappLeadAlertsEnabled: { type: Boolean, default: false },
+    providerWhatsappAlerts: {
+      type: [
+        new mongoose.Schema(
+          {
+            providerId: { type: String, required: true, trim: true, maxlength: 120 },
+            alertedAt: { type: Date, required: true },
+            mode: { type: String, enum: ["manual", "automatic"], default: "manual" },
+            actor: { type: String, default: "", trim: true, maxlength: 254 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+      validate: {
+        validator(value) {
+          return Array.isArray(value) && value.length <= 1000;
+        },
+        message: "A requirement may track no more than 1000 provider WhatsApp alerts",
+      },
+    },
     serviceType: { type: String, default: "", trim: true },
     serviceTypes: {
       type: [
