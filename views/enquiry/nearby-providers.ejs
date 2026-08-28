@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Lead management</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">View active providers in the same category within this requirement's saved alert radius.</p>
+                <p class="crm-page-subtitle mb-0">Review nearby providers, their available credits, and control who receives this requirement by WhatsApp.</p>
               </div>
               <a id="nearby-provider-back-link" href="/enquiries" class="btn btn-light crm-primary-action">
                 <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirement
@@ -25,6 +25,7 @@
 
             <main x-data="nearbyProviderList()" :class="loading && 'crm-loading'">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+              <div x-show="successMessage" x-cloak class="alert alert-success" x-text="successMessage"></div>
 
               <section class="card mb-3">
                 <div class="card-body">
@@ -45,6 +46,30 @@
                       <div class="text-muted fs-sm">Saved alert radius</div>
                       <div class="fw-semibold" x-text="radiusKm + ' km'"></div>
                     </div>
+                  </div>
+
+                  <div class="border-top mt-3 pt-3 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                    <div>
+                      <div class="text-muted fs-sm">Automatic nearby WhatsApp alerts</div>
+                      <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                        <span
+                          class="crm-status"
+                          :class="lead.automaticWhatsappLeadAlertsEnabled ? 'status-active' : 'status-inactive'"
+                          x-text="lead.automaticWhatsappLeadAlertsEnabled ? 'Enabled' : 'Disabled'"
+                        ></span>
+                        <span class="text-muted fs-sm">Disabled by default. The Provider Marketplace remains available either way.</span>
+                      </div>
+                    </div>
+                    <button
+                      x-show="can('requirements.manage')"
+                      x-cloak
+                      type="button"
+                      class="btn"
+                      :class="lead.automaticWhatsappLeadAlertsEnabled ? 'btn-light' : 'btn-primary'"
+                      :disabled="savingAutomaticAlerts || loading"
+                      @click="toggleAutomaticAlerts()"
+                      x-text="savingAutomaticAlerts ? 'Saving…' : (lead.automaticWhatsappLeadAlertsEnabled ? 'Disable automatic alerts' : 'Enable automatic alerts')"
+                    ></button>
                   </div>
                 </div>
               </section>
@@ -71,29 +96,70 @@
               <div x-show="reason === 'lead_coordinates_missing'" x-cloak class="alert alert-warning">
                 This requirement does not have saved coordinates yet, so nearby-provider distance cannot be calculated.
               </div>
+              <div x-show="!loading && lead.enquiryId && !canSendAlerts" x-cloak class="alert alert-light border">
+                WhatsApp alerts can be sent only while this requirement is published and still available to providers.
+              </div>
 
               <section class="card crm-data-card">
-                <div class="card-header crm-card-heading">
+                <div class="card-header crm-card-heading gap-3">
                   <div>
                     <h2 class="card-title mb-1">Nearby provider list</h2>
                     <p class="text-muted mb-0" x-text="providerCountLabel"></p>
                   </div>
-                  <span x-show="searchText" x-cloak class="badge bg-light text-dark" x-text="filteredProviders.length + ' matching'"></span>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span x-show="searchText" x-cloak class="badge bg-light text-dark" x-text="filteredProviders.length + ' matching'"></span>
+                    <button
+                      x-show="can('requirements.manage')"
+                      x-cloak
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      :disabled="sendingAlerts || !canSendAlerts || !selectedProviderIds.length"
+                      @click="sendAlerts(selectedProviderIds)"
+                    >
+                      <span x-text="sendingAlerts ? 'Sending…' : 'Send alert to selected'"></span>
+                      <span x-show="selectedProviderIds.length" x-text="' (' + selectedProviderIds.length + ')'"></span>
+                    </button>
+                  </div>
                 </div>
                 <div class="table-responsive">
                   <table class="table crm-table mb-0">
                     <thead>
-                      <tr><th>Provider</th><th>Distance</th><th>Service location</th><th>Status</th><th></th></tr>
+                      <tr>
+                        <th class="text-center">Select</th>
+                        <th>Provider</th>
+                        <th>Credits</th>
+                        <th>Distance</th>
+                        <th>Service location</th>
+                        <th>WhatsApp alert</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
                     </thead>
                     <tbody>
                       <template x-if="loading">
-                        <tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
+                        <tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
                       </template>
                       <template x-for="provider in filteredProviders" :key="provider.providerId">
                         <tr>
+                          <td class="text-center">
+                            <input
+                              x-show="can('requirements.manage')"
+                              x-cloak
+                              class="form-check-input"
+                              type="checkbox"
+                              :value="provider.providerId"
+                              x-model="selectedProviderIds"
+                              :disabled="sendingAlerts || !canSendAlerts || !provider.whatsappAlertEligible"
+                              :aria-label="'Select ' + (provider.businessName || provider.name) + ' for WhatsApp alert'"
+                            >
+                          </td>
                           <td>
                             <div class="fw-semibold" x-text="provider.businessName || provider.name"></div>
                             <div class="text-muted fs-sm" x-show="provider.businessName" x-text="provider.name"></div>
+                          </td>
+                          <td class="crm-nowrap">
+                            <strong x-text="formatCredits(provider.walletBalanceCredits)"></strong>
+                            <span class="text-muted fs-sm"> credits</span>
                           </td>
                           <td class="crm-nowrap"><strong x-text="provider.distanceKm.toFixed(1) + ' km'"></strong></td>
                           <td>
@@ -101,13 +167,30 @@
                             <div class="text-muted fs-sm" x-show="provider.servicePincode" x-text="provider.servicePincode"></div>
                           </td>
                           <td>
+                            <span
+                              class="crm-status"
+                              :class="provider.whatsappAlertEligible ? 'status-active' : 'status-inactive'"
+                              x-text="provider.whatsappAlertEligible ? 'Ready' : alertReasonLabel(provider.whatsappAlertReason)"
+                            ></span>
+                          </td>
+                          <td>
                             <span class="crm-status" :class="provider.portalAccessEnabled === false ? 'status-inactive' : 'status-active'" x-text="provider.portalAccessEnabled === false ? 'Active · portal restricted' : 'Active'"></span>
                           </td>
-                          <td class="text-end"><a class="crm-row-action" :href="'/providers/' + provider.providerId">View provider</a></td>
+                          <td class="text-end crm-nowrap">
+                            <button
+                              x-show="can('requirements.manage')"
+                              x-cloak
+                              type="button"
+                              class="btn btn-light btn-sm me-2"
+                              :disabled="sendingAlerts || !canSendAlerts || !provider.whatsappAlertEligible"
+                              @click="sendAlerts([provider.providerId])"
+                            >Send alert</button>
+                            <a class="crm-row-action" :href="'/providers/' + provider.providerId">View provider</a>
+                          </td>
                         </tr>
                       </template>
                       <tr x-show="!loading && !filteredProviders.length">
-                        <td colspan="5">
+                        <td colspan="8">
                           <div class="crm-empty-state">
                             <strong x-text="searchText ? 'No matching providers' : 'No nearby providers'"></strong>
                             <span x-text="searchText ? 'Clear the provider search to see all nearby providers.' : 'No active same-category providers are within the saved alert radius.'"></span>
@@ -139,8 +222,17 @@
           searchText: '',
           sortOrder: 'nearest',
           loading: false,
+          sendingAlerts: false,
+          savingAutomaticAlerts: false,
+          selectedProviderIds: [],
           error: '',
+          successMessage: '',
           reason: '',
+          get canSendAlerts() {
+            return this.lead.marketplaceAvailable === true
+              && String(this.lead.marketplaceStatus || '').toLowerCase() === 'published'
+              && Number(this.lead.remainingUnlocks || 0) > 0;
+          },
           get filteredProviders() {
             const needle = String(this.searchText || '').trim().toLowerCase();
             const rows = this.providers.filter((provider) => {
@@ -157,6 +249,19 @@
           get providerCountLabel() {
             return this.providerCount + ' provider' + (this.providerCount === 1 ? '' : 's')
               + ' within the saved ' + this.radiusKm + ' km radius';
+          },
+          formatCredits(value) {
+            const credits = Number(value || 0);
+            if (!Number.isFinite(credits)) return '0';
+            return credits.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+          },
+          alertReasonLabel(reason) {
+            return {
+              portal_restricted: 'Portal restricted',
+              provider_alerts_disabled: 'Provider alerts off',
+              whatsapp_contact_missing: 'No WhatsApp number',
+              subcategory_not_selected: 'Service not selected',
+            }[String(reason || '')] || 'Not eligible';
           },
           async init() {
             const backLink = document.getElementById('nearby-provider-back-link');
@@ -175,10 +280,77 @@
               this.providerCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : this.providers.length;
               this.radiusKm = Number(body.radiusKm || this.lead.alertDistanceKm || 20);
               this.reason = body.reason || '';
+              const availableIds = new Set(this.providers.filter((provider) => provider.whatsappAlertEligible).map((provider) => provider.providerId));
+              this.selectedProviderIds = this.selectedProviderIds.filter((providerId) => availableIds.has(providerId));
             } catch (error) {
               this.error = error.message;
             } finally {
               this.loading = false;
+            }
+          },
+          async sendAlerts(providerIds) {
+            if (this.sendingAlerts || !this.canSendAlerts) return;
+            const selected = [...new Set((Array.isArray(providerIds) ? providerIds : [])
+              .map((providerId) => String(providerId || '').trim())
+              .filter(Boolean))];
+            if (!selected.length) return;
+            this.sendingAlerts = true;
+            this.error = '';
+            this.successMessage = '';
+            try {
+              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers/alerts', {
+                method: 'POST',
+                body: JSON.stringify({ providerIds: selected }),
+              });
+              const result = body.data || {};
+              const alerted = Number(result.alerted || 0);
+              const skippedIds = Array.isArray(result.skippedProviderIds) ? result.skippedProviderIds : [];
+              if (alerted > 0) {
+                this.successMessage = 'WhatsApp alert sent to ' + alerted + ' provider' + (alerted === 1 ? '' : 's') + '.';
+                showCrmToast(this.successMessage, 'success');
+              } else {
+                this.error = skippedIds.length
+                  ? 'No new WhatsApp alert was sent to the selected provider.'
+                  : 'No WhatsApp alert was sent. Check provider eligibility and the communication rule.';
+                showCrmToast(this.error, 'warning');
+              }
+              this.selectedProviderIds = this.selectedProviderIds.filter((providerId) => !selected.includes(providerId));
+            } catch (error) {
+              this.error = error.message;
+              showCrmToast(error.message, 'error');
+            } finally {
+              this.sendingAlerts = false;
+            }
+          },
+          async toggleAutomaticAlerts() {
+            if (this.savingAutomaticAlerts) return;
+            const nextEnabled = !this.lead.automaticWhatsappLeadAlertsEnabled;
+            if (nextEnabled) {
+              const message = this.canSendAlerts
+                ? 'Enable automatic WhatsApp alerts? Eligible nearby providers may be alerted immediately.'
+                : 'Enable automatic WhatsApp alerts? Eligible nearby providers will be alerted when this requirement is available.';
+              if (!window.confirm(message)) return;
+            }
+            this.savingAutomaticAlerts = true;
+            this.error = '';
+            this.successMessage = '';
+            try {
+              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers/automatic-alerts', {
+                method: 'POST',
+                body: JSON.stringify({ automaticWhatsappLeadAlertsEnabled: nextEnabled }),
+              });
+              const result = body.data || {};
+              if (result.lead) this.lead = { ...this.lead, ...result.lead };
+              const alerted = Number(result.alertSummary?.alerted || 0);
+              this.successMessage = nextEnabled
+                ? 'Automatic nearby WhatsApp alerts enabled' + (alerted > 0 ? ' · ' + alerted + ' provider' + (alerted === 1 ? '' : 's') + ' alerted.' : '.')
+                : 'Automatic nearby WhatsApp alerts disabled.';
+              showCrmToast(this.successMessage, 'success');
+            } catch (error) {
+              this.error = error.message;
+              showCrmToast(error.message, 'error');
+            } finally {
+              this.savingAutomaticAlerts = false;
             }
           }
         };

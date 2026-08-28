@@ -324,6 +324,7 @@ function presentEnquiry(row = {}) {
     alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
       ? alertDistanceKm
       : 20,
+    automaticWhatsappLeadAlertsEnabled: row.automaticWhatsappLeadAlertsEnabled === true,
     serviceTypes: Array.isArray(row.serviceTypes)
       ? row.serviceTypes.map((item) => ({
           serviceTypeId: item.serviceTypeId || item.id || "",
@@ -527,8 +528,10 @@ async function publishMarketplace(enquiryId, actor = "system") {
   });
 
   const publishedLead = await get(enquiryId);
-  let alertSummary = null;
-  if (remainingUnlocks > 0) {
+  let alertSummary = publishedLead.automaticWhatsappLeadAlertsEnabled === true
+    ? null
+    : { eligible: 0, alerted: 0, skipped: 0, reason: "automatic_alerts_disabled" };
+  if (remainingUnlocks > 0 && publishedLead.automaticWhatsappLeadAlertsEnabled === true) {
     try {
       alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
     } catch (error) {
@@ -539,6 +542,7 @@ async function publishMarketplace(enquiryId, actor = "system") {
         message: String(error.message || error).slice(0, 2000),
         stack: error.stack,
       });
+      alertSummary = { eligible: 0, alerted: 0, skipped: 0, reason: "dispatch_failed" };
     }
   }
   console.info({
@@ -553,6 +557,76 @@ async function publishMarketplace(enquiryId, actor = "system") {
     durationMs: Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2)),
   });
   return publishedLead;
+}
+
+async function setAutomaticWhatsappLeadAlerts(enquiryId, input = {}, actor = "admin") {
+  const existing = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
+  if (!existing) throw Object.assign(new Error("Lead not found"), { status: 404 });
+
+  const suppliedValue = Object.prototype.hasOwnProperty.call(input, "automaticWhatsappLeadAlertsEnabled")
+    ? input.automaticWhatsappLeadAlertsEnabled
+    : input.enabled;
+  if (suppliedValue === undefined) {
+    throw validationError("Automatic WhatsApp lead alert setting is required");
+  }
+  const enabled = booleanValue(suppliedValue, {
+    label: "Automatic WhatsApp lead alerts",
+  });
+  const currentEnabled = existing.automaticWhatsappLeadAlertsEnabled === true;
+  if (enabled === currentEnabled) {
+    return {
+      lead: presentEnquiry(existing),
+      alertSummary: null,
+      unchanged: true,
+    };
+  }
+
+  const now = new Date();
+  await Enquiry.updateOne(enquiryQuery(enquiryId), {
+    $set: {
+      automaticWhatsappLeadAlertsEnabled: enabled,
+      updatedAt: now,
+    },
+    $push: {
+      timeline: pushTimeline({
+        timelineId: uuid(),
+        type: "nearby_whatsapp_alert_setting",
+        message: enabled
+          ? "Automatic nearby provider WhatsApp alerts enabled"
+          : "Automatic nearby provider WhatsApp alerts disabled",
+        actor,
+        createdAt: now,
+      }),
+    },
+  });
+
+  const lead = await get(enquiryId);
+  let alertSummary = null;
+  if (
+    enabled
+    && lead.marketplaceAvailable === true
+    && lead.marketplaceStatus === "published"
+    && Number(lead.remainingUnlocks || 0) > 0
+  ) {
+    try {
+      alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(lead, actor);
+    } catch (error) {
+      console.error({
+        event: "nearby_alert_manual_enable_dispatch_failed",
+        enquiryId: lead.enquiryId,
+        code: String(error.code || "NEARBY_ALERT_DISPATCH_FAILED"),
+        message: String(error.message || error).slice(0, 2000),
+        stack: error.stack,
+      });
+      alertSummary = { eligible: 0, alerted: 0, skipped: 0, reason: "dispatch_failed" };
+    }
+  }
+
+  return {
+    lead,
+    alertSummary,
+    unchanged: false,
+  };
 }
 
 async function closeMarketplace(enquiryId, marketplaceStatus = "paused", actor = "system", closureReason = "status_change") {
@@ -757,6 +831,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "timeline", "statusUpdatedAt", "statusUpdatedBy", "deactivatedAt", "deactivatedBy",
     "deactivationReason", "unlockedCount", "reservedUnlockCount", "remainingUnlocks",
     "marketplaceStatus", "marketplaceAvailable", "marketplaceClosureReason", "marketplacePublishedAt", "marketplaceExpiresAt",
+    "automaticWhatsappLeadAlertsEnabled",
     "locationLatitude", "locationLongitude", "locationPincode", "locationVerifiedAt",
     "providerConfirmedCount", "providerSaleConversionStatus", "providerSaleConversionUpdatedAt",
     "providerSaleConvertedAt", "agentSaleConversion",
@@ -1122,6 +1197,7 @@ module.exports = {
   addNote,
   setActiveState,
   publishMarketplace,
+  setAutomaticWhatsappLeadAlerts,
   closeMarketplace,
   listProviderUnlocks,
   getProviderUnlock,

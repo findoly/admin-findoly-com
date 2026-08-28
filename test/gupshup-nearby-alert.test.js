@@ -21,6 +21,7 @@ function loadNearbyService(providers, notifications, queryCapture) {
             async *[Symbol.asyncIterator]() {
               for (const provider of providers) {
                 if (query.whatsappLeadAlertsEnabled?.$ne === false && provider.whatsappLeadAlertsEnabled === false) continue;
+                if (Array.isArray(query.providerId?.$in) && !query.providerId.$in.includes(provider.providerId)) continue;
                 yield provider;
               }
             },
@@ -65,6 +66,60 @@ test("CRM WhatsApp delivery uses Gupshup templates and has no Meta Cloud API pat
   assert.match(webhook, /metaMessageId = String\(payload\.id/);
   assert.match(config, /CRM_GUPSHUP_API_KEY/);
   assert.doesNotMatch(`${whatsapp}\n${webhook}\n${config}`, /graph\.facebook|META_WHATSAPP|x-hub-signature/i);
+});
+
+test("selected nearby alerts target only requested eligible providers", async () => {
+  const notifications = [];
+  const queryCapture = { value: null };
+  const providers = [
+    {
+      providerId: "provider-near",
+      name: "Nearby Provider",
+      normalizedWhatsappNumber: "9876543210",
+      serviceLatitude: 19.076,
+      serviceLongitude: 72.8777,
+    },
+    {
+      providerId: "provider-other",
+      name: "Other Provider",
+      normalizedWhatsappNumber: "9876543211",
+      serviceLatitude: 19.08,
+      serviceLongitude: 72.8777,
+    },
+  ];
+  const service = loadNearbyService(providers, notifications, queryCapture);
+  const lead = {
+    enquiryId: "lead-selected-1",
+    categorySlug: "painting",
+    category: "Painting",
+    serviceTypes: [{ serviceTypeId: "service-wall-painting", name: "Wall Painting", slug: "wall-painting" }],
+    remainingUnlocks: 3,
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "400064",
+    marketplacePublishedAt: new Date("2026-08-28T10:00:00.000Z"),
+  };
+
+  const result = await service.dispatchSelectedNearbyLeadAlerts(
+    lead,
+    ["provider-near", "provider-near"],
+    "employee@findoly.com",
+  );
+
+  assert.deepEqual(queryCapture.value.providerId, { $in: ["provider-near"] });
+  assert.equal(result.requested, 1);
+  assert.equal(result.eligible, 1);
+  assert.equal(result.alerted, 1);
+  assert.deepEqual(result.alertedProviderIds, ["provider-near"]);
+  assert.deepEqual(result.skippedProviderIds, []);
+  assert.deepEqual(notifications.map((item) => item.context.provider.providerId), ["provider-near"]);
+  assert.equal(notifications[0].context.idempotencyEntityId, "lead-selected-1:provider-near");
+  assert.throws(
+    () => service.normalizeTargetProviderIds("provider-near"),
+    /Provider selection must be a list/,
+  );
 });
 
 test("nearby lead alerts use the requirement radius with a 20 km legacy fallback", async () => {
@@ -130,6 +185,27 @@ test("nearby lead alerts use the requirement radius with a 20 km legacy fallback
   const kmPerLatitudeDegree = 6371.0088 * Math.PI / 180;
   const exactBoundary = service.distanceKmExact(0, 0, 20 / kmPerLatitudeDegree, 0);
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
+});
+
+test("requirement automatic nearby WhatsApp alerts are default-off and explicitly gated", () => {
+  const enquiryModel = source("models/Enquiry.js");
+  const enquiryService = source("services/enquiry/enquiry-service.js");
+  const routes = source("routes/enquiry.js");
+
+  assert.match(
+    enquiryModel,
+    /automaticWhatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: false \}/,
+  );
+  assert.match(
+    enquiryService,
+    /remainingUnlocks > 0 && publishedLead\.automaticWhatsappLeadAlertsEnabled === true/,
+  );
+  assert.match(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
+  assert.match(enquiryService, /"automaticWhatsappLeadAlertsEnabled"/);
+  assert.match(
+    routes,
+    /nearby-providers\/automatic-alerts", requirePermission\("requirements\.manage"\)/,
+  );
 });
 
 test("category defaults and requirement overrides expose validated alert distances", () => {

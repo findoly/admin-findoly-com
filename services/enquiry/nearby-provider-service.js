@@ -6,6 +6,7 @@ const nearbyLeadAlertService = require("../communication/nearby-lead-alert-servi
 const enquiryLocationService = require("../location/enquiry-location-service");
 const { identifierValue, numberValue } = require("../../utils/validation");
 const { resolveRequirementLocation } = require("../../utils/requirement-location");
+const { creditsFromPaise } = require("../../utils/credits");
 
 const DEFAULT_RADIUS_KM = 20;
 const MIN_RADIUS_KM = 1;
@@ -86,6 +87,10 @@ function presentLead(lead = {}) {
     category: lead.category || "",
     categorySlug: lead.categorySlug || "",
     alertDistanceKm: defaultRadiusKmForLead(lead),
+    automaticWhatsappLeadAlertsEnabled: lead.automaticWhatsappLeadAlertsEnabled === true,
+    marketplaceStatus: lead.marketplaceStatus || "draft",
+    marketplaceAvailable: lead.marketplaceAvailable === true,
+    remainingUnlocks: Math.max(0, Number(lead.remainingUnlocks || 0)),
     ...(resolved ? {
       latitude: resolved.latitude,
       longitude: resolved.longitude,
@@ -93,6 +98,22 @@ function presentLead(lead = {}) {
     locationLabel: requirementLocationLabel(lead),
     locationSource: resolved?.source || lead.locationSource || "",
   };
+}
+
+function providerWhatsappAlertState(provider = {}, lead = {}) {
+  if (provider.portalAccessEnabled === false) {
+    return { eligible: false, reason: "portal_restricted" };
+  }
+  if (provider.whatsappLeadAlertsEnabled === false) {
+    return { eligible: false, reason: "provider_alerts_disabled" };
+  }
+  if (!nearbyLeadAlertService.whatsappContact(provider)) {
+    return { eligible: false, reason: "whatsapp_contact_missing" };
+  }
+  if (!nearbyLeadAlertService.providerMatchesLeadPreference(provider, lead)) {
+    return { eligible: false, reason: "subcategory_not_selected" };
+  }
+  return { eligible: true, reason: "" };
 }
 
 function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_RADIUS_KM) {
@@ -108,6 +129,7 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
       provider.serviceLongitude,
     );
     if (distanceKm === null || distanceKm > radiusKm) continue;
+    const whatsappAlertState = providerWhatsappAlertState(provider, lead);
     rows.push({
       providerId: provider.providerId || provider.id || "",
       name: provider.name || "Provider",
@@ -121,6 +143,11 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
       latitude: Number(provider.serviceLatitude),
       longitude: Number(provider.serviceLongitude),
       distanceKm: Number(distanceKm.toFixed(1)),
+      walletBalancePaise: Math.max(0, Number(provider.walletBalancePaise || 0)),
+      walletBalanceCredits: creditsFromPaise(provider.walletBalancePaise),
+      whatsappAlertEligible: whatsappAlertState.eligible,
+      whatsappAlertReason: whatsappAlertState.reason,
+      whatsappLeadAlertsEnabled: provider.whatsappLeadAlertsEnabled !== false,
     });
   }
   return rows.sort((left, right) => left.distanceKm - right.distanceKm
@@ -145,6 +172,12 @@ async function listNearbyProviders(enquiryId, options = {}) {
       category: 1,
       categorySlug: 1,
       alertDistanceKm: 1,
+      automaticWhatsappLeadAlertsEnabled: 1,
+      marketplaceStatus: 1,
+      marketplaceAvailable: 1,
+      remainingUnlocks: 1,
+      serviceTypeId: 1,
+      serviceTypes: 1,
       addressLine: 1,
       city: 1,
       state: 1,
@@ -205,6 +238,13 @@ async function listNearbyProviders(enquiryId, options = {}) {
       businessName: 1,
       status: 1,
       portalAccessEnabled: 1,
+      whatsappLeadAlertsEnabled: 1,
+      whatsappLeadPreferences: 1,
+      mobile: 1,
+      normalizedMobile: 1,
+      whatsappNumber: 1,
+      normalizedWhatsappNumber: 1,
+      walletBalancePaise: 1,
       city: 1,
       state: 1,
       servicePincode: 1,
@@ -226,6 +266,33 @@ async function listNearbyProviders(enquiryId, options = {}) {
   };
 }
 
+async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin") {
+  const value = identifierValue(enquiryId, { label: "Lead Reference ID" });
+  const providerIds = nearbyLeadAlertService.normalizeTargetProviderIds(input.providerIds);
+  if (!providerIds.length) {
+    throw Object.assign(new Error("Select at least one provider for WhatsApp alert"), { status: 400 });
+  }
+
+  let lead = await Enquiry.findOne({ $or: [{ enquiryId: value }, { id: value }] }).lean();
+  if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+  if (
+    lead.marketplaceAvailable !== true
+    || String(lead.marketplaceStatus || "").toLowerCase() !== "published"
+    || Number(lead.remainingUnlocks || 0) <= 0
+  ) {
+    throw Object.assign(new Error("This requirement is not currently available to providers"), { status: 409 });
+  }
+
+  if (!resolveRequirementLocation(lead) || canonicalLocationPincodeMismatch(lead)) {
+    const syncedLocation = await enquiryLocationService.syncLeadLocation(lead, {
+      fillMissingDescriptive: false,
+    });
+    if (syncedLocation) lead = { ...lead, ...syncedLocation };
+  }
+
+  return nearbyLeadAlertService.dispatchSelectedNearbyLeadAlerts(lead, providerIds, actor);
+}
+
 module.exports = {
   DEFAULT_RADIUS_KM,
   MIN_RADIUS_KM,
@@ -237,7 +304,9 @@ module.exports = {
   normalizeRadiusKm,
   providerLocationLabel,
   requirementLocationLabel,
+  providerWhatsappAlertState,
   presentLead,
   buildNearbyProviderRows,
   listNearbyProviders,
+  sendSelectedProviderAlerts,
 };
