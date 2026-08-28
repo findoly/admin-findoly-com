@@ -125,6 +125,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   const radiusKm = alertDistanceKmForLead(lead);
   const targetProviderIds = normalizeTargetProviderIds(options.providerIds);
   const targeted = targetProviderIds.length > 0;
+  const manualResend = targeted && options.manual === true;
   const previouslyAlertedProviderIds = new Set(
     (Array.isArray(lead?.providerWhatsappAlerts) ? lead.providerWhatsappAlerts : [])
       .map((entry) => String(entry?.providerId || "").trim())
@@ -158,14 +159,14 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     !lead
     || !lead.enquiryId
     || !lead.categorySlug
-    || Number(lead.unlockedCount || 0) > 0
+    || (!manualResend && Number(lead.unlockedCount || 0) > 0)
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
     const reason = !lead?.enquiryId
       ? "lead_id_missing"
       : !lead?.categorySlug
         ? "lead_category_missing"
-        : Number(lead?.unlockedCount || 0) > 0
+        : !manualResend && Number(lead?.unlockedCount || 0) > 0
           ? "provider_already_unlocked"
           : "remaining_unlocks_zero";
     console.warn({ event: "nearby_alert_dispatch_skipped", enquiryId: leadId, reason });
@@ -254,7 +255,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     databaseCandidates += 1;
     const providerId = String(provider.providerId || "");
     if (providerId) seenProviderIds.add(providerId);
-    if (providerId && previouslyAlertedProviderIds.has(providerId)) {
+    if (!manualResend && providerId && previouslyAlertedProviderIds.has(providerId)) {
       alreadyAlerted += 1;
       if (targeted) skippedProviderIds.add(providerId);
       continue;
@@ -347,7 +348,7 @@ async function dispatchSelectedNearbyLeadAlerts(lead, providerIds, actor = "syst
   if (!normalizedProviderIds.length) {
     throw Object.assign(new Error("Select at least one provider for WhatsApp alert"), { status: 400 });
   }
-  return dispatchNearbyLeadAlerts(lead, actor, { providerIds: normalizedProviderIds });
+  return dispatchNearbyLeadAlerts(lead, actor, { providerIds: normalizedProviderIds, manual: true });
 }
 
 module.exports = {
