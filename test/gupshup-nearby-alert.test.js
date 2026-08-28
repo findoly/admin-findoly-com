@@ -122,6 +122,61 @@ test("selected nearby alerts target only requested eligible providers", async ()
   );
 });
 
+test("provider alerts stop after the first unlock and skip providers already alerted", async () => {
+  const notifications = [];
+  const queryCapture = { value: null };
+  const providers = [
+    {
+      providerId: "provider-near",
+      name: "Nearby Provider",
+      normalizedWhatsappNumber: "9876543210",
+      serviceLatitude: 19.076,
+      serviceLongitude: 72.8777,
+    },
+    {
+      providerId: "provider-other",
+      name: "Other Provider",
+      normalizedWhatsappNumber: "9876543211",
+      serviceLatitude: 19.08,
+      serviceLongitude: 72.8777,
+    },
+  ];
+  const service = loadNearbyService(providers, notifications, queryCapture);
+  const baseLead = {
+    enquiryId: "lead-alert-stop",
+    categorySlug: "painting",
+    category: "Painting",
+    remainingUnlocks: 2,
+    locationLatitude: 19.076,
+    locationLongitude: 72.8777,
+    marketplacePublishedAt: new Date("2026-08-28T10:00:00.000Z"),
+  };
+
+  const stopped = await service.dispatchNearbyLeadAlerts(
+    { ...baseLead, unlockedCount: 1 },
+    "employee@findoly.com",
+  );
+  assert.equal(stopped.reason, "provider_already_unlocked");
+  assert.deepEqual(stopped.alertedProviderIds, []);
+  assert.equal(notifications.length, 0);
+
+  const result = await service.dispatchNearbyLeadAlerts({
+    ...baseLead,
+    enquiryId: "lead-alert-skip",
+    unlockedCount: 0,
+    providerWhatsappAlerts: [{
+      providerId: "provider-near",
+      alertedAt: new Date("2026-08-28T09:30:00.000Z"),
+      mode: "manual",
+    }],
+  }, "employee@findoly.com");
+
+  assert.equal(result.alreadyAlerted, 1);
+  assert.equal(result.alerted, 1);
+  assert.deepEqual(result.alertedProviderIds, ["provider-other"]);
+  assert.deepEqual(notifications.map((item) => item.context.provider.providerId), ["provider-other"]);
+});
+
 test("nearby lead alerts use the requirement radius with a 20 km legacy fallback", async () => {
   const notifications = [];
   const queryCapture = { value: null };
@@ -198,8 +253,9 @@ test("requirement automatic nearby WhatsApp alerts are default-off and explicitl
   );
   assert.match(
     enquiryService,
-    /remainingUnlocks > 0 && publishedLead\.automaticWhatsappLeadAlertsEnabled === true/,
+    /remainingUnlocks > 0[\s\S]*Number\(publishedLead\.unlockedCount \|\| 0\) === 0[\s\S]*publishedLead\.automaticWhatsappLeadAlertsEnabled === true/,
   );
+  assert.match(enquiryService, /recordSuccessfulProviderAlerts/);
   assert.match(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
   assert.match(enquiryService, /"automaticWhatsappLeadAlertsEnabled"/);
   assert.match(
