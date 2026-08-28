@@ -37,26 +37,16 @@ function providerAlertFor(lead = {}, providerId) {
 function providerAlertSummary(lead = {}) {
   const alerts = normalizedProviderAlerts(lead);
   const count = alerts.length;
-  const unlocked = Math.max(0, Number(lead.unlockedCount || 0)) > 0;
   const published = lead.marketplaceAvailable === true
     && String(lead.marketplaceStatus || "").toLowerCase() === "published"
     && Number(lead.remainingUnlocks || 0) > 0;
 
-  if (unlocked) {
-    return {
-      code: "provider_unlocked",
-      label: "Provider unlocked · Alerts stopped",
-      count,
-      canSend: false,
-      automatic: true,
-    };
-  }
   if (published) {
     return {
       code: "automatic_enabled",
       label: count > 0
-        ? `Automatic alerts active · ${count} provider${count === 1 ? "" : "s"} alerted`
-        : "Automatic alerts active",
+        ? `Automatic WhatsApp active · ${count} provider${count === 1 ? "" : "s"} sent`
+        : "Automatic WhatsApp active",
       count,
       canSend: true,
       automatic: true,
@@ -64,7 +54,7 @@ function providerAlertSummary(lead = {}) {
   }
   return {
     code: "not_ready",
-    label: "Provider alerts not ready",
+    label: "Provider messaging not ready",
     count,
     canSend: false,
     automatic: true,
