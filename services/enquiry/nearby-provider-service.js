@@ -3,6 +3,7 @@
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
+const providerAlertStateService = require("./provider-alert-state-service");
 const enquiryLocationService = require("../location/enquiry-location-service");
 const { identifierValue, numberValue } = require("../../utils/validation");
 const { resolveRequirementLocation } = require("../../utils/requirement-location");
@@ -81,6 +82,11 @@ function requirementLocationLabel(lead = {}) {
 
 function presentLead(lead = {}) {
   const resolved = resolveRequirementLocation(lead);
+  const providerWhatsappAlerts = providerAlertStateService.normalizedProviderAlerts(lead);
+  const providerAlertStatus = providerAlertStateService.providerAlertSummary({
+    ...lead,
+    providerWhatsappAlerts,
+  });
   return {
     enquiryId: lead.enquiryId || lead.id || "",
     requirementTitle: lead.requirementTitle || lead.serviceType || "Requirement",
@@ -91,6 +97,9 @@ function presentLead(lead = {}) {
     marketplaceStatus: lead.marketplaceStatus || "draft",
     marketplaceAvailable: lead.marketplaceAvailable === true,
     remainingUnlocks: Math.max(0, Number(lead.remainingUnlocks || 0)),
+    unlockedCount: Math.max(0, Number(lead.unlockedCount || 0)),
+    providerWhatsappAlerts,
+    providerAlertStatus,
     ...(resolved ? {
       latitude: resolved.latitude,
       longitude: resolved.longitude,
@@ -101,6 +110,13 @@ function presentLead(lead = {}) {
 }
 
 function providerWhatsappAlertState(provider = {}, lead = {}) {
+  const providerId = provider.providerId || provider.id || "";
+  if (Number(lead.unlockedCount || 0) > 0) {
+    return { eligible: false, reason: "provider_unlocked" };
+  }
+  if (providerAlertStateService.providerAlertFor(lead, providerId)) {
+    return { eligible: false, reason: "already_alerted" };
+  }
   if (provider.portalAccessEnabled === false) {
     return { eligible: false, reason: "portal_restricted" };
   }
@@ -129,9 +145,11 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
       provider.serviceLongitude,
     );
     if (distanceKm === null || distanceKm > radiusKm) continue;
+    const providerId = provider.providerId || provider.id || "";
+    const existingAlert = providerAlertStateService.providerAlertFor(lead, providerId);
     const whatsappAlertState = providerWhatsappAlertState(provider, lead);
     rows.push({
-      providerId: provider.providerId || provider.id || "",
+      providerId,
       name: provider.name || "Provider",
       businessName: provider.businessName || "",
       status: provider.status || "active",
@@ -148,6 +166,9 @@ function buildNearbyProviderRows(lead = {}, providers = [], radiusKm = DEFAULT_R
       whatsappAlertEligible: whatsappAlertState.eligible,
       whatsappAlertReason: whatsappAlertState.reason,
       whatsappLeadAlertsEnabled: provider.whatsappLeadAlertsEnabled !== false,
+      alertAlreadySent: Boolean(existingAlert),
+      alertedAt: existingAlert?.alertedAt || null,
+      alertMode: existingAlert?.mode || "",
     });
   }
   return rows.sort((left, right) => left.distanceKm - right.distanceKm
@@ -173,9 +194,11 @@ async function listNearbyProviders(enquiryId, options = {}) {
       categorySlug: 1,
       alertDistanceKm: 1,
       automaticWhatsappLeadAlertsEnabled: 1,
+      providerWhatsappAlerts: 1,
       marketplaceStatus: 1,
       marketplaceAvailable: 1,
       remainingUnlocks: 1,
+      unlockedCount: 1,
       serviceTypeId: 1,
       serviceTypes: 1,
       addressLine: 1,
@@ -257,12 +280,18 @@ async function listNearbyProviders(enquiryId, options = {}) {
     .lean();
 
   const data = buildNearbyProviderRows(workingLead, providers, radiusKm);
+  const eligibleCount = data.filter((provider) => provider.whatsappAlertEligible).length;
   return {
     lead: presentedLead,
     radiusKm,
     count: data.length,
+    eligibleCount,
     data,
-    reason: data.length ? "" : "no_providers_in_radius",
+    reason: !data.length
+      ? "no_providers_in_radius"
+      : eligibleCount === 0
+        ? "no_eligible_providers"
+        : "",
   };
 }
 
@@ -275,12 +304,23 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
 
   let lead = await Enquiry.findOne({ $or: [{ enquiryId: value }, { id: value }] }).lean();
   if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+  if (Number(lead.unlockedCount || 0) > 0) {
+    throw Object.assign(new Error("Provider alerts are stopped because this requirement has already been unlocked"), { status: 409 });
+  }
   if (
     lead.marketplaceAvailable !== true
     || String(lead.marketplaceStatus || "").toLowerCase() !== "published"
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
     throw Object.assign(new Error("This requirement is not currently available to providers"), { status: 409 });
+  }
+
+  const alreadyAlertedProviderIds = providerIds.filter((providerId) =>
+    Boolean(providerAlertStateService.providerAlertFor(lead, providerId)));
+  const providerIdsToSend = providerIds.filter((providerId) =>
+    !alreadyAlertedProviderIds.includes(providerId));
+  if (!providerIdsToSend.length) {
+    throw Object.assign(new Error("The selected provider has already received this WhatsApp alert"), { status: 409 });
   }
 
   if (!resolveRequirementLocation(lead) || canonicalLocationPincodeMismatch(lead)) {
@@ -290,7 +330,22 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
     if (syncedLocation) lead = { ...lead, ...syncedLocation };
   }
 
-  return nearbyLeadAlertService.dispatchSelectedNearbyLeadAlerts(lead, providerIds, actor);
+  const result = await nearbyLeadAlertService.dispatchSelectedNearbyLeadAlerts(
+    lead,
+    providerIdsToSend,
+    actor,
+  );
+  if (Array.isArray(result.alertedProviderIds) && result.alertedProviderIds.length) {
+    await providerAlertStateService.recordSuccessfulProviderAlerts(
+      lead.enquiryId || lead.id,
+      result.alertedProviderIds,
+      { mode: "manual", actor },
+    );
+  }
+  return {
+    ...result,
+    alreadyAlertedProviderIds,
+  };
 }
 
 module.exports = {
