@@ -22,7 +22,7 @@ function loadService(updateOne) {
   }
 }
 
-test("provider alert summary reports automatic primary delivery, sent history, and unlocked states", () => {
+test("provider messaging summary keeps manual sending available after unlock", () => {
   const service = loadService(async () => ({ modifiedCount: 0 }));
   const base = {
     marketplaceAvailable: true,
@@ -35,7 +35,7 @@ test("provider alert summary reports automatic primary delivery, sent history, a
     service.providerAlertSummary(base),
     {
       code: "automatic_enabled",
-      label: "Automatic alerts active",
+      label: "Automatic WhatsApp active",
       count: 0,
       canSend: true,
       automatic: true,
@@ -51,7 +51,7 @@ test("provider alert summary reports automatic primary delivery, sent history, a
     }],
   });
   assert.equal(sent.code, "automatic_enabled");
-  assert.equal(sent.label, "Automatic alerts active · 1 provider alerted");
+  assert.equal(sent.label, "Automatic WhatsApp active · 1 provider sent");
   assert.equal(sent.count, 1);
   assert.equal(sent.canSend, true);
 
@@ -63,7 +63,7 @@ test("provider alert summary reports automatic primary delivery, sent history, a
     ],
   });
   assert.equal(automatic.code, "automatic_enabled");
-  assert.equal(automatic.label, "Automatic alerts active · 2 providers alerted");
+  assert.equal(automatic.label, "Automatic WhatsApp active · 2 providers sent");
   assert.equal(automatic.count, 2);
 
   const unlocked = service.providerAlertSummary({
@@ -71,9 +71,9 @@ test("provider alert summary reports automatic primary delivery, sent history, a
     unlockedCount: 1,
     providerWhatsappAlerts: [{ providerId: "provider-1", alertedAt: new Date(), mode: "manual" }],
   });
-  assert.equal(unlocked.code, "provider_unlocked");
-  assert.equal(unlocked.label, "Provider unlocked · Alerts stopped");
-  assert.equal(unlocked.canSend, false);
+  assert.equal(unlocked.code, "automatic_enabled");
+  assert.equal(unlocked.label, "Automatic WhatsApp active · 1 provider sent");
+  assert.equal(unlocked.canSend, true);
 });
 
 test("provider alert normalization keeps one durable record per provider", () => {

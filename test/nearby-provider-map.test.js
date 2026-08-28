@@ -71,33 +71,34 @@ test("nearby provider discovery stays view-only while alert actions require mana
   assert.match(controller, /nearbyProviderService\.listNearbyProviders/);
   assert.match(controller, /nearbyProviderService\.sendSelectedProviderAlerts/);
   assert.doesNotMatch(controller, /setAutomaticWhatsappLeadAlerts/);
-  assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby Provider Alerts"\)/);
+  assert.match(frontendController, /enquiryNearbyProviders:\s*render\("enquiry\/nearby-providers", "Nearby Providers"\)/);
 });
 
-test("requirement details provider-alert action is clearly named and shows nearby count", () => {
+test("requirement details use Nearby providers without provider-alert status cards", () => {
   const action = source("public/js/nearby-providers-action.js");
   const head = source("views/partials/head.ejs");
   const leadView = source("views/enquiry/show.ejs");
+  const listView = source("views/enquiry/index.ejs");
 
   assert.match(action, /Provider status/);
-  assert.match(action, /Send Provider Alert/);
-  assert.match(action, /Provider Alerts/);
-  assert.match(action, /nearby\)/);
+  assert.match(action, /Nearby providers/);
   assert.match(action, /body\.count/);
   assert.match(action, /apiFetch\('\/api\/enquiry\/' \+ encodeURIComponent\(leadId\) \+ '\/nearby-providers'\)/);
   assert.match(head, /title === 'Requirement details'/);
   assert.match(head, /nearby-providers-action\.js\?v=20260828-alert-status-1/);
   assert.match(leadView, /Provider status/);
   assert.match(leadView, /Lead action centre/);
-  assert.match(leadView, /Provider alert/);
-  assert.match(leadView, /Select a nearby provider and send the WhatsApp alert/);
+  assert.doesNotMatch(leadView, /Provider alert/);
+  assert.doesNotMatch(leadView, /providerAlertStatus\.label/);
+  assert.match(listView, /Nearby providers/);
+  assert.doesNotMatch(listView, />Provider alert</);
 });
 
-test("nearby provider page keeps list-only discovery and adds controlled WhatsApp actions", () => {
+test("nearby provider page keeps one manual WhatsApp table without alert-status cards", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
-  assert.match(view, /Providers available for alert/);
-  assert.match(view, /Provider alert status/);
+  assert.match(view, /Nearby providers/);
+  assert.match(view, /Select nearby providers and send WhatsApp manually when needed/);
   assert.match(view, /Find provider/);
   assert.match(view, /Nearest first/);
   assert.match(view, /Farthest first/);
@@ -105,14 +106,13 @@ test("nearby provider page keeps list-only discovery and adds controlled WhatsAp
   assert.match(view, /providerCountLabel/);
   assert.match(view, /within the saved ' \+ this\.radiusKm \+ ' km radius'/);
   assert.match(view, /provider\.walletBalanceCredits/);
-  assert.match(view, /Send alert to selected/);
-  assert.match(view, /provider\.alertAlreadySent \? 'Alert sent' : 'Send alert'/);
-  assert.match(view, /Automatic WhatsApp alerts are sent to eligible nearby providers/);
-  assert.match(view, /manual send remains available for eligible providers/);
+  assert.match(view, /Send WhatsApp to selected/);
+  assert.match(view, />Send WhatsApp</);
+  assert.doesNotMatch(view, /Provider alert status/);
+  assert.doesNotMatch(view, /Providers available for alert/);
+  assert.doesNotMatch(view, /Provider unlocked · Further provider WhatsApp alerts are stopped/);
   assert.doesNotMatch(view, /automaticWhatsappLeadAlertsEnabled/);
-  assert.match(view, /Provider unlocked · Further provider WhatsApp alerts are stopped/);
   assert.match(view, /No eligible nearby providers/);
-  assert.match(view, /formatAlertTime/);
   assert.match(view, /can\('requirements\.manage'\)/);
   assert.match(view, /nearby-providers\/alerts/);
   assert.doesNotMatch(view, /nearby-providers\/automatic-alerts/);
@@ -244,7 +244,7 @@ test("nearby provider rows expose credits and WhatsApp alert eligibility without
   assert.equal(rows[1].whatsappAlertReason, "provider_alerts_disabled");
 });
 
-test("nearby provider rows show durable alert history and stop new alerts after unlock", () => {
+test("nearby provider rows keep manual WhatsApp eligible after history and unlock", () => {
   const service = loadNearbyProviderService();
   const baseLead = {
     categorySlug: "painting",
@@ -264,7 +264,7 @@ test("nearby provider rows show durable alert history and stop new alerts after 
   const providers = [
     {
       providerId: "provider-alerted",
-      name: "Already Alerted",
+      name: "Already Sent",
       portalAccessEnabled: true,
       whatsappLeadAlertsEnabled: true,
       normalizedWhatsappNumber: "9876543210",
@@ -283,21 +283,18 @@ test("nearby provider rows show durable alert history and stop new alerts after 
   ];
 
   const rows = service.buildNearbyProviderRows(baseLead, providers, 20);
-  const alerted = rows.find((row) => row.providerId === "provider-alerted");
+  const sent = rows.find((row) => row.providerId === "provider-alerted");
   const ready = rows.find((row) => row.providerId === "provider-ready");
 
-  assert.equal(alerted.alertAlreadySent, true);
-  assert.equal(alerted.whatsappAlertEligible, false);
-  assert.equal(alerted.whatsappAlertReason, "already_alerted");
-  assert.equal(alerted.alertMode, "manual");
-  assert.equal(String(alerted.alertedAt), String(baseLead.providerWhatsappAlerts[0].alertedAt));
-  assert.equal(ready.alertAlreadySent, false);
+  assert.equal(sent.alertAlreadySent, true);
+  assert.equal(sent.whatsappAlertEligible, true);
+  assert.equal(sent.whatsappAlertReason, "");
+  assert.equal(sent.alertMode, "manual");
   assert.equal(ready.whatsappAlertEligible, true);
 
   const unlockedRows = service.buildNearbyProviderRows({ ...baseLead, unlockedCount: 1 }, providers, 20);
-  assert.ok(unlockedRows.every((row) => row.whatsappAlertEligible === false));
-  assert.ok(unlockedRows.every((row) => row.whatsappAlertReason === "provider_unlocked"));
-  assert.equal(service.presentLead({ ...baseLead, unlockedCount: 1 }).providerAlertStatus.code, "provider_unlocked");
+  assert.ok(unlockedRows.every((row) => row.whatsappAlertEligible === true));
+  assert.equal(service.presentLead({ ...baseLead, unlockedCount: 1 }).providerAlertStatus.canSend, true);
 });
 
 test("nearby provider rows exclude outside or invalid locations and sort nearest first", () => {
