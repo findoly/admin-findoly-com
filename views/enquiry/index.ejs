@@ -90,6 +90,14 @@
                             <div class="crm-record-id" x-text="recordId(lead, 'enquiryId')"></div>
                             <div class="text-muted fs-sm mt-1" x-show="lead.referralId"><span class="fw-semibold">Agent</span> · <span x-text="lead.referralId"></span> · <span x-text="lead.agentBusinessName || lead.agentName || 'Agent Portal'"></span></div>
                             <div class="text-muted fs-sm mt-1"><span class="fw-semibold">Validation</span> · <span class="crm-status" :class="statusClass(lead.agentReferralValidation||'pending')" x-text="humanize(lead.agentReferralValidation||'pending')"></span></div>
+                            <div x-show="lead.providerAlertStatus && lead.providerAlertStatus.code !== 'not_ready'" x-cloak class="text-muted fs-sm mt-1">
+                              <span class="fw-semibold">Provider alert</span> ·
+                              <span
+                                class="crm-status"
+                                :class="statusClass(lead.providerAlertStatus.code === 'alert_pending' ? 'pending' : (lead.providerAlertStatus.code === 'provider_unlocked' ? 'closed' : 'active'))"
+                                x-text="lead.providerAlertStatus.label"
+                              ></span>
+                            </div>
                             <div class="crm-mobile-meta d-lg-none" x-text="leadName(lead) + ' · ' + leadMobile(lead)"></div>
                           </td>
                           <td class="crm-hide-mobile"><div class="fw-semibold" x-text="leadName(lead)"></div><div class="text-muted fs-sm" x-text="leadMobile(lead)"></div></td>
@@ -102,6 +110,13 @@
                           <td class="text-end"><div class="fw-semibold" x-text="money(lead.leadPricePaise)"></div><div class="text-muted fs-sm">per unlock</div></td>
                           <td class="text-end crm-nowrap">
                             <a class="crm-row-action" :href="'/enquiries/' + recordId(lead, 'enquiryId')">View</a>
+                            <a
+                              x-show="lead.providerAlertStatus && lead.providerAlertStatus.code !== 'not_ready'"
+                              x-cloak
+                              class="crm-row-action"
+                              :href="'/enquiries/' + recordId(lead, 'enquiryId') + '/nearby-providers'"
+                              x-text="lead.providerAlertStatus.canSend ? 'Send Provider Alert' : 'Provider Alerts'"
+                            ></a>
                             <a class="crm-row-action" :href="'/enquiries/' + recordId(lead, 'enquiryId') + '/providers'">Provider status</a>
                             <a class="crm-row-action crm-row-action-muted" :href="'/enquiries/' + recordId(lead, 'enquiryId') + '/edit'">Edit</a>
                           </td>
