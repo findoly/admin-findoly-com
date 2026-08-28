@@ -38,7 +38,6 @@ function providerAlertSummary(lead = {}) {
   const alerts = normalizedProviderAlerts(lead);
   const count = alerts.length;
   const unlocked = Math.max(0, Number(lead.unlockedCount || 0)) > 0;
-  const automatic = lead.automaticWhatsappLeadAlertsEnabled === true;
   const published = lead.marketplaceAvailable === true
     && String(lead.marketplaceStatus || "").toLowerCase() === "published"
     && Number(lead.remainingUnlocks || 0) > 0;
@@ -49,36 +48,18 @@ function providerAlertSummary(lead = {}) {
       label: "Provider unlocked · Alerts stopped",
       count,
       canSend: false,
-      automatic,
-    };
-  }
-  if (automatic) {
-    return {
-      code: "automatic_enabled",
-      label: count > 0
-        ? `Automatic alerts enabled · ${count} provider${count === 1 ? "" : "s"} alerted`
-        : "Automatic alerts enabled",
-      count,
-      canSend: published,
       automatic: true,
-    };
-  }
-  if (count > 0) {
-    return {
-      code: "alert_sent",
-      label: `Alert sent · ${count} provider${count === 1 ? "" : "s"}`,
-      count,
-      canSend: published,
-      automatic: false,
     };
   }
   if (published) {
     return {
-      code: "alert_pending",
-      label: "Alert pending",
-      count: 0,
+      code: "automatic_enabled",
+      label: count > 0
+        ? `Automatic alerts active · ${count} provider${count === 1 ? "" : "s"} alerted`
+        : "Automatic alerts active",
+      count,
       canSend: true,
-      automatic: false,
+      automatic: true,
     };
   }
   return {
@@ -86,7 +67,7 @@ function providerAlertSummary(lead = {}) {
     label: "Provider alerts not ready",
     count,
     canSend: false,
-    automatic,
+    automatic: true,
   };
 }
 
