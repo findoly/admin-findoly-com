@@ -236,7 +236,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
       }, actor);
       return {
         providerId: String(provider.providerId || ""),
-        sent: output.length > 0,
+        sent: output.some((item) => String(item?.status || "").toLowerCase() !== "failed"),
       };
     }));
     for (const result of results) {
