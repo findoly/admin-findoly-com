@@ -3,6 +3,7 @@ const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const catalogService = require("../catalog/catalog-service");
 const notificationService = require("../communication/notification-service");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
+const providerAlertStateService = require("./provider-alert-state-service");
 const uuid = require("../../utils/uuid");
 const { validateMobile } = require("../../utils/mobile");
 const {
@@ -295,6 +296,15 @@ function presentEnquiry(row = {}) {
   const remainingUnlocks = Number.isFinite(Number(row.remainingUnlocks))
     ? Math.max(0, Number(row.remainingUnlocks))
     : Math.max(0, maxProviderUnlocks - unlockedCount - reservedUnlockCount);
+  const providerWhatsappAlerts = providerAlertStateService.normalizedProviderAlerts(row);
+  const providerAlertStatus = providerAlertStateService.providerAlertSummary({
+    ...row,
+    unlockedCount,
+    reservedUnlockCount,
+    remainingUnlocks,
+    maxProviderUnlocks,
+    providerWhatsappAlerts,
+  });
 
   return {
     ...row,
@@ -324,7 +334,8 @@ function presentEnquiry(row = {}) {
     alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
       ? alertDistanceKm
       : 20,
-    automaticWhatsappLeadAlertsEnabled: row.automaticWhatsappLeadAlertsEnabled === true,
+    providerWhatsappAlerts,
+    providerAlertStatus,
     serviceTypes: Array.isArray(row.serviceTypes)
       ? row.serviceTypes.map((item) => ({
           serviceTypeId: item.serviceTypeId || item.id || "",
@@ -527,13 +538,22 @@ async function publishMarketplace(enquiryId, actor = "system") {
     },
   });
 
-  const publishedLead = await get(enquiryId);
-  let alertSummary = publishedLead.automaticWhatsappLeadAlertsEnabled === true
-    ? null
-    : { eligible: 0, alerted: 0, skipped: 0, reason: "automatic_alerts_disabled" };
-  if (remainingUnlocks > 0 && publishedLead.automaticWhatsappLeadAlertsEnabled === true) {
+  let publishedLead = await get(enquiryId);
+  let alertSummary = null;
+  if (
+    remainingUnlocks > 0
+    && Number(publishedLead.unlockedCount || 0) === 0
+  ) {
     try {
       alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
+      if (Array.isArray(alertSummary.alertedProviderIds) && alertSummary.alertedProviderIds.length) {
+        await providerAlertStateService.recordSuccessfulProviderAlerts(
+          publishedLead.enquiryId,
+          alertSummary.alertedProviderIds,
+          { mode: "automatic", actor },
+        );
+        publishedLead = await get(enquiryId);
+      }
     } catch (error) {
       console.error({
         event: "nearby_alert_dispatch_failed",
@@ -557,76 +577,6 @@ async function publishMarketplace(enquiryId, actor = "system") {
     durationMs: Number((Number(process.hrtime.bigint() - startedAt) / 1e6).toFixed(2)),
   });
   return publishedLead;
-}
-
-async function setAutomaticWhatsappLeadAlerts(enquiryId, input = {}, actor = "admin") {
-  const existing = await Enquiry.findOne(enquiryQuery(enquiryId)).lean();
-  if (!existing) throw Object.assign(new Error("Lead not found"), { status: 404 });
-
-  const suppliedValue = Object.prototype.hasOwnProperty.call(input, "automaticWhatsappLeadAlertsEnabled")
-    ? input.automaticWhatsappLeadAlertsEnabled
-    : input.enabled;
-  if (suppliedValue === undefined) {
-    throw validationError("Automatic WhatsApp lead alert setting is required");
-  }
-  const enabled = booleanValue(suppliedValue, {
-    label: "Automatic WhatsApp lead alerts",
-  });
-  const currentEnabled = existing.automaticWhatsappLeadAlertsEnabled === true;
-  if (enabled === currentEnabled) {
-    return {
-      lead: presentEnquiry(existing),
-      alertSummary: null,
-      unchanged: true,
-    };
-  }
-
-  const now = new Date();
-  await Enquiry.updateOne(enquiryQuery(enquiryId), {
-    $set: {
-      automaticWhatsappLeadAlertsEnabled: enabled,
-      updatedAt: now,
-    },
-    $push: {
-      timeline: pushTimeline({
-        timelineId: uuid(),
-        type: "nearby_whatsapp_alert_setting",
-        message: enabled
-          ? "Automatic nearby provider WhatsApp alerts enabled"
-          : "Automatic nearby provider WhatsApp alerts disabled",
-        actor,
-        createdAt: now,
-      }),
-    },
-  });
-
-  const lead = await get(enquiryId);
-  let alertSummary = null;
-  if (
-    enabled
-    && lead.marketplaceAvailable === true
-    && lead.marketplaceStatus === "published"
-    && Number(lead.remainingUnlocks || 0) > 0
-  ) {
-    try {
-      alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(lead, actor);
-    } catch (error) {
-      console.error({
-        event: "nearby_alert_manual_enable_dispatch_failed",
-        enquiryId: lead.enquiryId,
-        code: String(error.code || "NEARBY_ALERT_DISPATCH_FAILED"),
-        message: String(error.message || error).slice(0, 2000),
-        stack: error.stack,
-      });
-      alertSummary = { eligible: 0, alerted: 0, skipped: 0, reason: "dispatch_failed" };
-    }
-  }
-
-  return {
-    lead,
-    alertSummary,
-    unchanged: false,
-  };
 }
 
 async function closeMarketplace(enquiryId, marketplaceStatus = "paused", actor = "system", closureReason = "status_change") {
@@ -831,7 +781,7 @@ async function update(enquiryId, input = {}, actor = "admin") {
     "timeline", "statusUpdatedAt", "statusUpdatedBy", "deactivatedAt", "deactivatedBy",
     "deactivationReason", "unlockedCount", "reservedUnlockCount", "remainingUnlocks",
     "marketplaceStatus", "marketplaceAvailable", "marketplaceClosureReason", "marketplacePublishedAt", "marketplaceExpiresAt",
-    "automaticWhatsappLeadAlertsEnabled",
+    "providerWhatsappAlerts",
     "locationLatitude", "locationLongitude", "locationPincode", "locationVerifiedAt",
     "providerConfirmedCount", "providerSaleConversionStatus", "providerSaleConversionUpdatedAt",
     "providerSaleConvertedAt", "agentSaleConversion",
@@ -1197,7 +1147,6 @@ module.exports = {
   addNote,
   setActiveState,
   publishMarketplace,
-  setAutomaticWhatsappLeadAlerts,
   closeMarketplace,
   listProviderUnlocks,
   getProviderUnlock,

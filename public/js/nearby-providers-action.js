@@ -4,7 +4,10 @@
       const body = await apiFetch('/api/enquiry/' + encodeURIComponent(leadId) + '/nearby-providers');
       const count = Number(body.count);
       if (!Number.isFinite(count)) return;
-      link.textContent = 'Nearby providers (' + Math.max(0, Math.trunc(count)) + ')';
+      const nearbyCount = Math.max(0, Math.trunc(count));
+      const canSend = body.lead?.providerAlertStatus?.canSend === true;
+      link.textContent = (canSend ? 'Send Provider Alert' : 'Provider Alerts')
+        + ' (' + nearbyCount + ' nearby)';
     } catch (_error) {
       // Keep the action available even if the count request cannot be completed.
     }
@@ -25,7 +28,7 @@
     const link = document.createElement('a');
     link.className = providerStatus.className;
     link.href = '/' + match[1] + '/' + encodeURIComponent(match[2]) + '/nearby-providers';
-    link.textContent = 'Nearby providers';
+    link.textContent = 'Send Provider Alert';
     link.dataset.nearbyProvidersAction = 'true';
     providerStatus.insertAdjacentElement('afterend', link);
     updateCount(link, match[2]);

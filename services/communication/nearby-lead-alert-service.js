@@ -125,6 +125,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   const radiusKm = alertDistanceKmForLead(lead);
   const targetProviderIds = normalizeTargetProviderIds(options.providerIds);
   const targeted = targetProviderIds.length > 0;
+  const previouslyAlertedProviderIds = new Set(
+    (Array.isArray(lead?.providerWhatsappAlerts) ? lead.providerWhatsappAlerts : [])
+      .map((entry) => String(entry?.providerId || "").trim())
+      .filter(Boolean),
+  );
   const resolvedLocation = resolveRequirementLocation(lead || {});
   const effectiveLead = resolvedLocation
     ? {
@@ -141,20 +146,30 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     categorySlug: String(lead?.categorySlug || ""),
     serviceTypeIds: leadServiceTypeIds(lead || {}),
     remainingUnlocks: Number(lead?.remainingUnlocks || 0),
+    unlockedCount: Number(lead?.unlockedCount || 0),
     radiusKm,
     targeted,
     requestedProviderCount: targetProviderIds.length,
+    previouslyAlertedProviderCount: previouslyAlertedProviderIds.size,
     coordinatesAvailable: Boolean(resolvedLocation),
     coordinateSource: resolvedLocation?.source || "",
   });
-  if (!lead || !lead.enquiryId || !lead.categorySlug || Number(lead.remainingUnlocks || 0) <= 0) {
+  if (
+    !lead
+    || !lead.enquiryId
+    || !lead.categorySlug
+    || Number(lead.unlockedCount || 0) > 0
+    || Number(lead.remainingUnlocks || 0) <= 0
+  ) {
     const reason = !lead?.enquiryId
       ? "lead_id_missing"
       : !lead?.categorySlug
         ? "lead_category_missing"
-        : "remaining_unlocks_zero";
+        : Number(lead?.unlockedCount || 0) > 0
+          ? "provider_already_unlocked"
+          : "remaining_unlocks_zero";
     console.warn({ event: "nearby_alert_dispatch_skipped", enquiryId: leadId, reason });
-    return { eligible: 0, alerted: 0, skipped: 0, reason };
+    return { eligible: 0, alerted: 0, skipped: 0, alertedProviderIds: [], reason };
   }
   if (!resolvedLocation) {
     console.warn({
@@ -162,7 +177,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
       enquiryId: leadId,
       reason: "lead_coordinates_missing",
     });
-    return { eligible: 0, alerted: 0, skipped: 0, reason: "lead_coordinates_missing" };
+    return { eligible: 0, alerted: 0, skipped: 0, alertedProviderIds: [], reason: "lead_coordinates_missing" };
   }
 
   const query = {
@@ -199,6 +214,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   let invalidDistance = 0;
   let missingContactOrCoordinates = 0;
   let subcategoryMismatch = 0;
+  let alreadyAlerted = 0;
   const seenProviderIds = new Set();
   const alertedProviderIds = [];
   const skippedProviderIds = new Set();
@@ -220,7 +236,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
       }, actor);
       return {
         providerId: String(provider.providerId || ""),
-        sent: output.length > 0,
+        sent: output.some((item) => String(item?.status || "").toLowerCase() !== "failed"),
       };
     }));
     for (const result of results) {
@@ -238,6 +254,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     databaseCandidates += 1;
     const providerId = String(provider.providerId || "");
     if (providerId) seenProviderIds.add(providerId);
+    if (providerId && previouslyAlertedProviderIds.has(providerId)) {
+      alreadyAlerted += 1;
+      if (targeted) skippedProviderIds.add(providerId);
+      continue;
+    }
     if (!providerMatchesLeadPreference(provider, effectiveLead)) {
       subcategoryMismatch += 1;
       if (providerId) skippedProviderIds.add(providerId);
@@ -298,9 +319,10 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     invalidDistance,
     missingContactOrCoordinates,
     subcategoryMismatch,
+    alreadyAlerted,
+    alertedProviderIds,
     ...(targeted ? {
       requested: targetProviderIds.length,
-      alertedProviderIds,
       skippedProviderIds: [...skippedProviderIds],
     } : {}),
   };

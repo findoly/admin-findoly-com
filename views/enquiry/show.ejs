@@ -37,6 +37,24 @@
                 <button x-show="lead.isActive === false" class="btn btn-primary ms-auto" @click="reactivateLead()" :disabled="stateSaving">Reactivate</button>
               </div>
 
+              <div
+                x-show="lead.providerAlertStatus && lead.providerAlertStatus.code !== 'not_ready'"
+                x-cloak
+                class="alert alert-light border d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2"
+              >
+                <div>
+                  <strong x-text="lead.providerAlertStatus.label"></strong>
+                  <span
+                    class="text-muted ms-md-2"
+                    x-text="lead.providerAlertStatus.code === 'alert_pending'
+                      ? 'Select a nearby provider and send the WhatsApp alert.'
+                      : (lead.providerAlertStatus.code === 'provider_unlocked'
+                        ? 'No further provider WhatsApp alerts can be sent for this requirement.'
+                        : 'Provider WhatsApp distribution is recorded for this requirement.')"
+                  ></span>
+                </div>
+              </div>
+
               <section class="card crm-lead-command-center mb-3">
                 <div class="card-header crm-card-heading">
                   <div>
@@ -594,6 +612,7 @@
                       { label: 'Price', value: money(this.lead.leadPricePaise) },
                       { label: 'Status', value: humanize(this.currentStatus) },
                       { label: 'Marketplace', value: this.lead.marketplaceAvailable ? 'Published' : humanize(this.lead.marketplaceStatus || 'draft') },
+                      { label: 'Provider alert', value: this.lead.providerAlertStatus?.label || 'Provider alerts not ready' },
                       { label: 'Unlock capacity', value: (this.lead.unlockedCount || 0) + ' of ' + (this.lead.maxProviderUnlocks || 5) },
                       { label: 'Confirmed', value: (this.lead.providerConfirmedCount || 0) + ' providers' }
                     ];
