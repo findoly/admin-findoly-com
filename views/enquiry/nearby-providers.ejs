@@ -12,7 +12,7 @@
               <div>
                 <div class="crm-page-eyebrow">Lead management</div>
                 <h1 class="page-title mb-1"><%= title %></h1>
-                <p class="crm-page-subtitle mb-0">Select one or more nearby providers and send the WhatsApp enquiry alert. Automatic alerts are off unless enabled for this requirement.</p>
+                <p class="crm-page-subtitle mb-0">Automatic WhatsApp alerts are sent to eligible nearby providers. Use manual send below when you need to alert another eligible provider.</p>
               </div>
               <a id="nearby-provider-back-link" href="/enquiries" class="btn btn-light crm-primary-action">
                 <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to requirement
@@ -64,36 +64,11 @@
                         class="text-muted fs-sm"
                         x-text="lead.providerAlertStatus.code === 'provider_unlocked'
                           ? 'A provider has unlocked this requirement. Further proactive WhatsApp alerts are stopped.'
-                          : (lead.providerAlertStatus.code === 'alert_pending'
-                            ? 'Choose a provider below and send the first alert.'
-                            : 'Successful provider alerts are tracked permanently on this requirement.')"
+                          : 'Automatic alerts are the primary flow. Successful provider alerts are tracked permanently; manual send remains available for eligible providers.'"
                       ></span>
                     </div>
                   </div>
 
-                  <div class="border-top mt-3 pt-3 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
-                    <div>
-                      <div class="text-muted fs-sm">Automatic nearby WhatsApp alerts</div>
-                      <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                        <span
-                          class="crm-status"
-                          :class="lead.automaticWhatsappLeadAlertsEnabled ? 'status-active' : 'status-inactive'"
-                          x-text="lead.automaticWhatsappLeadAlertsEnabled ? 'Enabled' : 'Disabled'"
-                        ></span>
-                        <span class="text-muted fs-sm">Disabled by default. The Provider Marketplace remains available either way.</span>
-                      </div>
-                    </div>
-                    <button
-                      x-show="can('requirements.manage')"
-                      x-cloak
-                      type="button"
-                      class="btn"
-                      :class="lead.automaticWhatsappLeadAlertsEnabled ? 'btn-light' : 'btn-primary'"
-                      :disabled="savingAutomaticAlerts || loading || Number(lead.unlockedCount || 0) > 0"
-                      @click="toggleAutomaticAlerts()"
-                      x-text="savingAutomaticAlerts ? 'Saving…' : (lead.automaticWhatsappLeadAlertsEnabled ? 'Disable automatic alerts' : 'Enable automatic alerts')"
-                    ></button>
-                  </div>
                 </div>
               </section>
 
@@ -260,7 +235,6 @@
           sortOrder: 'nearest',
           loading: false,
           sendingAlerts: false,
-          savingAutomaticAlerts: false,
           selectedProviderIds: [],
           error: '',
           successMessage: '',
@@ -377,38 +351,6 @@
               this.sendingAlerts = false;
             }
           },
-          async toggleAutomaticAlerts() {
-            if (this.savingAutomaticAlerts || Number(this.lead.unlockedCount || 0) > 0) return;
-            const nextEnabled = !this.lead.automaticWhatsappLeadAlertsEnabled;
-            if (nextEnabled) {
-              const message = this.canSendAlerts
-                ? 'Enable automatic WhatsApp alerts? Eligible nearby providers may be alerted immediately.'
-                : 'Enable automatic WhatsApp alerts? Eligible nearby providers will be alerted when this requirement is available.';
-              if (!window.confirm(message)) return;
-            }
-            this.savingAutomaticAlerts = true;
-            this.error = '';
-            this.successMessage = '';
-            try {
-              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers/automatic-alerts', {
-                method: 'POST',
-                body: JSON.stringify({ automaticWhatsappLeadAlertsEnabled: nextEnabled }),
-              });
-              const result = body.data || {};
-              if (result.lead) this.lead = { ...this.lead, ...result.lead };
-              const alerted = Number(result.alertSummary?.alerted || 0);
-              this.successMessage = nextEnabled
-                ? 'Automatic nearby WhatsApp alerts enabled' + (alerted > 0 ? ' · ' + alerted + ' provider' + (alerted === 1 ? '' : 's') + ' alerted.' : '.')
-                : 'Automatic nearby WhatsApp alerts disabled.';
-              showCrmToast(this.successMessage, 'success');
-              await this.load();
-            } catch (error) {
-              this.error = error.message;
-              showCrmToast(error.message, 'error');
-            } finally {
-              this.savingAutomaticAlerts = false;
-            }
-          }
         };
       }
     </script>
