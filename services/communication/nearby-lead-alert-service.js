@@ -125,6 +125,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   const radiusKm = alertDistanceKmForLead(lead);
   const targetProviderIds = normalizeTargetProviderIds(options.providerIds);
   const targeted = targetProviderIds.length > 0;
+  const previouslyAlertedProviderIds = new Set(
+    (Array.isArray(lead?.providerWhatsappAlerts) ? lead.providerWhatsappAlerts : [])
+      .map((entry) => String(entry?.providerId || "").trim())
+      .filter(Boolean),
+  );
   const resolvedLocation = resolveRequirementLocation(lead || {});
   const effectiveLead = resolvedLocation
     ? {
@@ -145,6 +150,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     radiusKm,
     targeted,
     requestedProviderCount: targetProviderIds.length,
+    previouslyAlertedProviderCount: previouslyAlertedProviderIds.size,
     coordinatesAvailable: Boolean(resolvedLocation),
     coordinateSource: resolvedLocation?.source || "",
   });
@@ -208,6 +214,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
   let invalidDistance = 0;
   let missingContactOrCoordinates = 0;
   let subcategoryMismatch = 0;
+  let alreadyAlerted = 0;
   const seenProviderIds = new Set();
   const alertedProviderIds = [];
   const skippedProviderIds = new Set();
@@ -247,6 +254,11 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     databaseCandidates += 1;
     const providerId = String(provider.providerId || "");
     if (providerId) seenProviderIds.add(providerId);
+    if (providerId && previouslyAlertedProviderIds.has(providerId)) {
+      alreadyAlerted += 1;
+      if (targeted) skippedProviderIds.add(providerId);
+      continue;
+    }
     if (!providerMatchesLeadPreference(provider, effectiveLead)) {
       subcategoryMismatch += 1;
       if (providerId) skippedProviderIds.add(providerId);
@@ -307,6 +319,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     invalidDistance,
     missingContactOrCoordinates,
     subcategoryMismatch,
+    alreadyAlerted,
     alertedProviderIds,
     ...(targeted ? {
       requested: targetProviderIds.length,
