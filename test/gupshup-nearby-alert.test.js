@@ -122,7 +122,7 @@ test("selected nearby alerts target only requested eligible providers", async ()
   );
 });
 
-test("provider alerts stop after the first unlock and skip providers already alerted", async () => {
+test("automatic delivery stops after unlock while manual selected sends may resend", async () => {
   const notifications = [];
   const queryCapture = { value: null };
   const providers = [
@@ -143,7 +143,7 @@ test("provider alerts stop after the first unlock and skip providers already ale
   ];
   const service = loadNearbyService(providers, notifications, queryCapture);
   const baseLead = {
-    enquiryId: "lead-alert-stop",
+    enquiryId: "lead-auto-stop",
     categorySlug: "painting",
     category: "Painting",
     remainingUnlocks: 2,
@@ -160,9 +160,27 @@ test("provider alerts stop after the first unlock and skip providers already ale
   assert.deepEqual(stopped.alertedProviderIds, []);
   assert.equal(notifications.length, 0);
 
-  const result = await service.dispatchNearbyLeadAlerts({
+  const manual = await service.dispatchSelectedNearbyLeadAlerts(
+    {
+      ...baseLead,
+      enquiryId: "lead-manual-resend",
+      unlockedCount: 1,
+      providerWhatsappAlerts: [{
+        providerId: "provider-near",
+        alertedAt: new Date("2026-08-28T09:30:00.000Z"),
+        mode: "automatic",
+      }],
+    },
+    ["provider-near"],
+    "employee@findoly.com",
+  );
+  assert.equal(manual.alerted, 1);
+  assert.deepEqual(manual.alertedProviderIds, ["provider-near"]);
+  assert.deepEqual(notifications.map((item) => item.context.provider.providerId), ["provider-near"]);
+
+  const automatic = await service.dispatchNearbyLeadAlerts({
     ...baseLead,
-    enquiryId: "lead-alert-skip",
+    enquiryId: "lead-auto-idempotent",
     unlockedCount: 0,
     providerWhatsappAlerts: [{
       providerId: "provider-near",
@@ -171,10 +189,9 @@ test("provider alerts stop after the first unlock and skip providers already ale
     }],
   }, "employee@findoly.com");
 
-  assert.equal(result.alreadyAlerted, 1);
-  assert.equal(result.alerted, 1);
-  assert.deepEqual(result.alertedProviderIds, ["provider-other"]);
-  assert.deepEqual(notifications.map((item) => item.context.provider.providerId), ["provider-other"]);
+  assert.equal(automatic.alreadyAlerted, 1);
+  assert.equal(automatic.alerted, 1);
+  assert.deepEqual(automatic.alertedProviderIds, ["provider-other"]);
 });
 
 test("nearby lead alerts use the requirement radius with a 20 km legacy fallback", async () => {
