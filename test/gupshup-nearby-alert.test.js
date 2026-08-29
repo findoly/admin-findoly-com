@@ -411,6 +411,91 @@ test("nearby lead Meta template maps service area to narrow area plus Google Map
     /values\.requirement_title = lead\.providerRequirementTitle \|\| lead\.requirementTitle \|\| lead\.serviceType \|\| "New customer requirement"/,
   );
   assert.match(rules, /const whatsappOnly = event === "nearby_lead_available"/);
+  assert.match(rules, /"lead_area",[\s\S]*"lead_map_url",[\s\S]*"lead_area_map",[\s\S]*"lead_location"/);
+  assert.match(rules, /const DEFAULT_NEARBY_MAPPINGS = Object\.freeze\(\[[\s\S]*"lead_area_map"/);
+});
+
+test("nearby lead rule exposes and accepts the area Maps event mapping", async () => {
+  const rulePath = path.join(root, "services/communication/rule-service.js");
+  delete require.cache[rulePath];
+  const originalLoad = Module._load;
+  const template = {
+    templateId: "tpl-nearby-area-map",
+    channel: "whatsapp",
+    isActive: true,
+    status: "approved",
+    externalTemplateId: "external-template-id",
+    parameterDefinitions: [
+      { placeholder: "1", label: "Body {{1}}" },
+      { placeholder: "2", label: "Body {{2}}" },
+      { placeholder: "3", label: "Body {{3}}" },
+      { placeholder: "4", label: "Body {{4}}" },
+      { placeholder: "5", label: "Body {{5}}" },
+    ],
+    buttons: [{ index: 0, type: "QUICK_REPLY", text: "Unlock Lead" }],
+  };
+  Module._load = function patched(request, parent, isMain) {
+    if (request === "../../models/CommunicationRule") return {};
+    if (request === "../../models/CommunicationTemplate") {
+      return {
+        findOne() {
+          return { lean: async () => template };
+        },
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let ruleService;
+  try {
+    ruleService = require(rulePath);
+  } finally {
+    Module._load = originalLoad;
+  }
+
+  assert.ok(ruleService.EVENT_VARIABLES.nearby_lead_available.includes("lead_area"));
+  assert.ok(ruleService.EVENT_VARIABLES.nearby_lead_available.includes("lead_map_url"));
+  assert.ok(ruleService.EVENT_VARIABLES.nearby_lead_available.includes("lead_area_map"));
+  assert.ok(ruleService.EVENT_VARIABLES.nearby_lead_available.includes("lead_location"));
+  assert.deepEqual(ruleService.DEFAULT_NEARBY_MAPPINGS, [
+    "provider_name",
+    "service_name",
+    "lead_area_map",
+    "requirement_title",
+    "lead_url",
+  ]);
+
+  const explicit = await ruleService.normalizeInput({
+    name: "Nearby lead available",
+    event: "nearby_lead_available",
+    enabled: true,
+    whatsappEnabled: true,
+    whatsappTemplateId: template.templateId,
+    whatsappParameterMappings: [
+      "provider_name",
+      "service_name",
+      "lead_area_map",
+      "requirement_title",
+      "lead_url",
+    ],
+    whatsappActionType: "unlock_lead",
+    whatsappActionButtonIndex: 0,
+    emailEnabled: false,
+  }, {});
+  assert.equal(explicit.recipientSource, "provider");
+  assert.deepEqual(explicit.whatsappParameterMappings, ruleService.DEFAULT_NEARBY_MAPPINGS);
+
+  const defaults = await ruleService.normalizeInput({
+    name: "Nearby lead available",
+    event: "nearby_lead_available",
+    enabled: true,
+    whatsappEnabled: true,
+    whatsappTemplateId: template.templateId,
+    whatsappParameterMappings: [],
+    whatsappActionType: "unlock_lead",
+    whatsappActionButtonIndex: 0,
+    emailEnabled: false,
+  }, {});
+  assert.deepEqual(defaults.whatsappParameterMappings, ruleService.DEFAULT_NEARBY_MAPPINGS);
 });
 
 test("nearby lead area mapping prefers Google locality and exact coordinates with fallbacks", () => {
