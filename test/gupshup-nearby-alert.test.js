@@ -389,22 +389,104 @@ test("CRM provider form and model expose WhatsApp lead alert controls without ch
   assert.match(nearbyAlerts, /provider_subcategory_mismatch/);
 });
 
-test("nearby lead template contains only safe marketplace details", () => {
+test("nearby lead Meta template maps service area to narrow area plus Google Maps", () => {
   const templates = source("services/communication/default-template-service.js");
   const notifications = source("services/communication/notification-service.js");
   const rules = source("services/communication/rule-service.js");
 
   assert.match(templates, /findoly_nearby_lead_available/);
   assert.match(templates, /Service: \{\{2\}\}/);
-  assert.match(templates, /Location: \{\{3\}\}/);
+  assert.match(templates, /Service area: \{\{3\}\}/);
   assert.match(templates, /Requirement: \{\{4\}\}/);
+  assert.match(templates, /"provider_name", "service_name", "lead_area_map", "requirement_title", "lead_url"/);
+  assert.match(templates, /currentMappings\[2\] === "lead_location"/);
+  assert.match(templates, /index === 2 \? "lead_area_map" : mapping/);
   assert.match(notifications, /const whatsappOnly = rule\.event === "nearby_lead_available"/);
+  assert.match(notifications, /lead\.locationLocality \|\| lead\.city \|\| lead\.locationDistrict/);
+  assert.match(notifications, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
+  assert.match(notifications, /values\.lead_area_map = areaMap/);
+  assert.match(notifications, /values\["3"\] = areaMap \|\| leadLocation/);
   assert.match(
     notifications,
     /values\.requirement_title = lead\.providerRequirementTitle \|\| lead\.requirementTitle \|\| lead\.serviceType \|\| "New customer requirement"/,
   );
   assert.match(rules, /const whatsappOnly = event === "nearby_lead_available"/);
-  assert.doesNotMatch(templates, /Customer phone|Customer email|Exact address/i);
+});
+
+test("nearby lead area mapping prefers Google locality and exact coordinates with fallbacks", () => {
+  const notificationPath = path.join(root, "services/communication/notification-service.js");
+  delete require.cache[notificationPath];
+  const originalLoad = Module._load;
+  Module._load = function patched(request, parent, isMain) {
+    if ([
+      "../../models/CommunicationRule",
+      "../../models/CommunicationTemplate",
+      "./communication-service",
+      "./system-event-service",
+      "./default-template-service",
+    ].includes(request)) return {};
+    if (request === "./template-renderer") return { renderText(value) { return value; } };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let notificationService;
+  try {
+    notificationService = require(notificationPath);
+  } finally {
+    Module._load = originalLoad;
+  }
+
+  const exact = notificationService.variablesFor({
+    event: "nearby_lead_available",
+    lead: {
+      enquiryId: "lead-area-1",
+      category: "Pet Vaccination",
+      locationLocality: "Andheri West",
+      city: "Mumbai",
+      locationDistrict: "Mumbai Suburban",
+      pincode: "400058",
+      locationLatitude: 19.1197,
+      locationLongitude: 72.8468,
+      providerRequirementTitle: "Home vaccination for five cats",
+    },
+    provider: { providerId: "provider-1", name: "Provider" },
+    leadUrl: "https://provider.findoly.com/lead/lead-area-1",
+  });
+  assert.equal(exact.lead_area, "Andheri West, 400058");
+  assert.equal(
+    exact.lead_map_url,
+    "https://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
+  );
+  assert.equal(
+    exact.lead_area_map,
+    "Andheri West, 400058 https://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
+  );
+  assert.equal(exact["3"], exact.lead_area_map);
+  assert.equal(exact.lead_location, "Mumbai, 400058");
+
+  const addressFallback = notificationService.variablesFor({
+    event: "nearby_lead_available",
+    lead: {
+      locationLocality: "Andheri West",
+      pincode: "400058",
+      addressLine: "Andheri West, Mumbai, Maharashtra 400058, India",
+    },
+    provider: { providerId: "provider-1", name: "Provider" },
+  });
+  assert.equal(
+    addressFallback.lead_map_url,
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("Andheri West, Mumbai, Maharashtra 400058, India")}`,
+  );
+
+  const cityFallback = notificationService.variablesFor({
+    event: "nearby_lead_available",
+    lead: { city: "Mumbai", pincode: "400095" },
+    provider: { providerId: "provider-1", name: "Provider" },
+  });
+  assert.equal(cityFallback.lead_area, "Mumbai, 400095");
+  assert.equal(
+    cityFallback.lead_area_map,
+    "Mumbai, 400095 https://www.google.com/maps/search/?api=1&query=Mumbai%2C%20400095",
+  );
 });
 
 test("contact identity production migration supports every employee-linked role", () => {

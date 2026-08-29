@@ -115,6 +115,37 @@ const joinLocation = function (...values) {
   return values.map((value) => String(value || "").trim()).filter(Boolean).join(", ");
 };
 
+const validCoordinate = function (value, min, max) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
+};
+
+const leadArea = function (lead = {}) {
+  const area = String(lead.locationLocality || lead.city || lead.locationDistrict || "").trim();
+  const pincode = String(lead.pincode || lead.locationPincode || "").trim();
+  if (!area) return pincode;
+  if (!pincode || area.includes(pincode)) return area;
+  return `${area}, ${pincode}`;
+};
+
+const leadMapUrl = function (lead = {}) {
+  const latitude = validCoordinate(lead.locationLatitude, -90, 90);
+  const longitude = validCoordinate(lead.locationLongitude, -180, 180);
+  const area = leadArea(lead);
+  const address = String(lead.addressLine || lead.customerAddress || "").trim();
+  const query = latitude !== null && longitude !== null
+    ? `${latitude},${longitude}`
+    : (address || area || String(lead.pincode || lead.locationPincode || "").trim());
+  return query
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    : "";
+};
+
+const leadAreaMap = function (lead = {}) {
+  return [leadArea(lead), leadMapUrl(lead)].filter(Boolean).join(" ");
+};
+
 const urlSuffix = function (value) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -153,6 +184,9 @@ const variablesFor = function (context) {
     lead_status: status,
     category: lead.category || lead.categorySlug || "",
     lead_location: joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode),
+    lead_area: leadArea(lead),
+    lead_map_url: leadMapUrl(lead),
+    lead_area_map: leadAreaMap(lead),
     source_channel: lead.sourceChannel || context.source || "",
     source_website: lead.sourceWebsite || "",
     provider_name: provider.name || provider.businessName || context.providerName || "",
@@ -229,15 +263,19 @@ const variablesFor = function (context) {
     const leadUrl = context.leadUrl || context.marketplaceUrl || process.env.PROVIDER_PORTAL_MARKETPLACE_URL || process.env.PROVIDER_PORTAL_LOGIN_URL || "";
     const serviceName = lead.category || lead.categorySlug || lead.serviceType || "Service";
     const leadLocation = joinLocation(lead.city, lead.state, lead.pincode || lead.locationPincode);
+    const areaMap = leadAreaMap(lead);
     values.provider_name = provider.name || provider.businessName || "Provider";
     values.service_name = serviceName;
     values.lead_location = leadLocation;
+    values.lead_area = leadArea(lead);
+    values.lead_map_url = leadMapUrl(lead);
+    values.lead_area_map = areaMap;
     values.requirement_title = lead.providerRequirementTitle || lead.requirementTitle || lead.serviceType || "New customer requirement";
     values.lead_url = leadUrl;
     values.lead_url_suffix = urlSuffix(leadUrl);
     values["1"] = values.provider_name;
     values["2"] = serviceName;
-    values["3"] = leadLocation;
+    values["3"] = areaMap || leadLocation;
     values["4"] = values.requirement_title;
     values["5"] = leadUrl;
   }
