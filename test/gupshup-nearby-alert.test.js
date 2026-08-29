@@ -9,7 +9,7 @@ const Module = require("node:module");
 const root = path.resolve(__dirname, "..");
 const source = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-function loadNearbyService(providers, notifications, queryCapture) {
+function loadNearbyService(providers, notifications, queryCapture, geocoding = {}) {
   const Provider = {
     find(query) {
       queryCapture.value = query;
@@ -42,6 +42,15 @@ function loadNearbyService(providers, notifications, queryCapture) {
   Module._load = function patched(request, parent, isMain) {
     if (request === "../../models/Provider") return Provider;
     if (request === "./notification-service") return notificationService;
+    if (request === "../location/geocoding-service") {
+      return {
+        async geocodePincode(pincode) {
+          if (Array.isArray(geocoding.calls)) geocoding.calls.push(pincode);
+          if (typeof geocoding.resolve === "function") return geocoding.resolve(pincode);
+          return geocoding.location || null;
+        },
+      };
+    }
     return originalLoad.call(this, request, parent, isMain);
   };
   try {
@@ -50,6 +59,138 @@ function loadNearbyService(providers, notifications, queryCapture) {
     Module._load = originalLoad;
   }
 }
+
+function loadGeocodingService(cachedLocation, capture = {}) {
+  const PincodeLocation = {
+    findOne(query) {
+      capture.query = query;
+      return {
+        async lean() {
+          return cachedLocation;
+        },
+      };
+    },
+    async updateOne(query, update, options) {
+      capture.update = { query, update, options };
+      return { acknowledged: true };
+    },
+  };
+  const servicePath = path.join(root, "services/location/geocoding-service.js");
+  delete require.cache[servicePath];
+  const originalLoad = Module._load;
+  Module._load = function patched(request, parent, isMain) {
+    if (request === "../../models/PincodeLocation") return PincodeLocation;
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return require(servicePath);
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+test("PIN geocoding prefers a specific cached postal locality over the generic city", async () => {
+  const geocoding = loadGeocodingService({
+    pincode: "400095",
+    latitude: 19.186,
+    longitude: 72.84,
+    locality: "Mumbai",
+    city: "Mumbai",
+    district: "Mumbai Suburban",
+    state: "Maharashtra",
+    country: "India",
+    formattedAddress: "Malvani, Mumbai, Maharashtra 400095, India",
+    postcodeLocalities: ["Malvani", "Kharodi"],
+    enrichmentVersion: 2,
+    source: "google_geocoding",
+  });
+
+  const location = await geocoding.geocodePincode("400095");
+  assert.equal(location.locality, "Malvani");
+  assert.deepEqual(location.postcodeLocalities, ["Malvani", "Kharodi"]);
+});
+
+test("fresh PIN geocoding prefers postcode locality when Google locality is only the city", async () => {
+  const capture = {};
+  const geocoding = loadGeocodingService(null, capture);
+  const originalFetch = global.fetch;
+  const originalKey = process.env.GOOGLE_MAPS_API_KEY;
+  process.env.GOOGLE_MAPS_API_KEY = "qa-google-key";
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        status: "OK",
+        results: [{
+          geometry: { location: { lat: 19.186, lng: 72.84 } },
+          address_components: [
+            { long_name: "Mumbai", types: ["locality"] },
+            { long_name: "Mumbai Suburban", types: ["administrative_area_level_2"] },
+            { long_name: "Maharashtra", types: ["administrative_area_level_1"] },
+            { long_name: "India", short_name: "IN", types: ["country"] },
+          ],
+          formatted_address: "Malvani, Mumbai, Maharashtra 400095, India",
+          postcode_localities: ["Malvani", "Kharodi"],
+        }],
+      };
+    },
+  });
+  try {
+    const location = await geocoding.geocodePincode("400095");
+    assert.equal(location.locality, "Malvani");
+    assert.equal(capture.update.update.$set.locality, "Malvani");
+    assert.deepEqual(capture.update.update.$set.postcodeLocalities, ["Malvani", "Kharodi"]);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
+    else process.env.GOOGLE_MAPS_API_KEY = originalKey;
+  }
+});
+
+test("nearby alert replaces generic city locality with the specific PIN area", async () => {
+  const notifications = [];
+  const queryCapture = { value: null };
+  const geocoding = {
+    calls: [],
+    location: {
+      locality: "Malvani",
+      district: "Mumbai Suburban",
+      latitude: 19.186,
+      longitude: 72.84,
+    },
+  };
+  const service = loadNearbyService([
+    {
+      providerId: "provider-area",
+      name: "Area Provider",
+      normalizedWhatsappNumber: "9876543210",
+      serviceLatitude: 19.186,
+      serviceLongitude: 72.84,
+    },
+  ], notifications, queryCapture, geocoding);
+
+  const result = await service.dispatchNearbyLeadAlerts({
+    enquiryId: "lead-area-specific",
+    categorySlug: "painting",
+    category: "Painting",
+    remainingUnlocks: 3,
+    unlockedCount: 0,
+    locationLatitude: 19.186,
+    locationLongitude: 72.84,
+    locationPincode: "400095",
+    locationLocality: "Mumbai",
+    locationDistrict: "Mumbai Suburban",
+    city: "Mumbai",
+    state: "Maharashtra",
+    marketplacePublishedAt: new Date("2026-08-29T10:00:00.000Z"),
+  }, "qa");
+
+  assert.equal(result.alerted, 1);
+  assert.deepEqual(geocoding.calls, ["400095"]);
+  assert.equal(notifications[0].context.lead.locationLocality, "Malvani");
+  assert.equal(notifications[0].context.lead.locationPincode, "400095");
+});
 
 test("CRM WhatsApp delivery uses Gupshup templates and has no Meta Cloud API path", () => {
   const whatsapp = source("services/communication/whatsapp-service.js");
