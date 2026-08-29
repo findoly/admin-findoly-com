@@ -58,6 +58,9 @@ const EVENT_VARIABLES = Object.freeze({
   nearby_lead_available: Object.freeze([
     "provider_name",
     "service_name",
+    "lead_area",
+    "lead_map_url",
+    "lead_area_map",
     "lead_location",
     "requirement_title",
     "lead_url",
@@ -93,7 +96,7 @@ const EVENT_VARIABLES = Object.freeze({
 const DEFAULT_NEARBY_MAPPINGS = Object.freeze([
   "provider_name",
   "service_name",
-  "lead_location",
+  "lead_area_map",
   "requirement_title",
   "lead_url",
 ]);
