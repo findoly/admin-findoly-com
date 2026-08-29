@@ -117,7 +117,7 @@ const nearbyLeadWhatsappTemplate = Object.freeze({
     "A new customer enquiry matching your service profile is available on Findoly.",
     "",
     "Service: {{2}}",
-    "Location: {{3}}",
+    "Service area: {{3}}",
     "Requirement: {{4}}",
     "",
     "Tap the button below to review the enquiry details in your Provider Portal.",
@@ -134,7 +134,7 @@ const nearbyLeadWhatsappTemplate = Object.freeze({
   sampleVariables: [
     "Provider name",
     "Painting",
-    "Malad West, Mumbai, 400064",
+    "Malad West, 400064 https://www.google.com/maps/search/?api=1&query=19.186%2C72.849",
     "Interior painting requirement",
     "https://provider.findoly.com/lead/ENQUIRY-ID",
   ],
@@ -214,14 +214,21 @@ async function ensureDefaultProviderTemplates() {
       const definitions = Array.isArray(assignedTemplate.parameterDefinitions) && assignedTemplate.parameterDefinitions.length
         ? assignedTemplate.parameterDefinitions
         : parameterDefinitions(assignedTemplate);
-      const defaults = ["provider_name", "service_name", "lead_location", "requirement_title", "lead_url"];
+      const defaults = ["provider_name", "service_name", "lead_area_map", "requirement_title", "lead_url"];
       const quickReply = (assignedTemplate.buttons || []).map((button, index) => ({
         index: Number.isInteger(Number(button?.index)) ? Number(button.index) : index,
         type: String(button?.type || button?.buttonType || "").toUpperCase(),
       })).find((button) => button.type.includes("QUICK") || button.type === "REPLY");
       const update = {};
-      if (!Array.isArray(nearbyLeadRule.whatsappParameterMappings) || !nearbyLeadRule.whatsappParameterMappings.length) {
+      const currentMappings = Array.isArray(nearbyLeadRule.whatsappParameterMappings)
+        ? nearbyLeadRule.whatsappParameterMappings
+        : [];
+      if (!currentMappings.length) {
         update.whatsappParameterMappings = definitions.map((definition, index) => defaults[index] || definition.placeholder || String(index + 1));
+      } else if (currentMappings[2] === "lead_location") {
+        update.whatsappParameterMappings = currentMappings.map((mapping, index) =>
+          index === 2 ? "lead_area_map" : mapping,
+        );
       }
       if (!nearbyLeadRule.whatsappActionType && quickReply) update.whatsappActionType = "unlock_lead";
       if ((nearbyLeadRule.whatsappActionButtonIndex === null || nearbyLeadRule.whatsappActionButtonIndex === undefined) && quickReply) {
