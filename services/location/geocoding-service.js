@@ -40,6 +40,52 @@ function cleanTextList(value, { maxItems = 100, maxLength = 120 } = {}) {
   return output;
 }
 
+function normalizedLocationText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function formattedAddressLocality(formattedAddress, details = {}) {
+  const pincode = String(details.pincode || "").trim();
+  const generic = new Set(
+    [details.city, details.district, details.state, details.country]
+      .map(normalizedLocationText)
+      .filter(Boolean),
+  );
+  for (const part of String(formattedAddress || "").split(",").map((value) => value.trim()).filter(Boolean)) {
+    const withoutPincode = pincode ? part.replace(pincode, "").trim() : part;
+    const normalized = normalizedLocationText(withoutPincode);
+    if (!normalized || generic.has(normalized)) continue;
+    if (normalized === "india") continue;
+    if (pincode && normalized === normalizedLocationText(pincode)) continue;
+    return withoutPincode;
+  }
+  return "";
+}
+
+function preferredLocality(details = {}) {
+  const locality = String(details.locality || "").trim();
+  const city = String(details.city || "").trim();
+  const district = String(details.district || "").trim();
+  const state = String(details.state || "").trim();
+  const country = String(details.country || "").trim();
+  const postcodeLocalities = cleanTextList(details.postcodeLocalities);
+  const generic = new Set(
+    [city, district, state, country]
+      .map(normalizedLocationText)
+      .filter(Boolean),
+  );
+  if (locality && !generic.has(normalizedLocationText(locality))) return locality;
+  if (postcodeLocalities.length) return postcodeLocalities[0];
+  const formatted = formattedAddressLocality(details.formattedAddress, {
+    pincode: details.pincode,
+    city,
+    district,
+    state,
+    country,
+  });
+  return formatted || locality || city || district;
+}
+
 function validCachedLocation(cached) {
   if (!cached || typeof cached !== "object") return null;
   const hasLatitude = cached.latitude !== null && cached.latitude !== undefined && String(cached.latitude).trim() !== "";
@@ -59,11 +105,16 @@ function validCachedLocation(cached) {
     || (country && country !== "india")
   ) return null;
 
+  const postcodeLocalities = cleanTextList(cached.postcodeLocalities);
   return {
     ...cached,
     latitude,
     longitude,
-    postcodeLocalities: cleanTextList(cached.postcodeLocalities),
+    locality: preferredLocality({
+      ...cached,
+      postcodeLocalities,
+    }),
+    postcodeLocalities,
   };
 }
 
@@ -204,17 +255,41 @@ async function geocodePincode(value, options = {}) {
     throw validationError("The service PIN code must be located in India");
   }
 
+  const district = componentValue(components, ["administrative_area_level_2"]);
+  const city = componentValue(components, ["locality", "administrative_area_level_3", "administrative_area_level_2"]);
+  const state = componentValue(components, ["administrative_area_level_1"]);
+  const country = componentValue(components, ["country"]) || "India";
+  const formattedAddress = String(result?.formatted_address || "").trim().slice(0, 500);
+  const postcodeLocalities = cleanTextList(result?.postcode_localities);
+  const componentLocality = componentValue(components, [
+    "sublocality_level_5",
+    "sublocality_level_4",
+    "sublocality_level_3",
+    "sublocality_level_2",
+    "sublocality_level_1",
+    "sublocality",
+    "locality",
+  ]);
   const data = {
     pincode,
     latitude,
     longitude,
-    locality: componentValue(components, ["sublocality_level_1", "sublocality", "locality"]),
-    district: componentValue(components, ["administrative_area_level_2"]),
-    city: componentValue(components, ["locality", "administrative_area_level_3", "administrative_area_level_2"]),
-    state: componentValue(components, ["administrative_area_level_1"]),
-    country: componentValue(components, ["country"]) || "India",
-    formattedAddress: String(result?.formatted_address || "").trim().slice(0, 500),
-    postcodeLocalities: cleanTextList(result?.postcode_localities),
+    locality: preferredLocality({
+      locality: componentLocality,
+      city,
+      district,
+      state,
+      country,
+      formattedAddress,
+      postcodeLocalities,
+      pincode,
+    }),
+    district,
+    city,
+    state,
+    country,
+    formattedAddress,
+    postcodeLocalities,
     source: "google_geocoding",
     enrichmentVersion: LOCATION_ENRICHMENT_VERSION,
     verifiedAt: new Date(),

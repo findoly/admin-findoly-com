@@ -3,6 +3,7 @@
 const Provider = require("../../models/Provider");
 const notificationService = require("./notification-service");
 const { resolveRequirementLocation } = require("../../utils/requirement-location");
+const { geocodePincode } = require("../location/geocoding-service");
 
 const MAX_ALERT_DISTANCE_KM = 20;
 const BATCH_SIZE = Math.min(100, Math.max(5, Number(process.env.CRM_NEARBY_LEAD_ALERT_BATCH_SIZE || 25)));
@@ -26,6 +27,38 @@ function hasCoordinates(record = {}, latitudeField, longitudeField) {
 function hasVerifiedProviderCoordinates(provider = {}) {
   return String(provider.serviceLocationSource || "").trim().toLowerCase() !== "manual_pincode"
     && hasCoordinates(provider, "serviceLatitude", "serviceLongitude");
+}
+
+function normalizedLocationText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function needsSpecificLeadArea(lead = {}) {
+  const locality = normalizedLocationText(lead.locationLocality);
+  if (!locality) return true;
+  return [lead.city, lead.locationDistrict, lead.state, lead.locationState]
+    .map(normalizedLocationText)
+    .filter(Boolean)
+    .includes(locality);
+}
+
+async function withSpecificLeadArea(lead = {}) {
+  const pincode = String(lead.locationPincode || lead.pincode || "").trim();
+  if (!needsSpecificLeadArea(lead) || !/^[1-9]\d{5}$/.test(pincode)) return lead;
+  try {
+    const location = await geocodePincode(pincode);
+    const locality = String(location?.locality || "").trim();
+    if (!locality || normalizedLocationText(locality) === normalizedLocationText(lead.locationLocality)) {
+      return lead;
+    }
+    return {
+      ...lead,
+      locationLocality: locality,
+      locationDistrict: lead.locationDistrict || location?.district || "",
+    };
+  } catch (_error) {
+    return lead;
+  }
 }
 
 function alertDistanceKmForLead(lead = {}) {
@@ -131,16 +164,17 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
       .map((entry) => String(entry?.providerId || "").trim())
       .filter(Boolean),
   );
-  const resolvedLocation = resolveRequirementLocation(lead || {});
+  const areaEnrichedLead = await withSpecificLeadArea(lead || {});
+  const resolvedLocation = resolveRequirementLocation(areaEnrichedLead);
   const effectiveLead = resolvedLocation
     ? {
-        ...lead,
+        ...areaEnrichedLead,
         locationLatitude: resolvedLocation.latitude,
         locationLongitude: resolvedLocation.longitude,
-        locationPincode: lead?.locationPincode || resolvedLocation.pincode || lead?.pincode || "",
-        locationSource: lead?.locationSource || resolvedLocation.source,
+        locationPincode: areaEnrichedLead.locationPincode || resolvedLocation.pincode || areaEnrichedLead.pincode || "",
+        locationSource: areaEnrichedLead.locationSource || resolvedLocation.source,
       }
-    : lead;
+    : areaEnrichedLead;
   console.info({
     event: "nearby_alert_dispatch_started",
     enquiryId: leadId,
