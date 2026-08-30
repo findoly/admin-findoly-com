@@ -280,6 +280,13 @@
                             <div class="form-text"><span x-text="requirementDetailsWords"></span> / 100 words · approved provider-facing description.</div>
                           </div>
 
+                          <div class="mb-3">
+                            <label class="form-label d-block">Automatic nearby WhatsApp alerts</label>
+                            <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" :value="true" x-model="requirementForm.automaticWhatsappLeadAlertsEnabled" :disabled="requirementApproving"><span class="form-check-label">Enabled</span></label>
+                            <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" :value="false" x-model="requirementForm.automaticWhatsappLeadAlertsEnabled" :disabled="requirementApproving"><span class="form-check-label">Disabled</span></label>
+                            <div class="form-text">Disabled skips automatic nearby-provider WhatsApp alerts. Manual Nearby Providers sending remains available.</div>
+                          </div>
+
                           <button class="btn btn-primary w-100" @click="approveRequirement()" :disabled="requirementApproving || requirementGenerating || !requirementReadyToApprove">
                             <span x-text="requirementApproving ? 'Approving…' : 'Approve requirement & lead'"></span>
                           </button>
@@ -489,6 +496,7 @@
                     aiDetails: '',
                     providerTitle: '',
                     providerDetails: '',
+                    automaticWhatsappLeadAlertsEnabled: true,
                     generatedAt: null,
                     approvedAt: null
                   },
@@ -624,6 +632,7 @@
                       aiDetails,
                       providerTitle: approvedAt ? (approvedTitle || aiTitle) : aiTitle,
                       providerDetails: approvedAt ? (approvedDetails || aiDetails) : aiDetails,
+                      automaticWhatsappLeadAlertsEnabled: data.automaticWhatsappLeadAlertsEnabled ?? (this.lead.automaticWhatsappLeadAlertsEnabled !== false),
                       generatedAt: data.generatedAt ?? data.requirementAiGeneratedAt ?? this.lead.requirementAiGeneratedAt ?? null,
                       approvedAt
                     };
@@ -867,7 +876,8 @@
                         method: 'POST',
                         body: JSON.stringify({
                           providerTitle: this.requirementForm.providerTitle,
-                          providerDetails: this.requirementForm.providerDetails
+                          providerDetails: this.requirementForm.providerDetails,
+                          automaticWhatsappLeadAlertsEnabled: this.requirementForm.automaticWhatsappLeadAlertsEnabled
                         })
                       })).data || {};
                       if (data.lead) this.lead = data.lead;
