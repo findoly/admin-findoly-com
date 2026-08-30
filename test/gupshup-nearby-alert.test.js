@@ -298,6 +298,14 @@ test("automatic delivery stops after unlock while manual selected sends may rese
     marketplacePublishedAt: new Date("2026-08-28T10:00:00.000Z"),
   };
 
+  const disabled = await service.dispatchNearbyLeadAlerts(
+    { ...baseLead, enquiryId: "lead-auto-disabled", automaticWhatsappLeadAlertsEnabled: false, unlockedCount: 0 },
+    "employee@findoly.com",
+  );
+  assert.equal(disabled.reason, "automatic_alerts_disabled");
+  assert.deepEqual(disabled.alertedProviderIds, []);
+  assert.equal(notifications.length, 0);
+
   const stopped = await service.dispatchNearbyLeadAlerts(
     { ...baseLead, unlockedCount: 1 },
     "employee@findoly.com",
@@ -310,6 +318,7 @@ test("automatic delivery stops after unlock while manual selected sends may rese
     {
       ...baseLead,
       enquiryId: "lead-manual-resend",
+      automaticWhatsappLeadAlertsEnabled: false,
       unlockedCount: 1,
       providerWhatsappAlerts: [{
         providerId: "provider-near",
@@ -405,16 +414,17 @@ test("nearby lead alerts use the requirement radius with a 20 km legacy fallback
   assert.ok(Math.abs(exactBoundary - 20) < 1e-9);
 });
 
-test("requirement automatic nearby WhatsApp alerts are primary and not gated by a per-requirement toggle", () => {
+test("requirement approval can disable automatic nearby WhatsApp without adding a separate alert endpoint", () => {
   const enquiryModel = source("models/Enquiry.js");
   const enquiryService = source("services/enquiry/enquiry-service.js");
+  const nearbyAlerts = source("services/communication/nearby-lead-alert-service.js");
   const routes = source("routes/enquiry.js");
 
-  assert.doesNotMatch(enquiryModel, /automaticWhatsappLeadAlertsEnabled/);
-  assert.match(
-    enquiryService,
-    /remainingUnlocks > 0[\s\S]*Number\(publishedLead\.unlockedCount \|\| 0\) === 0[\s\S]*dispatchNearbyLeadAlerts\(publishedLead, actor\)/,
-  );
+  assert.match(enquiryModel, /automaticWhatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: true \}/);
+  assert.match(enquiryService, /automaticWhatsappLeadAlertsEnabled:\s*row\.automaticWhatsappLeadAlertsEnabled !== false/);
+  assert.match(enquiryService, /publishedLead\.automaticWhatsappLeadAlertsEnabled !== false/);
+  assert.match(nearbyAlerts, /automatic_alerts_disabled/);
+  assert.match(nearbyAlerts, /dispatchSelectedNearbyLeadAlerts[\s\S]*manual:\s*true/);
   assert.match(enquiryService, /recordSuccessfulProviderAlerts/);
   assert.doesNotMatch(enquiryService, /async function setAutomaticWhatsappLeadAlerts/);
   assert.doesNotMatch(routes, /nearby-providers\/automatic-alerts/);
