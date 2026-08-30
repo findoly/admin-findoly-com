@@ -196,6 +196,7 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     !lead
     || !lead.enquiryId
     || !lead.categorySlug
+    || (!manualResend && lead.automaticWhatsappLeadAlertsEnabled === false)
     || (!manualResend && Number(lead.unlockedCount || 0) > 0)
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
