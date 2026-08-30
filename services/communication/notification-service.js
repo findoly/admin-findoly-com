@@ -167,7 +167,7 @@ const leadMapUrl = function (lead = {}) {
 };
 
 const leadAreaMap = function (lead = {}) {
-  return [leadArea(lead), leadMapUrl(lead)].filter(Boolean).join("\n");
+  return [leadArea(lead), leadMapUrl(lead)].filter(Boolean).join(" | ");
 };
 
 const urlSuffix = function (value) {
