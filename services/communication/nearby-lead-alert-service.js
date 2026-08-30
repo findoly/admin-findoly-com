@@ -192,11 +192,15 @@ async function dispatchNearbyLeadAlerts(lead, actor = "system", options = {}) {
     coordinatesAvailable: Boolean(resolvedLocation),
     coordinateSource: resolvedLocation?.source || "",
   });
+  if (!manualResend && lead && lead.automaticWhatsappLeadAlertsEnabled === false) {
+    const reason = "automatic_alerts_disabled";
+    console.warn({ event: "nearby_alert_dispatch_skipped", enquiryId: leadId, reason });
+    return { eligible: 0, alerted: 0, skipped: 0, alertedProviderIds: [], reason };
+  }
   if (
     !lead
     || !lead.enquiryId
     || !lead.categorySlug
-    || (!manualResend && lead.automaticWhatsappLeadAlertsEnabled === false)
     || (!manualResend && Number(lead.unlockedCount || 0) > 0)
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
