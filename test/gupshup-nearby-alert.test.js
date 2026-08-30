@@ -100,14 +100,14 @@ test("PIN geocoding prefers a specific cached postal locality over the generic c
     state: "Maharashtra",
     country: "India",
     formattedAddress: "Malvani, Mumbai, Maharashtra 400095, India",
-    postcodeLocalities: ["Malvani", "Kharodi"],
+    postcodeLocalities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
     enrichmentVersion: 2,
     source: "google_geocoding",
   });
 
   const location = await geocoding.geocodePincode("400095");
   assert.equal(location.locality, "Malvani");
-  assert.deepEqual(location.postcodeLocalities, ["Malvani", "Kharodi"]);
+  assert.deepEqual(location.postcodeLocalities, ["Gorai", "Malvani", "Kharodi"]);
 });
 
 test("fresh PIN geocoding prefers postcode locality when Google locality is only the city", async () => {
@@ -131,7 +131,7 @@ test("fresh PIN geocoding prefers postcode locality when Google locality is only
             { long_name: "India", short_name: "IN", types: ["country"] },
           ],
           formatted_address: "Malvani, Mumbai, Maharashtra 400095, India",
-          postcode_localities: ["Malvani", "Kharodi"],
+          postcode_localities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
         }],
       };
     },
@@ -140,7 +140,7 @@ test("fresh PIN geocoding prefers postcode locality when Google locality is only
     const location = await geocoding.geocodePincode("400095");
     assert.equal(location.locality, "Malvani");
     assert.equal(capture.update.update.$set.locality, "Malvani");
-    assert.deepEqual(capture.update.update.$set.postcodeLocalities, ["Malvani", "Kharodi"]);
+    assert.deepEqual(capture.update.update.$set.postcodeLocalities, ["Gorai", "Malvani", "Kharodi"]);
   } finally {
     global.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
@@ -154,7 +154,8 @@ test("nearby alert replaces generic city locality with the specific PIN area", a
   const geocoding = {
     calls: [],
     location: {
-      locality: "Malvani",
+      locality: "Gorai",
+      postcodeLocalities: ["Gorai", "Malvani", "Kharodi"],
       district: "Mumbai Suburban",
       latitude: 19.186,
       longitude: 72.84,
@@ -188,7 +189,11 @@ test("nearby alert replaces generic city locality with the specific PIN area", a
 
   assert.equal(result.alerted, 1);
   assert.deepEqual(geocoding.calls, ["400095"]);
-  assert.equal(notifications[0].context.lead.locationLocality, "Malvani");
+  assert.equal(notifications[0].context.lead.locationLocality, "Gorai");
+  assert.deepEqual(
+    notifications[0].context.lead.locationPostcodeLocalities,
+    ["Gorai", "Malvani", "Kharodi"],
+  );
   assert.equal(notifications[0].context.lead.locationPincode, "400095");
 });
 
@@ -546,6 +551,8 @@ test("nearby lead Meta template maps service area to narrow area plus Google Map
   assert.match(notifications, /lead\.locationLocality \|\| lead\.city \|\| lead\.locationDistrict/);
   assert.match(notifications, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(notifications, /values\.lead_area_map = areaMap/);
+  assert.match(notifications, /locationPostcodeLocalities/);
+  assert.match(notifications, /join\("\\n"\)/);
   assert.match(notifications, /values\["3"\] = areaMap \|\| leadLocation/);
   assert.match(
     notifications,
@@ -677,17 +684,38 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
     provider: { providerId: "provider-1", name: "Provider" },
     leadUrl: "https://provider.findoly.com/lead/lead-area-1",
   });
-  assert.equal(exact.lead_area, "Andheri West, 400058");
+  assert.equal(exact.lead_area, "Andheri West - 400058");
   assert.equal(
     exact.lead_map_url,
     "https://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
   );
   assert.equal(
     exact.lead_area_map,
-    "Andheri West, 400058 https://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
+    "Andheri West - 400058\nhttps://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
   );
   assert.equal(exact["3"], exact.lead_area_map);
   assert.equal(exact.lead_location, "Mumbai, 400058");
+
+  const multipleAreas = notificationService.variablesFor({
+    event: "nearby_lead_available",
+    lead: {
+      locationLocality: "Gorai",
+      locationPostcodeLocalities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
+      city: "Mumbai",
+      locationDistrict: "Mumbai Suburban",
+      state: "Maharashtra",
+      pincode: "400095",
+      locationLatitude: 19.186,
+      locationLongitude: 72.84,
+    },
+    provider: { providerId: "provider-1", name: "Provider" },
+  });
+  assert.equal(multipleAreas.lead_area, "Gorai, Malvani, Kharodi - 400095");
+  assert.equal(
+    multipleAreas.lead_area_map,
+    "Gorai, Malvani, Kharodi - 400095\nhttps://www.google.com/maps/search/?api=1&query=19.186%2C72.84",
+  );
+  assert.equal(multipleAreas["3"], multipleAreas.lead_area_map);
 
   const addressFallback = notificationService.variablesFor({
     event: "nearby_lead_available",
@@ -708,10 +736,10 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
     lead: { city: "Mumbai", pincode: "400095" },
     provider: { providerId: "provider-1", name: "Provider" },
   });
-  assert.equal(cityFallback.lead_area, "Mumbai, 400095");
+  assert.equal(cityFallback.lead_area, "Mumbai - 400095");
   assert.equal(
     cityFallback.lead_area_map,
-    "Mumbai, 400095 https://www.google.com/maps/search/?api=1&query=Mumbai%2C%20400095",
+    "Mumbai - 400095\nhttps://www.google.com/maps/search/?api=1&query=Mumbai%20-%20400095",
   );
 });
 

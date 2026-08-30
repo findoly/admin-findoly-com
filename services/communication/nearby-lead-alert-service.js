@@ -44,16 +44,19 @@ function needsSpecificLeadArea(lead = {}) {
 
 async function withSpecificLeadArea(lead = {}) {
   const pincode = String(lead.locationPincode || lead.pincode || "").trim();
-  if (!needsSpecificLeadArea(lead) || !/^[1-9]\d{5}$/.test(pincode)) return lead;
+  if (!/^[1-9]\d{5}$/.test(pincode)) return lead;
   try {
     const location = await geocodePincode(pincode);
     const locality = String(location?.locality || "").trim();
-    if (!locality || normalizedLocationText(locality) === normalizedLocationText(lead.locationLocality)) {
-      return lead;
-    }
+    const postcodeLocalities = Array.isArray(location?.postcodeLocalities)
+      ? location.postcodeLocalities.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
     return {
       ...lead,
-      locationLocality: locality,
+      ...(locality && (needsSpecificLeadArea(lead) || postcodeLocalities.length)
+        ? { locationLocality: locality }
+        : {}),
+      locationPostcodeLocalities: postcodeLocalities,
       locationDistrict: lead.locationDistrict || location?.district || "",
     };
   } catch (_error) {
