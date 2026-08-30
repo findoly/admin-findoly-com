@@ -552,7 +552,7 @@ test("nearby lead Meta template maps service area to narrow area plus Google Map
   assert.match(notifications, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(notifications, /values\.lead_area_map = areaMap/);
   assert.match(notifications, /locationPostcodeLocalities/);
-  assert.match(notifications, /join\("\\n"\)/);
+  assert.match(notifications, /join\(" \| "\)/);
   assert.match(notifications, /values\["3"\] = areaMap \|\| leadLocation/);
   assert.match(
     notifications,
@@ -691,7 +691,7 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
   );
   assert.equal(
     exact.lead_area_map,
-    "Andheri West - 400058\nhttps://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
+    "Andheri West - 400058 | https://www.google.com/maps/search/?api=1&query=19.1197%2C72.8468",
   );
   assert.equal(exact["3"], exact.lead_area_map);
   assert.equal(exact.lead_location, "Mumbai, 400058");
@@ -713,9 +713,11 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
   assert.equal(multipleAreas.lead_area, "Gorai, Malvani, Kharodi - 400095");
   assert.equal(
     multipleAreas.lead_area_map,
-    "Gorai, Malvani, Kharodi - 400095\nhttps://www.google.com/maps/search/?api=1&query=19.186%2C72.84",
+    "Gorai, Malvani, Kharodi - 400095 | https://www.google.com/maps/search/?api=1&query=19.186%2C72.84",
   );
   assert.equal(multipleAreas["3"], multipleAreas.lead_area_map);
+  assert.equal(/[\r\n\t]/.test(multipleAreas.lead_area_map), false);
+  assert.equal(/ {5,}/.test(multipleAreas.lead_area_map), false);
 
   const addressFallback = notificationService.variablesFor({
     event: "nearby_lead_available",
@@ -739,7 +741,7 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
   assert.equal(cityFallback.lead_area, "Mumbai - 400095");
   assert.equal(
     cityFallback.lead_area_map,
-    "Mumbai - 400095\nhttps://www.google.com/maps/search/?api=1&query=Mumbai%20-%20400095",
+    "Mumbai - 400095 | https://www.google.com/maps/search/?api=1&query=Mumbai%20-%20400095",
   );
 });
 
