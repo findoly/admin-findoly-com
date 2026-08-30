@@ -161,6 +161,23 @@ test("requirement form separates read-only AI suggestions from editable final pr
 });
 
 
+test("requirement approval stage owns the automatic nearby WhatsApp choice", () => {
+  const view = fs.readFileSync(path.join(__dirname, "../views/enquiry/show.ejs"), "utf8");
+  const model = fs.readFileSync(path.join(__dirname, "../models/Enquiry.js"), "utf8");
+  const requirementService = fs.readFileSync(path.join(__dirname, "../services/requirement-ai/requirement-ai-service.js"), "utf8");
+  const enquiryService = fs.readFileSync(path.join(__dirname, "../services/enquiry/enquiry-service.js"), "utf8");
+
+  assert.match(view, /Automatic nearby WhatsApp alerts/);
+  assert.match(view, /type="radio"[\s\S]*:value="true"[\s\S]*Enabled/);
+  assert.match(view, /type="radio"[\s\S]*:value="false"[\s\S]*Disabled/);
+  assert.match(view, /automaticWhatsappLeadAlertsEnabled:\s*true/);
+  assert.match(view, /automaticWhatsappLeadAlertsEnabled:\s*this\.requirementForm\.automaticWhatsappLeadAlertsEnabled/);
+  assert.match(model, /automaticWhatsappLeadAlertsEnabled:\s*\{ type: Boolean, default: true \}/);
+  assert.match(requirementService, /booleanValue\([\s\S]*input\.automaticWhatsappLeadAlertsEnabled/);
+  assert.match(requirementService, /automaticWhatsappLeadAlertsEnabled,/);
+  assert.match(enquiryService, /publishedLead\.automaticWhatsappLeadAlertsEnabled !== false/);
+});
+
 test("lead approval is hard-gated by the approved customer requirement", () => {
   const source = fs.readFileSync(path.join(__dirname, "../services/enquiry/enquiry-service.js"), "utf8");
   assert.match(source, /Approve the customer requirement before approving this lead/);
