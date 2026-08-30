@@ -334,6 +334,7 @@ function presentEnquiry(row = {}) {
     alertDistanceKm: Number.isInteger(alertDistanceKm) && alertDistanceKm >= 1 && alertDistanceKm <= 100
       ? alertDistanceKm
       : 20,
+    automaticWhatsappLeadAlertsEnabled: row.automaticWhatsappLeadAlertsEnabled !== false,
     providerWhatsappAlerts,
     providerAlertStatus,
     serviceTypes: Array.isArray(row.serviceTypes)
@@ -543,6 +544,7 @@ async function publishMarketplace(enquiryId, actor = "system") {
   if (
     remainingUnlocks > 0
     && Number(publishedLead.unlockedCount || 0) === 0
+    && publishedLead.automaticWhatsappLeadAlertsEnabled !== false
   ) {
     try {
       alertSummary = await nearbyLeadAlertService.dispatchNearbyLeadAlerts(publishedLead, actor);
