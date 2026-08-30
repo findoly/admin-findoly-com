@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const Enquiry = require("../../models/Enquiry");
 const uuid = require("../../utils/uuid");
+const { booleanValue } = require("../../utils/validation");
 const { canonicalLeadStatus } = require("../../utils/lead-journey");
 const leadQualificationService = require("../lead-qualification/lead-qualification-service");
 const enquiryService = require("../enquiry/enquiry-service");
@@ -408,6 +409,7 @@ function presentRequirement(lead = {}) {
     generationCount: Number(lead.requirementAiGenerationCount || 0),
     approvedAt: lead.requirementAiApprovedAt || null,
     approvedBy: lead.requirementAiApprovedBy || "",
+    automaticWhatsappLeadAlertsEnabled: lead.automaticWhatsappLeadAlertsEnabled !== false,
     approved: Boolean(
       lead.requirementAiApprovedAt
       && lead.providerRequirementTitle
@@ -549,6 +551,13 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
     input.providerTitle ?? lead.requirementAiProviderTitle,
     input.providerDetails ?? lead.requirementAiProviderDetails,
   );
+  const automaticWhatsappLeadAlertsEnabled = booleanValue(
+    input.automaticWhatsappLeadAlertsEnabled,
+    {
+      label: "Automatic nearby WhatsApp alerts",
+      fallback: lead.automaticWhatsappLeadAlertsEnabled !== false,
+    },
+  );
   const now = new Date();
   const approvedBy = String(actor || "admin").slice(0, 254);
   const save = await Enquiry.updateOne(
@@ -568,6 +577,7 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
         requirementAiProviderDetails: providerDetails,
         requirementAiApprovedAt: now,
         requirementAiApprovedBy: approvedBy,
+        automaticWhatsappLeadAlertsEnabled,
         updatedAt: now,
       },
       $push: {
