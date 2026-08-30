@@ -62,28 +62,54 @@ function formattedAddressLocality(formattedAddress, details = {}) {
   return "";
 }
 
+function specificPostcodeLocalities(details = {}) {
+  const pincode = String(details.pincode || "").trim();
+  const city = String(details.city || "").trim();
+  const district = String(details.district || "").trim();
+  const state = String(details.state || "").trim();
+  const country = String(details.country || "").trim();
+  const generic = new Set(
+    [city, district, state, country, "India", pincode]
+      .map(normalizedLocationText)
+      .filter(Boolean),
+  );
+  const candidates = [
+    ...cleanTextList(details.postcodeLocalities),
+    details.locality,
+    formattedAddressLocality(details.formattedAddress, {
+      pincode,
+      city,
+      district,
+      state,
+      country,
+    }),
+  ];
+  const output = [];
+  const seen = new Set();
+  for (const value of candidates) {
+    const text = String(value || "").trim();
+    const normalized = normalizedLocationText(text);
+    if (!text || !normalized || generic.has(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(text);
+  }
+  return output;
+}
+
 function preferredLocality(details = {}) {
   const locality = String(details.locality || "").trim();
   const city = String(details.city || "").trim();
   const district = String(details.district || "").trim();
   const state = String(details.state || "").trim();
   const country = String(details.country || "").trim();
-  const postcodeLocalities = cleanTextList(details.postcodeLocalities);
   const generic = new Set(
     [city, district, state, country]
       .map(normalizedLocationText)
       .filter(Boolean),
   );
   if (locality && !generic.has(normalizedLocationText(locality))) return locality;
-  if (postcodeLocalities.length) return postcodeLocalities[0];
-  const formatted = formattedAddressLocality(details.formattedAddress, {
-    pincode: details.pincode,
-    city,
-    district,
-    state,
-    country,
-  });
-  return formatted || locality || city || district;
+  const postcodeLocalities = specificPostcodeLocalities(details);
+  return postcodeLocalities[0] || locality || city || district;
 }
 
 function validCachedLocation(cached) {
@@ -105,7 +131,7 @@ function validCachedLocation(cached) {
     || (country && country !== "india")
   ) return null;
 
-  const postcodeLocalities = cleanTextList(cached.postcodeLocalities);
+  const postcodeLocalities = specificPostcodeLocalities(cached);
   return {
     ...cached,
     latitude,
@@ -260,7 +286,7 @@ async function geocodePincode(value, options = {}) {
   const state = componentValue(components, ["administrative_area_level_1"]);
   const country = componentValue(components, ["country"]) || "India";
   const formattedAddress = String(result?.formatted_address || "").trim().slice(0, 500);
-  const postcodeLocalities = cleanTextList(result?.postcode_localities);
+  const rawPostcodeLocalities = cleanTextList(result?.postcode_localities);
   const componentLocality = componentValue(components, [
     "sublocality_level_5",
     "sublocality_level_4",
@@ -270,6 +296,16 @@ async function geocodePincode(value, options = {}) {
     "sublocality",
     "locality",
   ]);
+  const postcodeLocalities = specificPostcodeLocalities({
+    locality: componentLocality,
+    city,
+    district,
+    state,
+    country,
+    formattedAddress,
+    postcodeLocalities: rawPostcodeLocalities,
+    pincode,
+  });
   const data = {
     pincode,
     latitude,
@@ -310,4 +346,4 @@ async function geocodePincode(value, options = {}) {
   return data;
 }
 
-module.exports = { geocodePincode, normalizePincode };
+module.exports = { geocodePincode, normalizePincode, specificPostcodeLocalities };

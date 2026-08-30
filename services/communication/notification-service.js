@@ -121,12 +121,36 @@ const validCoordinate = function (value, min, max) {
   return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
 };
 
+const normalizedLocationText = function (value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+};
+
+const leadPostalAreas = function (lead = {}) {
+  const generic = new Set(
+    [lead.city, lead.locationDistrict, lead.state, lead.locationState, lead.locationCountry, "India"]
+      .map(normalizedLocationText)
+      .filter(Boolean),
+  );
+  const output = [];
+  const seen = new Set();
+  for (const value of Array.isArray(lead.locationPostcodeLocalities) ? lead.locationPostcodeLocalities : []) {
+    const text = String(value || "").trim();
+    const normalized = normalizedLocationText(text);
+    if (!text || !normalized || generic.has(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(text);
+  }
+  return output;
+};
+
 const leadArea = function (lead = {}) {
-  const area = String(lead.locationLocality || lead.city || lead.locationDistrict || "").trim();
   const pincode = String(lead.pincode || lead.locationPincode || "").trim();
+  const postalAreas = leadPostalAreas(lead);
+  const fallbackArea = String(lead.locationLocality || lead.city || lead.locationDistrict || "").trim();
+  const area = postalAreas.length ? postalAreas.join(", ") : fallbackArea;
   if (!area) return pincode;
   if (!pincode || area.includes(pincode)) return area;
-  return `${area}, ${pincode}`;
+  return `${area} - ${pincode}`;
 };
 
 const leadMapUrl = function (lead = {}) {
@@ -143,7 +167,7 @@ const leadMapUrl = function (lead = {}) {
 };
 
 const leadAreaMap = function (lead = {}) {
-  return [leadArea(lead), leadMapUrl(lead)].filter(Boolean).join(" ");
+  return [leadArea(lead), leadMapUrl(lead)].filter(Boolean).join("\n");
 };
 
 const urlSuffix = function (value) {
