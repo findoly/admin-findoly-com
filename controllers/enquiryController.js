@@ -1,5 +1,6 @@
 const service = require("../services/enquiry/enquiry-service");
 const nearbyProviderService = require("../services/enquiry/nearby-provider-service");
+const providerAlertAuditService = require("../services/enquiry/provider-alert-audit-service");
 const customerVerificationService = require("../services/enquiry/customer-verification-service");
 const leadQualificationService = require("../services/lead-qualification/lead-qualification-service");
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
@@ -315,6 +316,17 @@ async function reactivate(req, res, next) {
   }
 }
 
+async function providerAlertAudit(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await providerAlertAuditService.getProviderAlertAudit(req.params.enquiryId),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function providerStatuses(req, res, next) {
   try {
     const result = await service.listProviderUnlocks(
@@ -385,6 +397,7 @@ module.exports = {
   note,
   deactivate,
   reactivate,
+  providerAlertAudit,
   providerStatuses,
   nearbyProviders,
   sendNearbyProviderAlerts,
