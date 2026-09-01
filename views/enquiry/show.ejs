@@ -442,6 +442,52 @@
                       </table>
                     </div>
                   </div>
+
+                  <div class="card mb-3">
+                    <div class="card-header d-flex align-items-center">
+                      <div>
+                        <h5 class="mb-1">Provider WhatsApp alert audit</h5>
+                        <p class="text-muted mb-0">Read-only history of nearby-provider WhatsApp alerts for this requirement.</p>
+                      </div>
+                      <span class="badge bg-light text-dark ms-auto" x-text="(providerAlertAudit.rows || []).length + ' providers'"></span>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table mb-0">
+                        <thead><tr><th>Provider</th><th>Mode</th><th>Sent</th><th>Latest status</th><th>Latest update</th><th>Recent attempts</th></tr></thead>
+                        <tbody>
+                          <template x-if="providerAlertAuditLoading">
+                            <tr><td colspan="6"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
+                          </template>
+                          <template x-for="row in (providerAlertAudit.rows || [])" :key="row.providerId">
+                            <tr>
+                              <td>
+                                <a class="crm-record-title" :href="'/providers/' + row.providerId" x-text="row.providerName || row.providerId"></a>
+                                <div class="crm-record-id" x-text="row.providerId"></div>
+                              </td>
+                              <td x-text="row.mode === 'unknown' ? '—' : humanize(row.mode)"></td>
+                              <td class="crm-nowrap">
+                                <div x-text="formatDate(row.alertedAt)"></div>
+                                <div class="text-muted fs-sm" x-show="row.actor" x-text="'By ' + row.actor"></div>
+                              </td>
+                              <td>
+                                <span class="crm-status" :class="statusClass(row.latestStatus)" x-text="row.deliveryDetailExpired ? 'Sent' : humanize(row.latestStatus)"></span>
+                                <div class="text-muted fs-sm" x-show="row.deliveryDetailExpired">Delivery detail expired</div>
+                                <div class="text-danger fs-sm" x-show="row.failureReason" x-text="row.failureReason"></div>
+                              </td>
+                              <td class="crm-nowrap" x-text="row.latestStatusAt ? formatDate(row.latestStatusAt) : '—'"></td>
+                              <td x-text="row.recentAttemptCount || 0"></td>
+                            </tr>
+                          </template>
+                          <tr x-show="!providerAlertAuditLoading && !(providerAlertAudit.rows || []).length">
+                            <td colspan="6" class="text-center text-muted py-4">No nearby-provider WhatsApp alerts recorded.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="card-body border-top py-2 text-muted fs-sm" x-show="providerAlertAudit.communicationRetentionDays">
+                      Detailed delivery statuses are retained for about <span x-text="providerAlertAudit.communicationRetentionDays"></span> days; durable provider-send history remains available after that.
+                    </div>
+                  </div>
                 </div>
 
                 <div class="col-xl-4">
@@ -481,6 +527,8 @@
                   recordId: pathRecordId(),
                   lead: {},
                   communications: [],
+                  providerAlertAudit: { rows: [], communicationRetentionDays: 7 },
+                  providerAlertAuditLoading: false,
                   note: '',
                   statusNote: '',
                   referralForm: { status: '', method: '', reason: '', note: '' },
@@ -784,11 +832,21 @@
                       this.referralForm.method = this.lead.leadValidationMethod || '';
                       this.referralForm.reason = this.lead.agentReferralInvalidReason || '';
                       await this.loadQualification();
-                      await this.loadCommunications();
+                      await Promise.all([this.loadCommunications(), this.loadProviderAlertAudit()]);
                     } catch (error) {
                       this.notify(error.message, 'error');
                     } finally {
                       this.loading = false;
+                    }
+                  },
+                  async loadProviderAlertAudit() {
+                    this.providerAlertAuditLoading = true;
+                    try {
+                      this.providerAlertAudit = (await apiFetch('/api/enquiry/' + this.recordId + '/provider-alert-audit')).data || { rows: [] };
+                    } catch (error) {
+                      this.notify(error.message, 'error');
+                    } finally {
+                      this.providerAlertAuditLoading = false;
                     }
                   },
                   async loadCommunications() {
