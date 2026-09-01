@@ -9,12 +9,13 @@ const { identifierValue } = require("../../utils/validation");
 const MAX_RECENT_COMMUNICATIONS = 500;
 
 function communicationStatusAt(row = {}) {
-  return row.readAt
-    || row.deliveredAt
-    || row.failedAt
-    || row.sentAt
-    || row.updatedAt
-    || row.createdAt
+  const source = row || {};
+  return source.readAt
+    || source.deliveredAt
+    || source.failedAt
+    || source.sentAt
+    || source.updatedAt
+    || source.createdAt
     || null;
 }
 
