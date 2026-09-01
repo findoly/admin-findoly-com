@@ -12,7 +12,9 @@ function clampPercent(value) {
 }
 
 function scoreLabel(score) {
-  if (!Number.isFinite(Number(score))) return "Not enough data";
+  if (score === null || score === undefined || score === "" || !Number.isFinite(Number(score))) {
+    return "Not enough data";
+  }
   if (score >= 80) return "Strong";
   if (score >= 60) return "Good";
   return "Needs attention";
