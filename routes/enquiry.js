@@ -5,6 +5,7 @@ const { requirePermission } = require("../middleware/auth");
 router.get("/", requirePermission("requirements.view"), c.list);
 router.post("/", requirePermission("requirements.create"), c.create);
 router.get("/:enquiryId/nearby-providers", requirePermission("requirements.view"), c.nearbyProviders);
+router.get("/:enquiryId/provider-alert-audit", requirePermission("requirements.view"), c.providerAlertAudit);
 router.post("/:enquiryId/nearby-providers/alerts", requirePermission("requirements.manage"), c.sendNearbyProviderAlerts);
 router.get("/:enquiryId/providers", requirePermission("requirements.view"), c.providerStatuses);
 router.get("/:enquiryId/providers/:providerLeadUnlockId", requirePermission("requirements.view"), c.providerStatus);

@@ -81,6 +81,44 @@
                 </article>
               </section>
 
+              <section class="card crm-data-card mb-4" aria-label="Requirements needing attention">
+                <div class="card-header crm-card-heading">
+                  <div>
+                    <h2 class="card-title mb-1">Needs attention</h2>
+                    <p class="text-muted mb-0">Requirements with stalled progress or recent provider WhatsApp failures.</p>
+                  </div>
+                  <span class="badge bg-light text-dark" x-text="(data.needsAttention || []).length + ' items'"></span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table crm-table mb-0">
+                    <thead><tr><th>Requirement</th><th>Status</th><th>Reason</th><th>Since</th><th aria-label="Actions"></th></tr></thead>
+                    <tbody>
+                      <template x-if="loading">
+                        <tr><td colspan="5"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
+                      </template>
+                      <template x-for="item in (data.needsAttention || [])" :key="item.enquiryId">
+                        <tr>
+                          <td>
+                            <a class="crm-record-title" :href="'/enquiries/' + item.enquiryId" x-text="item.requirementTitle || 'Customer requirement'"></a>
+                            <div class="text-muted fs-sm" x-text="[item.name, item.category].filter(Boolean).join(' · ')"></div>
+                          </td>
+                          <td><span class="crm-status" :class="statusClass(item.status)" x-text="humanize(item.status)"></span></td>
+                          <td style="min-width:300px">
+                            <div class="fw-semibold" x-text="item.reason"></div>
+                            <div class="text-muted fs-sm" x-text="'Priority: ' + humanize(item.severity || 'medium')"></div>
+                          </td>
+                          <td class="crm-nowrap" x-text="formatDate(item.sinceAt)"></td>
+                          <td class="text-end"><a class="crm-row-action" :href="'/enquiries/' + item.enquiryId">Open</a></td>
+                        </tr>
+                      </template>
+                      <tr x-show="!loading && !(data.needsAttention || []).length">
+                        <td colspan="5" class="text-center text-muted py-4">No requirements need attention right now.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
               <section class="crm-dashboard-grid">
                 <div class="card crm-data-card">
                   <div class="card-header crm-card-heading">

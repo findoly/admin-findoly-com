@@ -1,6 +1,7 @@
 const service = require("../services/provider/provider-service");
 const creditService = require("../services/provider/provider-credit-service");
 const providerLocationEnrichmentService = require("../services/provider/provider-location-enrichment-service");
+const providerPerformanceService = require("../services/provider/provider-performance-service");
 
 async function list(req, res, next) {
   try {
@@ -16,6 +17,17 @@ async function get(req, res, next) {
     res.json({
       success: true,
       data: await service.get(req.params.providerId),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function performance(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      data: await providerPerformanceService.getProviderPerformance(req.params.providerId),
     });
   } catch (error) {
     next(error);
@@ -102,6 +114,7 @@ async function reviewOutcome(req, res, next) {
 module.exports = {
   list,
   get,
+  performance,
   unlocks,
   transactions,
   create,

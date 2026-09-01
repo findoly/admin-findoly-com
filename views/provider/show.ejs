@@ -47,6 +47,34 @@
                       </dl>
                     </div>
                   </div>
+                  <div class="card mt-3">
+                    <div class="card-header">
+                      <div><h5 class="mb-1">Performance</h5><p class="text-muted mb-0">Read-only metrics from provider lead outcomes.</p></div>
+                    </div>
+                    <div class="card-body">
+                      <div x-show="performanceLoading" class="crm-table-loading"><span></span><span></span><span></span></div>
+                      <div x-show="!performanceLoading" x-cloak>
+                        <div class="d-flex align-items-end gap-2 mb-3">
+                          <strong class="display-6 mb-0" x-text="performance.enoughData ? (performance.performanceScore + '/100') : '—'"></strong>
+                          <span class="text-muted mb-2" x-text="performance.label || 'Not enough data'"></span>
+                        </div>
+                        <div class="crm-provider-stat-grid mb-3">
+                          <div><span>Total unlocks</span><strong x-text="performance.totalUnlocks || 0"></strong></div>
+                          <div><span>Resolved</span><strong x-text="performance.resolvedOutcomes || 0"></strong></div>
+                          <div><span>Confirmed</span><strong x-text="performance.confirmed || 0"></strong></div>
+                          <div><span>Not confirmed</span><strong x-text="performance.notConfirmed || 0"></strong></div>
+                          <div><span>Pending</span><strong x-text="performance.pendingOutcomes || 0"></strong></div>
+                          <div><span>Conversion</span><strong x-text="performance.conversionRate === null || performance.conversionRate === undefined ? '—' : (performance.conversionRate + '%')"></strong></div>
+                        </div>
+                        <div class="alert alert-light mb-0" x-show="!performance.enoughData">
+                          Score appears after <strong x-text="performance.minimumResolvedOutcomes || 3"></strong> resolved outcomes.
+                        </div>
+                        <div class="text-muted fs-sm mt-2" x-show="performance.enoughData">
+                          Score uses conversion performance and outcome reliability. It does not affect provider alert ranking.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="col-xl-8">
                   <div class="card mb-3">
@@ -184,10 +212,12 @@
                 return {
                   recordId: pathRecordId(),
                   provider: {},
+                  performance: {},
                   offers: [],
                   transactions: [],
                   offerPagination: createCursorPagination(10),
                   transactionPagination: createCursorPagination(10),
+                  performanceLoading: false,
                   offerLoading: false,
                   transactionLoading: false,
                   creditModalOpen: false,
@@ -198,9 +228,19 @@
                   async load() {
                     try {
                       this.provider = (await apiFetch('/api/provider/' + this.recordId)).data;
-                      await Promise.all([this.loadOffers(), this.loadTransactions()]);
+                      await Promise.all([this.loadPerformance(), this.loadOffers(), this.loadTransactions()]);
                     } catch (error) {
                       this.error = error.message;
+                    }
+                  },
+                  async loadPerformance() {
+                    this.performanceLoading = true;
+                    try {
+                      this.performance = (await apiFetch('/api/provider/' + this.recordId + '/performance')).data || {};
+                    } catch (error) {
+                      this.error = error.message;
+                    } finally {
+                      this.performanceLoading = false;
                     }
                   },
                   async loadOffers() {
