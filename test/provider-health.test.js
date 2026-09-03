@@ -78,6 +78,7 @@ test("provider health keeps the approved 300-credit and 30-day boundaries", () =
   assert.equal(service.LOW_CREDIT_THRESHOLD_PAISE, 30000);
   assert.equal(service.ACTIVITY_WINDOW_DAYS, 30);
   assert.equal(service.lowCreditMatch().$or[0].walletBalancePaise.$lt, 30000);
+  assert.equal(service.lowCreditMatch().$or[1].walletBalancePaise, null);
   const cutoff = service.activityCutoff(new Date("2026-09-03T00:00:00.000Z"));
   assert.equal(cutoff.toISOString(), "2026-08-04T00:00:00.000Z");
 });
