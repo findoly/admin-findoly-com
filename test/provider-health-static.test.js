@@ -46,3 +46,9 @@ test("provider health is wired under Provider without changing subscription hist
   assert.match(providers, /href="\/providers\/health"[\s\S]*Provider health/);
   assert.doesNotMatch(read("views/billing/provider-subscriptions.ejs"), /Provider health/);
 });
+
+test("provider health keeps legacy provider IDs compatible", () => {
+  const service = read("services/provider/provider-health-service.js");
+  assert.match(service, /\$eq: \["\$id", "\$\$providerId"\]/);
+  assert.match(service, /\$ifNull: \["\$providerId", "\$id"\]/);
+});
