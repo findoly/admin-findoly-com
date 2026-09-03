@@ -40,6 +40,7 @@ function lowCreditMatch() {
     ...activeProviderMatch(),
     $or: [
       { walletBalancePaise: { $lt: LOW_CREDIT_THRESHOLD_PAISE } },
+      { walletBalancePaise: null },
       { walletBalancePaise: { $exists: false } },
     ],
   };
