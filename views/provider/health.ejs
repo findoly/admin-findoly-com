@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <%- include('../partials/head') %>
+  <body x-data="crmShell()" x-init="initShell()">
+    <%- include('../partials/navbar') %>
+    <div class="page-content">
+      <%- include('../partials/sidebar') %>
+      <div class="content-wrapper">
+        <div class="content-inner">
+          <div class="page-header page-header-light crm-page-header">
+            <div class="page-header-content crm-page-heading">
+              <div>
+                <div class="crm-page-eyebrow">Provider network</div>
+                <h1 class="page-title mb-1">Provider health</h1>
+                <p class="crm-page-subtitle mb-0">Spot recharge opportunities, active lead buyers and providers who may need re-engagement.</p>
+              </div>
+              <a href="/providers" class="btn btn-light crm-primary-action">All providers</a>
+            </div>
+          </div>
+
+          <div class="content">
+            <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
+            <main x-data="providerHealth()" x-init="load()">
+              <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-12 col-md-4"><section class="card h-100"><div class="card-body"><div class="text-muted fs-sm">Low credits</div><div class="fs-3 fw-semibold" x-text="summary.lowCreditCount"></div><div class="text-muted fs-sm">Active providers below <span x-text="summary.thresholdCredits"></span> credits</div></div></section></div>
+                <div class="col-12 col-md-4"><section class="card h-100"><div class="card-body"><div class="text-muted fs-sm">Unlocking providers</div><div class="fs-3 fw-semibold" x-text="summary.frequentUnlockerCount"></div><div class="text-muted fs-sm">Active providers with an unlock in the last <span x-text="summary.windowDays"></span> days</div></div></section></div>
+                <div class="col-12 col-md-4"><section class="card h-100"><div class="card-body"><div class="text-muted fs-sm">Idle providers</div><div class="fs-3 fw-semibold" x-text="summary.idleProviderCount"></div><div class="text-muted fs-sm">Active providers with no unlock in the last <span x-text="summary.windowDays"></span> days</div></div></section></div>
+              </div>
+
+              <section class="card crm-filter-card mb-3">
+                <div class="card-body d-flex flex-wrap align-items-end justify-content-between gap-3">
+                  <div class="d-flex flex-wrap gap-2" role="group" aria-label="Provider health view">
+                    <button type="button" class="btn" :class="view === 'low_credits' ? 'btn-primary' : 'btn-light'" @click="selectView('low_credits')">Low credits</button>
+                    <button type="button" class="btn" :class="view === 'frequent_unlockers' ? 'btn-primary' : 'btn-light'" @click="selectView('frequent_unlockers')">Frequent unlockers</button>
+                    <button type="button" class="btn" :class="view === 'idle' ? 'btn-primary' : 'btn-light'" @click="selectView('idle')">Idle providers</button>
+                  </div>
+                  <label class="crm-filter-field crm-filter-page-size"><span>Rows</span><select x-model.number="limit" @change="load()"><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select></label>
+                </div>
+              </section>
+
+              <section class="card crm-data-card">
+                <div class="card-header crm-card-heading crm-list-heading">
+                  <div><h2 class="card-title mb-1" x-text="viewTitle()"></h2><p class="text-muted mb-0"><span x-text="rows.length"></span> shown · <span x-text="viewCount()"></span> matching active providers</p></div>
+                  <span class="crm-list-refresh" x-show="loading"><span></span>Refreshing</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table crm-table mb-0">
+                    <thead><tr><th>Provider</th><th>Credits</th><th>30-day unlocks</th><th>Last unlock</th><th>Last login</th><th>Plan</th><th>Signal</th></tr></thead>
+                    <tbody>
+                      <template x-if="loading"><tr><td colspan="7"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr></template>
+                      <template x-for="row in rows" :key="row.providerId">
+                        <tr>
+                          <td><div class="crm-provider-cell"><span class="crm-provider-avatar" x-text="(row.name || 'P').charAt(0).toUpperCase()"></span><div><a class="crm-record-title" :href="'/providers/' + row.providerId" x-text="row.name || 'Unnamed provider'"></a><div class="text-muted fs-sm" x-text="row.businessName || [row.city, row.state].filter(Boolean).join(', ') || row.providerId"></div></div></div></td>
+                          <td><div class="fw-semibold" x-text="Number(row.walletBalanceCredits || 0).toLocaleString('en-IN')"></div><div class="text-muted fs-sm">available</div></td>
+                          <td><div class="fw-semibold" x-text="Number(row.unlockCount30d || 0).toLocaleString('en-IN')"></div><div class="text-muted fs-sm">last 30 days</div></td>
+                          <td x-text="row.lastUnlockAt ? formatDate(row.lastUnlockAt) : 'Never unlocked'"></td>
+                          <td x-text="row.lastLoginAt ? formatDate(row.lastLoginAt) : 'No login recorded'"></td>
+                          <td><div class="fw-semibold" x-text="row.currentPlanName || row.currentPlanCode || 'No active plan'"></div><div class="text-muted fs-sm" x-show="row.currentPlanExpiresAt" x-text="'Until ' + formatDateOnly(row.currentPlanExpiresAt)"></div></td>
+                          <td><span class="fw-semibold" x-text="signal(row)"></span></td>
+                        </tr>
+                      </template>
+                      <tr x-show="!loading && !rows.length"><td colspan="7"><div class="crm-empty-state"><strong x-text="emptyTitle()"></strong><span x-text="emptyMessage()"></span></div></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </main>
+          </div>
+          <%- include('../partials/footer') %>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function providerHealth() {
+        return {
+          rows: [],
+          summary: { lowCreditCount: 0, frequentUnlockerCount: 0, idleProviderCount: 0, activeProviderCount: 0, thresholdCredits: 300, windowDays: 30 },
+          view: 'low_credits',
+          limit: 50,
+          loading: false,
+          error: '',
+          async load() {
+            this.loading = true;
+            this.error = '';
+            try {
+              const query = new URLSearchParams({ view: this.view, limit: this.limit });
+              const body = await apiFetch('/api/providers/health?' + query.toString());
+              this.rows = body.data || [];
+              this.summary = { ...this.summary, ...(body.summary || {}) };
+            } catch (error) {
+              this.error = error.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          selectView(view) {
+            if (this.view === view) return;
+            this.view = view;
+            this.load();
+          },
+          viewTitle() {
+            return this.view === 'frequent_unlockers'
+              ? 'Frequent unlockers'
+              : this.view === 'idle'
+                ? 'Idle providers'
+                : 'Low-credit providers';
+          },
+          viewCount() {
+            return this.view === 'frequent_unlockers'
+              ? this.summary.frequentUnlockerCount
+              : this.view === 'idle'
+                ? this.summary.idleProviderCount
+                : this.summary.lowCreditCount;
+          },
+          signal(row) {
+            if (this.view === 'frequent_unlockers') return Number(row.unlockCount30d || 0) + ' unlocks in 30 days';
+            if (this.view === 'idle') return row.lastUnlockAt ? 'No unlock in 30 days' : 'Never unlocked';
+            return 'Below ' + this.summary.thresholdCredits + ' credits';
+          },
+          emptyTitle() {
+            return this.view === 'frequent_unlockers'
+              ? 'No recent unlockers'
+              : this.view === 'idle'
+                ? 'No idle providers'
+                : 'No low-credit providers';
+          },
+          emptyMessage() {
+            return this.view === 'frequent_unlockers'
+              ? 'No active provider has unlocked a lead in the last 30 days.'
+              : this.view === 'idle'
+                ? 'Every active provider has unlocked a lead in the last 30 days.'
+                : 'Every active provider currently has at least 300 credits.';
+          }
+        };
+      }
+    </script>
+    <%- include('../partials/scripts') %>
+  </body>
+</html>

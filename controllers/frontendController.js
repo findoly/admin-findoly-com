@@ -14,6 +14,7 @@ const frontendController = {
   enquiryProviderStatuses: render("enquiry/provider-statuses", "Unlocked providers"),
   enquiryProviderStatusShow: render("enquiry/provider-status-show", "Provider unlock details"),
   providers: render("provider/index", "Providers"),
+  providerHealth: render("provider/health", "Provider health"),
   providerMap: (req, res) => res.render("provider/map", {
     title: "Provider map",
     googleMapsBrowserApiKey: String(process.env.GOOGLE_MAPS_BROWSER_API_KEY || "").trim(),
