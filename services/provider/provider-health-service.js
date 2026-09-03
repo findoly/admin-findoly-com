@@ -134,8 +134,20 @@ async function frequentUnlockerRows(limit, cutoff) {
     {
       $lookup: {
         from: Provider.collection.collectionName,
-        localField: "_id",
-        foreignField: "providerId",
+        let: { providerId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $eq: ["$providerId", "$$providerId"] },
+                  { $eq: ["$id", "$$providerId"] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
         as: "providerRows",
       },
     },
@@ -158,7 +170,7 @@ async function idleRows(limit, cutoff) {
     {
       $lookup: {
         from: ProviderLeadUnlock.collection.collectionName,
-        let: { providerId: "$providerId" },
+        let: { providerId: { $ifNull: ["$providerId", "$id"] } },
         pipeline: [
           {
             $match: {
@@ -181,7 +193,7 @@ async function idleRows(limit, cutoff) {
     {
       $lookup: {
         from: ProviderLeadUnlock.collection.collectionName,
-        let: { providerId: "$providerId" },
+        let: { providerId: { $ifNull: ["$providerId", "$id"] } },
         pipeline: [
           { $match: { $expr: { $eq: ["$providerId", "$$providerId"] } } },
           { $sort: { unlockedAt: -1, _id: -1 } },
@@ -211,8 +223,20 @@ async function recentActiveProviderCount(cutoff) {
     {
       $lookup: {
         from: Provider.collection.collectionName,
-        localField: "_id",
-        foreignField: "providerId",
+        let: { providerId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $eq: ["$providerId", "$$providerId"] },
+                  { $eq: ["$id", "$$providerId"] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
         as: "providerRows",
       },
     },
