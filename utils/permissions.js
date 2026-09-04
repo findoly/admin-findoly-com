@@ -11,7 +11,7 @@ const PERMISSION_GROUPS = Object.freeze([
       { key: "requirements.view", label: "View requirements" },
       { key: "requirements.create", label: "Create requirements" },
       { key: "requirements.edit", label: "Edit requirements" },
-      { key: "requirements.manage", label: "Change status, notes and marketplace availability" },
+      { key: "requirements.manage", label: "Change status, notes, marketplace availability and provider access links" },
     ],
   },
   {
