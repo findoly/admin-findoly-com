@@ -27,7 +27,6 @@
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <div x-show="successMessage" x-cloak class="alert alert-success" x-text="successMessage"></div>
 
-
               <div x-show="reason === 'lead_coordinates_missing'" x-cloak class="alert alert-warning">
                 This requirement does not have saved coordinates yet, so nearby-provider distance cannot be calculated.
               </div>
@@ -147,6 +146,14 @@
                               :disabled="sendingAlerts || !canSendAlerts || !provider.whatsappAlertEligible"
                               @click="sendAlerts([provider.providerId])"
                             ><span>Send WhatsApp</span></button>
+                            <button
+                              x-show="can('requirements.manage')"
+                              x-cloak
+                              type="button"
+                              class="btn btn-light btn-sm me-2"
+                              :disabled="copyingProviderId === provider.providerId || provider.portalAccessEnabled === false"
+                              @click="copyDirectLink(provider)"
+                            ><span x-text="copyingProviderId === provider.providerId ? 'Preparing…' : 'Copy lead link'"></span></button>
                             <a class="crm-row-action" :href="'/providers/' + provider.providerId">View provider</a>
                           </td>
                         </tr>
@@ -186,6 +193,7 @@
           sortOrder: 'nearest',
           loading: false,
           sendingAlerts: false,
+          copyingProviderId: '',
           selectedProviderIds: [],
           error: '',
           successMessage: '',
@@ -235,6 +243,22 @@
               subcategory_not_selected: 'Service not selected',
             }[String(reason || '')] || 'Not eligible';
           },
+          async copyText(value) {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(value);
+              return;
+            }
+            const textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (!copied) throw new Error('Could not copy the lead link. Please try again.');
+          },
           async init() {
             const backLink = document.getElementById('nearby-provider-back-link');
             if (backLink) backLink.href = '/' + this.section + '/' + encodeURIComponent(this.leadId);
@@ -262,6 +286,31 @@
               this.error = error.message;
             } finally {
               this.loading = false;
+            }
+          },
+          async copyDirectLink(provider) {
+            const providerId = String(provider?.providerId || '').trim();
+            if (!providerId || this.copyingProviderId) return;
+            this.copyingProviderId = providerId;
+            this.error = '';
+            this.successMessage = '';
+            try {
+              const body = await apiFetch(
+                '/api/enquiry/' + encodeURIComponent(this.leadId)
+                  + '/nearby-providers/' + encodeURIComponent(providerId) + '/direct-link',
+                { method: 'POST', body: '{}' },
+              );
+              const url = String(body.data?.url || '').trim();
+              if (!url) throw new Error('The direct lead link could not be created.');
+              await this.copyText(url);
+              const providerName = provider.businessName || provider.name || 'provider';
+              this.successMessage = 'Lead link copied for ' + providerName + '.';
+              showCrmToast(this.successMessage, 'success');
+            } catch (error) {
+              this.error = error.message;
+              showCrmToast(error.message, 'error');
+            } finally {
+              this.copyingProviderId = '';
             }
           },
           async sendAlerts(providerIds) {

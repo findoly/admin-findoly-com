@@ -10,10 +10,13 @@ router.post("/enquiries", publicIntakeRateLimit, optionalIntakeToken, enquiryCon
 router.post("/requirements", publicIntakeRateLimit, optionalIntakeToken, enquiryController.createPublic);
 router.post("/leads", publicIntakeRateLimit, optionalIntakeToken, enquiryController.createPublic);
 const communicationController = require("../controllers/communicationController");
+const providerPlanCommunicationController = require("../controllers/providerPlanCommunicationController");
 router.post("/communication/otp/send", communicationOtpAccess, communicationController.sendOtp);
 router.post("/communication/otp/verify", communicationOtpAccess, communicationController.verifyOtp);
 router.post("/communications/otp/send", communicationOtpAccess, communicationController.sendOtp);
 router.post("/communications/otp/verify", communicationOtpAccess, communicationController.verifyOtp);
+router.post("/communication/events/provider_plan_purchased", communicationEventAccess, providerPlanCommunicationController.integrationEvent);
+router.post("/communications/events/provider_plan_purchased", communicationEventAccess, providerPlanCommunicationController.integrationEvent);
 router.post("/communication/events/:event", communicationEventAccess, communicationController.integrationEvent);
 router.post("/communications/events/:event", communicationEventAccess, communicationController.integrationEvent);
 router.use("/customer-portal", require("./customer-portal"));
