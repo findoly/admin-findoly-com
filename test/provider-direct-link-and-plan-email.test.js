@@ -72,6 +72,21 @@ test("provider plan email is simple, growth-focused and contains no emoji", () =
   assert.doesNotMatch(planEmailService.SUBJECT + planEmailService.BODY, /[\p{Extended_Pictographic}\uFE0F]/u);
 });
 
+test("provider plan email uses accurate active and scheduled renewal wording", () => {
+  const now = new Date("2026-09-04T00:00:00.000Z");
+  assert.equal(
+    planEmailService.planStatusLine({ planStatus: "active", startsAt: now }, "Growth", now),
+    "Your Growth plan is now active.",
+  );
+  const scheduled = planEmailService.planStatusLine(
+    { planStatus: "scheduled", startsAt: new Date("2026-09-10T00:00:00.000Z") },
+    "Growth",
+    now,
+  );
+  assert.match(scheduled, /^Your Growth plan renewal is confirmed and will start on /);
+  assert.match(scheduled, /10 Sept 2026\.$/);
+});
+
 test("provider plan email classifies terminal failures for outbox retries", () => {
   for (const status of ["failed", "bounced", "complained", "rejected"]) {
     assert.equal(planEmailService.deliveryFailed({ status }), true);
