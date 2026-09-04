@@ -47,6 +47,11 @@ function validDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isoDateTime(value) {
+  const date = validDate(value);
+  return date ? date.toISOString() : "";
+}
+
 function formatStartDate(value) {
   const date = validDate(value);
   if (!date) return "";
@@ -166,7 +171,7 @@ async function dispatch(context = {}) {
         planCode: clean(context.planCode, 120),
         billingCycle: clean(context.billingCycle, 80),
         planStatus: clean(context.planStatus, 40),
-        startsAt: validDate(context.startsAt),
+        startsAt: isoDateTime(context.startsAt),
         source: "provider-portal",
       },
     },
@@ -201,6 +206,7 @@ module.exports = {
   TERMINAL_FAILURE_STATUSES,
   clean,
   validDate,
+  isoDateTime,
   formatStartDate,
   planStatusLine,
   ensureTemplate,
