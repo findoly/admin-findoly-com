@@ -119,12 +119,12 @@ function providerLeadUrl(enquiryId) {
     || "https://provider.findoly.com";
   try {
     const url = new URL(rawBase);
-    url.pathname = `/lead/${encodeURIComponent(String(enquiryId || ""))}`;
+    url.pathname = `/leads/${encodeURIComponent(String(enquiryId || ""))}`;
     url.search = "";
     url.hash = "";
     return url.toString();
   } catch (_error) {
-    return `https://provider.findoly.com/lead/${encodeURIComponent(String(enquiryId || ""))}`;
+    return `https://provider.findoly.com/leads/${encodeURIComponent(String(enquiryId || ""))}`;
   }
 }
 
