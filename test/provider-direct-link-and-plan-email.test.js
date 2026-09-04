@@ -85,6 +85,11 @@ test("provider plan email uses accurate active and scheduled renewal wording", (
   );
   assert.match(scheduled, /^Your Growth plan renewal is confirmed and will start on /);
   assert.match(scheduled, /10 Sept 2026\.$/);
+  assert.equal(
+    planEmailService.isoDateTime(new Date("2026-09-10T00:00:00.000Z")),
+    "2026-09-10T00:00:00.000Z",
+  );
+  assert.equal(planEmailService.isoDateTime("not-a-date"), "");
 });
 
 test("provider plan email classifies terminal failures for outbox retries", () => {
@@ -97,6 +102,7 @@ test("provider plan email classifies terminal failures for outbox retries", () =
   const source = fs.readFileSync(path.join(__dirname, "../services/communication/provider-plan-email-service.js"), "utf8");
   assert.match(source, /communicationService\.retry\(/);
   assert.match(source, /deliveryFailed\(communication\)/);
+  assert.match(source, /startsAt: isoDateTime\(context\.startsAt\)/);
 });
 
 test("provider plan event has an exact communication-token route before generic events", () => {
