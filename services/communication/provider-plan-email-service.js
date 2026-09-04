@@ -13,7 +13,9 @@ const BODY = [
   "",
   "Thank you for choosing Findoly.",
   "",
-  "Your {{plan_name}} plan has been successfully purchased, and {{total_credits}} credits have been added to your account.",
+  "{{plan_status_line}}",
+  "",
+  "{{total_credits}} credits have been added to your account.",
   "",
   "We're happy to have you grow with us. Our goal is to help you connect with more genuine customer enquiries, win more bookings, and grow your business with Findoly.",
   "",
@@ -37,6 +39,37 @@ function requiredId(value, label) {
   const result = clean(value, 180);
   if (!result) throw Object.assign(new Error(`${label} is required`), { status: 400 });
   return result;
+}
+
+function validDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatStartDate(value) {
+  const date = validDate(value);
+  if (!date) return "";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+}
+
+function planStatusLine(context = {}, planNameInput = "Findoly", now = new Date()) {
+  const planName = clean(planNameInput, 160) || "Findoly";
+  const status = clean(context.planStatus, 40).toLowerCase();
+  const startsAt = validDate(context.startsAt);
+  const scheduled = status === "scheduled" && (!startsAt || startsAt > now);
+  if (scheduled) {
+    const startDate = formatStartDate(startsAt);
+    return startDate
+      ? `Your ${planName} plan renewal is confirmed and will start on ${startDate}.`
+      : `Your ${planName} plan renewal is confirmed and is scheduled to start later.`;
+  }
+  return `Your ${planName} plan is now active.`;
 }
 
 async function ensureTemplate() {
@@ -108,6 +141,7 @@ async function dispatch(context = {}) {
   const variables = {
     provider_name: providerName,
     plan_name: planName,
+    plan_status_line: planStatusLine(context, planName),
     total_credits: Number.isFinite(totalCredits)
       ? totalCredits.toLocaleString("en-IN", { maximumFractionDigits: 2 })
       : "0",
@@ -131,6 +165,8 @@ async function dispatch(context = {}) {
         providerSubscriptionId: ack.providerSubscriptionId,
         planCode: clean(context.planCode, 120),
         billingCycle: clean(context.billingCycle, 80),
+        planStatus: clean(context.planStatus, 40),
+        startsAt: validDate(context.startsAt),
         source: "provider-portal",
       },
     },
@@ -163,6 +199,10 @@ module.exports = {
   SUBJECT,
   BODY,
   TERMINAL_FAILURE_STATUSES,
+  clean,
+  validDate,
+  formatStartDate,
+  planStatusLine,
   ensureTemplate,
   acknowledgement,
   deliveryFailed,
