@@ -7,6 +7,7 @@ const communicationService = require("./communication-service");
 const EVENT_NAME = "provider_plan_purchased";
 const TEMPLATE_NAME = "findoly_provider_plan_purchased";
 const SUBJECT = "Thank you for growing with Findoly";
+const TERMINAL_FAILURE_STATUSES = new Set(["failed", "bounced", "complained", "rejected"]);
 const BODY = [
   "Hello {{provider_name}},",
   "",
@@ -76,6 +77,10 @@ function acknowledgement(context = {}) {
   };
 }
 
+function deliveryFailed(communication = {}) {
+  return TERMINAL_FAILURE_STATUSES.has(String(communication.status || "").toLowerCase());
+}
+
 async function dispatch(context = {}) {
   const ack = acknowledgement(context);
   const provider = await Provider.findOne({
@@ -108,7 +113,7 @@ async function dispatch(context = {}) {
       : "0",
   };
 
-  const communication = await communicationService.send(
+  let communication = await communicationService.send(
     {
       channel: "email",
       templateId: template.templateId,
@@ -132,9 +137,14 @@ async function dispatch(context = {}) {
     "integration-api",
   );
 
-  const failed = ["failed", "bounced", "complained", "rejected"].includes(
-    String(communication?.status || "").toLowerCase(),
-  );
+  if (deliveryFailed(communication)) {
+    communication = await communicationService.retry(
+      communication.communicationId,
+      "integration-api",
+    );
+  }
+
+  const failed = deliveryFailed(communication);
   return {
     acknowledgement: ack,
     channelDeliveries: [{
@@ -152,7 +162,9 @@ module.exports = {
   TEMPLATE_NAME,
   SUBJECT,
   BODY,
+  TERMINAL_FAILURE_STATUSES,
   ensureTemplate,
   acknowledgement,
+  deliveryFailed,
   dispatch,
 };
