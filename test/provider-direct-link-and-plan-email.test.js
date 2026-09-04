@@ -72,6 +72,18 @@ test("provider plan email is simple, growth-focused and contains no emoji", () =
   assert.doesNotMatch(planEmailService.SUBJECT + planEmailService.BODY, /[\p{Extended_Pictographic}\uFE0F]/u);
 });
 
+test("provider plan email classifies terminal failures for outbox retries", () => {
+  for (const status of ["failed", "bounced", "complained", "rejected"]) {
+    assert.equal(planEmailService.deliveryFailed({ status }), true);
+  }
+  for (const status of ["queued", "accepted", "sent", "delivered"]) {
+    assert.equal(planEmailService.deliveryFailed({ status }), false);
+  }
+  const source = fs.readFileSync(path.join(__dirname, "../services/communication/provider-plan-email-service.js"), "utf8");
+  assert.match(source, /communicationService\.retry\(/);
+  assert.match(source, /deliveryFailed\(communication\)/);
+});
+
 test("provider plan event has an exact communication-token route before generic events", () => {
   const routes = fs.readFileSync(path.join(__dirname, "../routes/main.js"), "utf8");
   const exact = routes.indexOf('/communication/events/provider_plan_purchased');
