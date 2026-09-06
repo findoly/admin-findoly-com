@@ -58,6 +58,34 @@
                     </button>
                   </div>
                 </div>
+
+                <div
+                  class="border-bottom bg-light bg-opacity-25"
+                  data-nearby-coverage-root
+                  data-google-maps-browser-api-key="<%= googleMapsBrowserApiKey || '' %>"
+                  data-google-maps-map-id="<%= googleMapsMapId || '' %>"
+                >
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 py-2">
+                    <div>
+                      <div class="fw-semibold">Customer and provider locations</div>
+                      <div class="text-muted fs-sm">Google Maps is used only to visualize locations. Findoly's existing Haversine calculation remains the source of provider distance.</div>
+                    </div>
+                    <span class="badge bg-light text-dark" data-nearby-coverage-count>0 providers plotted</span>
+                  </div>
+                  <div class="alert alert-light mb-0 rounded-0 border-start-0 border-end-0" data-nearby-coverage-message>
+                    Loading customer and nearby provider locations…
+                  </div>
+                  <div
+                    data-nearby-coverage-canvas
+                    role="region"
+                    aria-label="Customer and nearby provider locations"
+                    style="width:100%;min-height:420px;background:#f4f6f8"
+                  ></div>
+                  <div class="px-3 py-2 text-muted fs-sm">
+                    C = customer · P = provider · Circle = saved nearby-provider radius. Distances shown in the map popup come from the CRM, not Google distance APIs.
+                  </div>
+                </div>
+
                 <div class="card-body border-bottom">
                   <div class="row g-3 align-items-end">
                     <div class="col-lg-6">
@@ -282,6 +310,13 @@
               this.reason = body.reason || '';
               const availableIds = new Set(this.providers.filter((provider) => provider.whatsappAlertEligible).map((provider) => provider.providerId));
               this.selectedProviderIds = this.selectedProviderIds.filter((providerId) => availableIds.has(providerId));
+              const mapPayload = {
+                lead: this.lead,
+                providers: this.providers,
+                radiusKm: this.radiusKm,
+              };
+              window.__findolyNearbyProviderMapData = mapPayload;
+              window.dispatchEvent(new CustomEvent('nearby-providers:loaded', { detail: mapPayload }));
             } catch (error) {
               this.error = error.message;
             } finally {
@@ -351,6 +386,7 @@
         };
       }
     </script>
+    <script src="/js/nearby-coverage-map.js?v=20260907-1"></script>
     <%- include('../partials/scripts') %>
   </body>
 </html>
