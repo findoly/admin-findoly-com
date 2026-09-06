@@ -8,7 +8,6 @@
   let radiusCircle = null;
   let customerMarker = null;
   let providerMarkers = [];
-  let lastPayload = null;
 
   function finiteCoordinate(value, min, max) {
     if (value === null || value === undefined || String(value).trim() === '') return null;
@@ -258,7 +257,6 @@
   }
 
   async function renderPayload(payload) {
-    lastPayload = payload;
     const lead = payload?.lead || {};
     const providers = Array.isArray(payload?.providers) ? payload.providers : [];
     const customer = customerPosition(lead);
