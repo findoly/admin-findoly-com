@@ -32,6 +32,8 @@ test("nearby map visualizes the same lead and provider payload used by the table
   assert.match(map, /window\.addEventListener\('nearby-providers:loaded'/);
   assert.match(map, /payload\?\.lead/);
   assert.match(map, /payload\?\.providers/);
+  assert.match(map, /mapInitializationPromise/);
+  assert.match(map, /if \(mapInitializationPromise\) return mapInitializationPromise/);
 });
 
 test("Google Maps is visualization-only and CRM Haversine distance remains authoritative", () => {
