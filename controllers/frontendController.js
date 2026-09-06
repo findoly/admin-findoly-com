@@ -1,5 +1,11 @@
 function render(view, title) {
-  return (req, res) => res.render(view, { title });
+  return (req, res) => res.render(view, {
+    title,
+    ...(view === "enquiry/nearby-providers" ? {
+      googleMapsBrowserApiKey: String(process.env.GOOGLE_MAPS_BROWSER_API_KEY || "").trim(),
+      googleMapsMapId: String(process.env.GOOGLE_MAPS_MAP_ID || "").trim(),
+    } : {}),
+  });
 }
 
 const frontendController = {
