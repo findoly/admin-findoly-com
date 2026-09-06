@@ -1,6 +1,15 @@
 (function () {
   'use strict';
 
+  function loadContextHelpUi() {
+    if (document.querySelector('script[data-crm-context-help]')) return;
+    const script = document.createElement('script');
+    script.src = '/js/crm-context-help.js?v=20260904-1';
+    script.async = false;
+    script.dataset.crmContextHelp = 'true';
+    document.head.appendChild(script);
+  }
+
   function loadLeadValidationUi() {
     const path = window.location.pathname.replace(/\/$/, '');
     if (!/^\/(?:enquiries|requirements)\/[^/]+$/.test(path)) return;
@@ -12,6 +21,7 @@
     document.head.appendChild(script);
   }
 
+  loadContextHelpUi();
   loadLeadValidationUi();
 
   if (window.Alpine) return;
