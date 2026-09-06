@@ -2,6 +2,7 @@
   'use strict';
 
   let map = null;
+  let mapInitializationPromise = null;
   let infoWindow = null;
   let AdvancedMarkerElement = null;
   let PinElement = null;
@@ -215,45 +216,50 @@
     if (!providerPositions.length) map.setZoom(radiusKm <= 5 ? 13 : radiusKm <= 20 ? 11 : 9);
   }
 
-  async function initializeMap() {
+  function initializeMap() {
     const root = rootElement();
     const canvas = canvasElement();
-    if (!root || !canvas) return false;
-    if (map) return true;
+    if (!root || !canvas) return Promise.resolve(false);
+    if (map) return Promise.resolve(true);
+    if (mapInitializationPromise) return mapInitializationPromise;
 
     const apiKey = String(root.dataset.googleMapsBrowserApiKey || '').trim();
     const mapId = String(root.dataset.googleMapsMapId || '').trim();
     if (!apiKey || !mapId) {
       setMessage('Google Maps is not configured for this CRM environment. The provider table remains fully available.', 'warning');
       canvas.hidden = true;
-      return false;
+      return Promise.resolve(false);
     }
 
     setMessage('Loading customer and nearby provider locations…');
-    try {
-      await loadGoogleMaps(apiKey);
-      const mapsLibrary = await google.maps.importLibrary('maps');
-      const markerLibrary = await google.maps.importLibrary('marker');
-      AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
-      PinElement = markerLibrary.PinElement;
-      infoWindow = new mapsLibrary.InfoWindow();
-      map = new mapsLibrary.Map(canvas, {
-        center: { lat: 20.5937, lng: 78.9629 },
-        zoom: 5,
-        mapId,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        clickableIcons: true,
-      });
-      canvas.hidden = false;
-      setMessage('');
-      return true;
-    } catch (error) {
-      canvas.hidden = true;
-      setMessage(error.message || 'Google Maps could not be initialized.', 'warning');
-      return false;
-    }
+    mapInitializationPromise = (async () => {
+      try {
+        await loadGoogleMaps(apiKey);
+        const mapsLibrary = await google.maps.importLibrary('maps');
+        const markerLibrary = await google.maps.importLibrary('marker');
+        AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
+        PinElement = markerLibrary.PinElement;
+        infoWindow = new mapsLibrary.InfoWindow();
+        map = new mapsLibrary.Map(canvas, {
+          center: { lat: 20.5937, lng: 78.9629 },
+          zoom: 5,
+          mapId,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: true,
+          clickableIcons: true,
+        });
+        canvas.hidden = false;
+        setMessage('');
+        return true;
+      } catch (error) {
+        canvas.hidden = true;
+        setMessage(error.message || 'Google Maps could not be initialized.', 'warning');
+        return false;
+      }
+    })();
+
+    return mapInitializationPromise;
   }
 
   async function renderPayload(payload) {
