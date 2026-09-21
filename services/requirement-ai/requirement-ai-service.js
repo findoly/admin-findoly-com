@@ -95,9 +95,10 @@ function trimWords(value, maxWords) {
 }
 
 function manualProviderText(lead = {}, raw = "") {
-  const serviceType = Array.isArray(lead.serviceTypes)
-    ? compactText(lead.serviceTypes.find((item) => compactText(item?.name || item))?.name || lead.serviceTypes[0])
-    : "";
+  const firstServiceType = Array.isArray(lead.serviceTypes)
+    ? lead.serviceTypes.find((item) => compactText(item?.name || item))
+    : null;
+  const serviceType = compactText(firstServiceType?.name || firstServiceType);
   let providerTitle = trimWords(
     serviceType
       || lead.serviceType
