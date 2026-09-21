@@ -128,6 +128,42 @@ test("requirement AI prompt is explicitly a low-level clarity gate", () => {
   assert.match(prompt, /Use clarify only when the main customer need cannot be described without guessing/);
 });
 
+test("manual fallback uses safe raw requirement text within provider limits", () => {
+  const fallback = requirementAi.manualProviderText({
+    serviceTypes: [{ name: "CCTV Repair" }],
+  }, words(120));
+  assert.equal(fallback.providerTitle, "CCTV Repair");
+  assert.equal(requirementAi.wordCount(fallback.providerDetails), 100);
+});
+
+test("manual fallback does not prefill raw contact or budget details for providers", () => {
+  const fallback = requirementAi.manualProviderText({
+    serviceType: "CCTV Repair",
+  }, "Need CCTV repair. Call 9876543210. Budget is ₹5,000.");
+  assert.equal(fallback.providerTitle, "CCTV Repair");
+  assert.equal(fallback.providerDetails, "");
+});
+
+test("only AI errors activate manual requirement fallback", () => {
+  assert.equal(requirementAi.isAiFailure({ code: "AI_TIMEOUT" }), true);
+  assert.equal(requirementAi.isAiFailure({ code: "AI_PROVIDER_ERROR" }), true);
+  assert.equal(requirementAi.isAiFailure({ code: "LEAD_REQUIREMENT_CONCURRENT_UPDATE" }), false);
+  assert.equal(requirementAi.isAiFailure(new Error("network")), false);
+});
+
+test("requirement workflow persists and exposes manual fallback state", () => {
+  const service = fs.readFileSync(path.join(__dirname, "../services/requirement-ai/requirement-ai-service.js"), "utf8");
+  const model = fs.readFileSync(path.join(__dirname, "../models/Enquiry.js"), "utf8");
+  const view = fs.readFileSync(path.join(__dirname, "../views/enquiry/show.ejs"), "utf8");
+
+  assert.match(service, /requirementAiStatus: "manual"/);
+  assert.match(service, /type: "requirement_ai_fallback"/);
+  assert.match(service, /\["ready", "manual"\]\.includes\(lead\.requirementAiStatus\)/);
+  assert.match(model, /enum: \["", "ready", "clarify", "manual"\]/);
+  assert.match(view, /AI is temporarily unavailable — manual approval is enabled/);
+  assert.match(view, /\['ready', 'manual'\]\.includes\(this\.requirementForm\.status\)/);
+});
+
 test("nearby provider alert resolves the approved short requirement first", () => {
   const source = fs.readFileSync(path.join(__dirname, "../services/communication/notification-service.js"), "utf8");
   assert.match(source, /lead\.providerRequirementTitle \|\| lead\.requirementTitle/);

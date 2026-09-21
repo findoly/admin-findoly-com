@@ -204,7 +204,7 @@
                           <h3>Customer requirement</h3>
                           <p>Capture the customer's need, then use AI to prepare clear provider-facing wording.</p>
                         </div>
-                        <span class="crm-status ms-auto" :class="requirementApproved ? 'status-approved' : 'status-pending'" x-text="requirementApproved ? 'Approved' : (providerControlled ? 'Not captured' : (requirementForm.status === 'ready' ? 'Ready' : (requirementForm.status === 'clarify' ? 'Clarify' : 'Pending')))"></span>
+                        <span class="crm-status ms-auto" :class="requirementApproved ? 'status-approved' : 'status-pending'" x-text="requirementApproved ? 'Approved' : (providerControlled ? 'Not captured' : (requirementForm.status === 'ready' ? 'Ready' : (requirementForm.status === 'manual' ? 'Manual' : (requirementForm.status === 'clarify' ? 'Clarify' : 'Pending'))))"></span>
                       </div>
 
                       <div x-show="providerControlled" x-cloak class="crm-action-lock">
@@ -250,19 +250,24 @@
                           <div class="small mt-2">Update the customer requirement above and check again.</div>
                         </div>
 
-                        <div x-show="requirementForm.status === 'ready'" x-cloak>
-                          <div class="alert alert-success mb-3">
+                        <div x-show="requirementForm.status === 'manual'" x-cloak class="alert alert-warning mb-3">
+                          <div class="fw-semibold">AI is temporarily unavailable — manual approval is enabled</div>
+                          <div class="small mt-1">Review the saved customer requirement and the provider-facing wording below, then approve normally. If the raw text contains contact or budget details, enter safe provider wording manually before approval.</div>
+                        </div>
+
+                        <div x-show="requirementForm.status === 'ready' || requirementForm.status === 'manual'" x-cloak>
+                          <div x-show="requirementForm.status === 'ready'" x-cloak class="alert alert-success mb-3">
                             <div class="fw-semibold">AI wording is ready for employee review</div>
                             <div class="small mt-1">The AI suggestion stays visible below. Edit only the final provider wording if a correction is required.</div>
                           </div>
 
-                          <div class="mb-3">
+                          <div class="mb-3" x-show="requirementForm.status === 'ready'" x-cloak>
                             <label class="form-label">AI corrected title</label>
                             <input class="form-control" :value="requirementForm.aiTitle" readonly>
                             <div class="form-text">Read-only snapshot of the latest AI suggestion.</div>
                           </div>
 
-                          <div class="mb-3">
+                          <div class="mb-3" x-show="requirementForm.status === 'ready'" x-cloak>
                             <label class="form-label">AI corrected description</label>
                             <textarea class="form-control" rows="4" :value="requirementForm.aiDetails" readonly></textarea>
                             <div class="form-text">Read-only snapshot of the latest AI suggestion.</div>
@@ -548,7 +553,7 @@
                     return this.wordCount(this.requirementForm.providerDetails);
                   },
                   get requirementReadyToApprove() {
-                    return this.requirementForm.status === 'ready'
+                    return ['ready', 'manual'].includes(this.requirementForm.status)
                       && Boolean(this.requirementForm.providerTitle.trim())
                       && Boolean(this.requirementForm.providerDetails.trim())
                       && this.requirementTitleWords <= 20
@@ -669,6 +674,7 @@
                     if (['agent_referral_validation', 'lead_validation'].includes(event.type)) return 'Lead validation updated';
                     if (event.type === 'requirement_ai_generated') return 'Customer requirement prepared';
                     if (event.type === 'requirement_ai_clarification') return 'Customer requirement needs clarification';
+                    if (event.type === 'requirement_ai_fallback') return 'Manual requirement review enabled';
                     if (event.type === 'customer_requirement_approved') return 'Customer requirement approved';
                     if (event.type === 'created') return 'Lead created';
                     if (event.type === 'note') return 'Note added';
@@ -854,6 +860,8 @@
                       this.applyRequirement(data.requirement || data.lead || {});
                       if (this.requirementForm.status === 'clarify') {
                         this.notify('AI needs one clarification before this requirement can be approved.', 'warning');
+                      } else if (this.requirementForm.status === 'manual') {
+                        this.notify('AI is unavailable. Manual requirement approval is enabled using the saved customer requirement.', 'warning');
                       } else {
                         this.notify('Provider-facing requirement wording is ready for review.', 'success');
                       }

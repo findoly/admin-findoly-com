@@ -88,6 +88,41 @@ function containsRestrictedContact(value) {
   return /(?:\+?91[\s().-]*)?[6-9](?:[\s().-]*\d){9}\b/.test(text);
 }
 
+function trimWords(value, maxWords) {
+  const text = compactText(value);
+  if (!text) return "";
+  return text.split(/\s+/).slice(0, maxWords).join(" ");
+}
+
+function manualProviderText(lead = {}, raw = "") {
+  const firstServiceType = Array.isArray(lead.serviceTypes)
+    ? lead.serviceTypes.find((item) => compactText(item?.name || item))
+    : null;
+  const serviceType = compactText(firstServiceType?.name || firstServiceType);
+  let providerTitle = trimWords(
+    serviceType
+      || lead.serviceType
+      || lead.category
+      || lead.requirementTitle
+      || "Customer requirement",
+    MAX_TITLE_WORDS,
+  ).slice(0, 300);
+  if (containsRestrictedContact(providerTitle) || containsRestrictedBudget(providerTitle)) {
+    providerTitle = "Customer requirement";
+  }
+
+  const rawText = compactText(raw);
+  const providerDetails = containsRestrictedContact(rawText) || containsRestrictedBudget(rawText)
+    ? ""
+    : trimWords(rawText, MAX_DETAILS_WORDS).slice(0, 2000);
+
+  return { providerTitle, providerDetails };
+}
+
+function isAiFailure(error) {
+  return typeof error?.code === "string" && error.code.startsWith("AI_");
+}
+
 function containsRestrictedBudget(value) {
   const text = String(value || "");
   return /₹|\b(?:budget|expected\s+spend|rupees?|inr)\b|\brs\.?\s*\d/i.test(text);
@@ -448,7 +483,55 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
   }
   lead = { ...lead, ...rawUpdate };
 
-  const generated = await requestOpenAi(lead, raw, options);
+  let generated;
+  try {
+    generated = await requestOpenAi(lead, raw, options);
+  } catch (error) {
+    if (!isAiFailure(error)) throw error;
+
+    const now = new Date();
+    const hash = sourceHash(lead, raw);
+    const fallback = manualProviderText(lead, raw);
+    const update = await Enquiry.updateOne({
+      $and: [
+        editableRequirementQuery(enquiryId),
+        { customerRequirementRaw: raw },
+      ],
+    }, {
+      $set: {
+        customerRequirementRaw: raw,
+        requirementAiStatus: "manual",
+        requirementAiClarificationReason: "",
+        requirementAiClarificationMessage: "",
+        requirementAiProviderTitle: fallback.providerTitle,
+        requirementAiProviderDetails: fallback.providerDetails,
+        requirementAiSchemaVersion: SCHEMA_VERSION,
+        requirementAiSourceHash: hash,
+        requirementAiModel: "",
+        requirementAiGeneratedAt: now,
+        updatedAt: now,
+      },
+      $push: {
+        timeline: {
+          $each: [{
+            timelineId: uuid(),
+            type: "requirement_ai_fallback",
+            message: "AI requirement assistance failed; manual requirement review enabled",
+            aiErrorCode: String(error.code || "AI_UNAVAILABLE").slice(0, 120),
+            customerRequirementRaw: raw,
+            actor: String(actor || "admin").slice(0, 254),
+            createdAt: now,
+          }],
+          $slice: -TIMELINE_LIMIT,
+        },
+      },
+    });
+    if (update.matchedCount !== 1) {
+      throw requirementError("Lead requirement changed while manual fallback was being enabled", 409, "LEAD_REQUIREMENT_CONCURRENT_UPDATE");
+    }
+    const updated = await getLead(enquiryId);
+    return { lead: updated, requirement: presentRequirement(updated) };
+  }
   const result = generated.result;
   const now = new Date();
   const hash = sourceHash(lead, raw);
@@ -504,8 +587,11 @@ async function generateRequirement(enquiryId, input = {}, actor = "admin", optio
   return { lead: updated, requirement: presentRequirement(updated) };
 }
 
-async function advanceToApproved(enquiryId, actor) {
-  const note = "Customer requirement approved after AI-assisted review";
+async function advanceToApproved(
+  enquiryId,
+  actor,
+  note = "Customer requirement approved after AI-assisted review",
+) {
   let lead = await enquiryService.get(enquiryId);
   let status = canonicalLeadStatus(lead.status || lead.journeyStatus);
 
@@ -535,9 +621,10 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
   let lead = await getLead(enquiryId);
   assertPrerequisites(lead);
 
-  if (lead.requirementAiStatus !== "ready") {
+  if (!["ready", "manual"].includes(lead.requirementAiStatus)) {
     throw requirementError("Check the customer requirement with AI and resolve any clarification before approval");
   }
+  const manualApproval = lead.requirementAiStatus === "manual";
   const currentHash = sourceHash(lead);
   if (!lead.requirementAiSourceHash || currentHash !== lead.requirementAiSourceHash) {
     throw requirementError(
@@ -566,7 +653,7 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
         editableRequirementQuery(enquiryId),
         { customerRequirementRaw: lead.customerRequirementRaw || "" },
         { requirementAiSourceHash: lead.requirementAiSourceHash },
-        { requirementAiStatus: "ready" },
+        { requirementAiStatus: lead.requirementAiStatus },
       ],
     },
     {
@@ -585,7 +672,9 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
           $each: [{
             timelineId: uuid(),
             type: "customer_requirement_approved",
-            message: "Customer requirement wording approved for providers",
+            message: manualApproval
+              ? "Customer requirement wording manually approved after AI assistance failed"
+              : "Customer requirement wording approved for providers",
             actor: approvedBy,
             createdAt: now,
           }],
@@ -598,7 +687,13 @@ async function approveRequirement(enquiryId, input = {}, actor = "admin") {
     throw requirementError("Lead requirement was locked while being approved", 409, "LEAD_REQUIREMENT_LOCKED");
   }
 
-  lead = await advanceToApproved(enquiryId, actor);
+  lead = await advanceToApproved(
+    enquiryId,
+    actor,
+    manualApproval
+      ? "Customer requirement approved after manual review because AI assistance was unavailable"
+      : undefined,
+  );
   return { lead, requirement: presentRequirement(await getLead(enquiryId)) };
 }
 
@@ -614,6 +709,8 @@ module.exports = {
   extractOutputText,
   validateAiResult,
   wordCount,
+  manualProviderText,
+  isAiFailure,
   sourcePayload,
   sourceHash,
   presentRequirement,
