@@ -84,7 +84,7 @@ const enquirySchema = new mongoose.Schema(
     customerRequirementRaw: { type: String, default: "", trim: true, maxlength: 5000 },
     providerRequirementTitle: { type: String, default: "", trim: true, maxlength: 300 },
     providerRequirementDetails: { type: String, default: "", trim: true, maxlength: 2000 },
-    requirementAiStatus: { type: String, enum: ["", "ready", "clarify"], default: "" },
+    requirementAiStatus: { type: String, enum: ["", "ready", "clarify", "manual"], default: "" },
     requirementAiClarificationReason: {
       type: String,
       enum: ["", "missing_core_requirement", "ambiguous_requirement", "conflicting_information", "insufficient_context"],
