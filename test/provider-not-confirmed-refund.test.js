@@ -171,6 +171,8 @@ test("reassignment links are blocked until every prior provider is Not Confirmed
   assert.match(linkService, /findBlockingUnlock/);
   assert.match(linkService, /PREVIOUS_PROVIDER_NOT_CLOSED/);
   assert.match(unlockService, /providerSaleOutcome: \{ \$ne: "not_confirmed" \}/);
+  assert.match(unlockService, /\$in: \["", "pending_review"\]/);
+  assert.match(unlockService, /chargedCredits = \{ \$gt: 0 \}/);
   assert.match(unlockService, /reassignmentEligible/);
   assert.match(enquiryModel, /provider_pending/);
 });
