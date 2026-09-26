@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
 const { identifierValue } = require("../../utils/validation");
+const assignmentService = require("../provider-unlock/provider-assignment-service");
 
 const TOKEN_PREFIX = "findoly_direct_lead_v1";
 
@@ -110,6 +111,13 @@ async function createProviderDirectLink(enquiryIdInput, providerIdInput) {
   }
   if (!(Array.isArray(provider.categorySlugs) && provider.categorySlugs.includes(lead.categorySlug))) {
     throw Object.assign(new Error("Provider does not match this lead category"), { status: 409 });
+  }
+  const blocker = await assignmentService.findBlockingUnlock(lead.enquiryId, providerId);
+  if (blocker) {
+    throw Object.assign(
+      new Error("This requirement is still assigned to another provider. Every earlier provider must be Not Confirmed before creating a link for a new provider."),
+      { status: 409, code: "PREVIOUS_PROVIDER_NOT_CLOSED" },
+    );
   }
   if (!leadAllowsDirectLink(lead)) {
     throw Object.assign(new Error("This requirement is not eligible for a direct provider link"), { status: 409 });
