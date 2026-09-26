@@ -105,7 +105,13 @@
                         <td class="crm-nowrap" x-text="formatDate(row.providerSaleOutcomeUpdatedAt || row.updatedAt)"></td>
                         <td class="text-end crm-nowrap">
                           <a class="btn btn-light btn-sm me-2" :href="'/enquiries/' + row.enquiryId + '/providers/' + row.providerLeadUnlockId">Review</a>
-                          <a class="btn btn-primary btn-sm" :href="'/enquiries/' + row.enquiryId + '/nearby-providers'">Reassign / Copy link</a>
+                          <a
+                            class="btn btn-primary btn-sm"
+                            :class="row.reassignmentEligible ? '' : 'disabled'"
+                            :aria-disabled="row.reassignmentEligible ? 'false' : 'true'"
+                            :href="row.reassignmentEligible ? '/enquiries/' + row.enquiryId + '/nearby-providers' : '#'"
+                            x-text="row.reassignmentEligible ? 'Reassign / Copy link' : 'Waiting for all providers'"
+                          ></a>
                         </td>
                       </tr>
                     </template>
