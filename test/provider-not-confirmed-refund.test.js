@@ -156,7 +156,7 @@ test("CRM outcome review can manually mark Not Confirmed and decide refund or ke
   assert.match(providerService, /creditAction === "refund"/);
   assert.match(providerService, /refundLeadUnlockCredits/);
   assert.match(providerService, /creditRefundStatus = "kept_charged"/);
-  assert.match(providerService, /reopenIfAllNotConfirmed/);
+  assert.match(providerService, /markReadyForReassignment/);
   assert.match(providerService, /LEAD_ALREADY_REASSIGNED/);
   assert.match(reviewView, /Effective outcome/);
   assert.match(reviewView, /Credit decision/);
@@ -170,6 +170,8 @@ test("reassignment links are blocked until every prior provider is Not Confirmed
 
   assert.match(linkService, /findBlockingUnlock/);
   assert.match(linkService, /PREVIOUS_PROVIDER_NOT_CLOSED/);
+  assert.match(linkService, /PROVIDER_ALREADY_ASSIGNED/);
+  assert.match(linkService, /marketplaceClosureReason === "provider_pending"/);
   assert.match(unlockService, /providerSaleOutcome: \{ \$ne: "not_confirmed" \}/);
   assert.match(unlockService, /\$in: \["", "pending_review"\]/);
   assert.match(unlockService, /chargedCredits = \{ \$gt: 0 \}/);
