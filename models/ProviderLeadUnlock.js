@@ -55,6 +55,15 @@ const providerLeadUnlockSchema = new mongoose.Schema(
     walletTransactionId: { type: String, default: "", index: true },
     paymentOrderId: { type: String, default: "", index: true },
 
+    assignmentSource: {
+      type: String,
+      enum: ["", "crm_manual"],
+      default: "",
+      index: true,
+    },
+    assignedBy: { type: String, default: "", trim: true, maxlength: 254 },
+    assignedAt: { type: Date, default: null, index: true },
+
     creditRefundStatus: {
       type: String,
       enum: ["", "pending_review", "refunded", "kept_charged"],
