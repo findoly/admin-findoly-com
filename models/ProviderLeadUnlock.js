@@ -55,6 +55,22 @@ const providerLeadUnlockSchema = new mongoose.Schema(
     walletTransactionId: { type: String, default: "", index: true },
     paymentOrderId: { type: String, default: "", index: true },
 
+    billingModel: {
+      type: String,
+      enum: ["unlock_legacy", "confirmed_outcome_v1"],
+      default: "unlock_legacy",
+      index: true,
+    },
+    billableCredits: { type: Number, default: 0, min: 0 },
+    billingStatus: {
+      type: String,
+      enum: ["", "pending_confirmation", "charged", "refunded"],
+      default: "",
+      index: true,
+    },
+    confirmationChargedAt: { type: Date, default: null, index: true },
+    confirmationChargedBy: { type: String, default: "" },
+
     assignmentSource: {
       type: String,
       enum: ["", "crm_manual"],
@@ -121,6 +137,7 @@ providerLeadUnlockSchema.index({ providerId: 1, enquiryId: 1 }, { unique: true }
 providerLeadUnlockSchema.index({ providerId: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ enquiryId: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerId: 1, providerSaleOutcome: 1, unlockedAt: -1, _id: -1 });
+providerLeadUnlockSchema.index({ providerId: 1, billingModel: 1, billingStatus: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerSaleOutcome: 1, creditRefundStatus: 1, providerSaleOutcomeUpdatedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerId: 1, providerLeadStatus: 1, unlockedAt: -1, _id: -1 });
 providerLeadUnlockSchema.index({ providerId: 1, categorySlug: 1, unlockedAt: -1, _id: -1 });
