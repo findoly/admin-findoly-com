@@ -179,7 +179,7 @@
                               x-cloak
                               type="button"
                               class="btn btn-light btn-sm me-2"
-                              :disabled="copyingProviderId === provider.providerId || provider.portalAccessEnabled === false"
+                              :disabled="copyingProviderId === provider.providerId || provider.portalAccessEnabled === false || provider.previouslyAssigned === true"
                               @click="copyDirectLink(provider)"
                             ><span x-text="copyingProviderId === provider.providerId ? 'Preparing…' : 'Copy lead link'"></span></button>
                             <a class="crm-row-action" :href="'/providers/' + provider.providerId">View provider</a>
@@ -269,6 +269,7 @@
               provider_alerts_disabled: 'WhatsApp disabled',
               whatsapp_contact_missing: 'No WhatsApp number',
               subcategory_not_selected: 'Service not selected',
+              previously_assigned: 'Already handled this requirement',
             }[String(reason || '')] || 'Not eligible';
           },
           async copyText(value) {
