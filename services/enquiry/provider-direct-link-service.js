@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const { identifierValue } = require("../../utils/validation");
 const assignmentService = require("../provider-unlock/provider-assignment-service");
 
@@ -111,6 +112,16 @@ async function createProviderDirectLink(enquiryIdInput, providerIdInput) {
   }
   if (!(Array.isArray(provider.categorySlugs) && provider.categorySlugs.includes(lead.categorySlug))) {
     throw Object.assign(new Error("Provider does not match this lead category"), { status: 409 });
+  }
+  const existingAssignment = await ProviderLeadUnlock.findOne({
+    enquiryId: lead.enquiryId,
+    providerId,
+  }).select({ providerLeadUnlockId: 1 }).lean();
+  if (existingAssignment) {
+    throw Object.assign(
+      new Error("This provider already handled this requirement. Select a different provider for reassignment."),
+      { status: 409, code: "PROVIDER_ALREADY_ASSIGNED" },
+    );
   }
   const blocker = await assignmentService.findBlockingUnlock(lead.enquiryId, providerId);
   if (blocker) {
