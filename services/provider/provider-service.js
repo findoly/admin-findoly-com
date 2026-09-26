@@ -638,7 +638,9 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
   }
 
   const actorLabel = String(actor || "admin").trim() || "admin";
-  const result = await withTransaction(async (session) => {
+  let result;
+  try {
+    result = await withTransaction(async (session) => {
     const provider = await Provider.findOne(providerQuery(requestedProviderId)).session(session);
     if (!provider) throw Object.assign(new Error("Provider not found"), { status: 404 });
     const canonicalProviderId = String(provider.providerId || provider.id || requestedProviderId);
@@ -796,7 +798,28 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
       creditAction,
       refund,
     };
-  }, { operationLabel: "Provider outcome and credit review" });
+    }, { operationLabel: "Provider outcome and credit review" });
+  } catch (error) {
+    if (error?.code !== 11000 || creditAction !== "refund") throw error;
+    const latestUnlock = await ProviderLeadUnlock.findOne({
+      providerLeadUnlockId: unlockId,
+    }).lean();
+    if (!latestUnlock || latestUnlock.creditRefundStatus !== "refunded") throw error;
+    const existingRefund = await WalletTransaction.findOne({
+      idempotencyKey: `lead-unlock-refund:${latestUnlock.providerId}:${unlockId}`,
+    }).lean();
+    if (!existingRefund) throw error;
+    result = {
+      providerId: latestUnlock.providerId,
+      reviewAction,
+      creditAction,
+      refund: {
+        duplicate: true,
+        transaction: existingRefund,
+        refundedCredits: Number(latestUnlock.creditRefundedCredits || latestUnlock.chargedCredits || 0),
+      },
+    };
+  }
 
   return {
     provider: await get(result.providerId),
