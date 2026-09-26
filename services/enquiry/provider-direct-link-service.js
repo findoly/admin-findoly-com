@@ -78,6 +78,14 @@ function leadAllowsDirectLink(lead, now = new Date()) {
   if (!lead.marketplacePublishedAt || new Date(lead.marketplacePublishedAt) > now) return false;
   if (!lead.marketplaceExpiresAt || new Date(lead.marketplaceExpiresAt) <= now) return false;
   if (lead.marketplaceAvailable === true && lead.marketplaceStatus === "published") return true;
+  if (
+    lead.marketplaceStatus === "closed"
+    && lead.marketplaceAvailable === false
+    && lead.marketplaceClosureReason === "provider_pending"
+    && Number(lead.remainingUnlocks || 0) > 0
+  ) {
+    return true;
+  }
   return Number(lead.remainingUnlocks || 0) <= 0
     && lead.marketplaceStatus === "closed"
     && lead.marketplaceClosureReason === "unlock_limit";
