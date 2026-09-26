@@ -38,12 +38,16 @@ async function list(filters = {}) {
     const refundStatus = enumValue(filters.refundStatus, CREDIT_REFUND_STATUSES, {
       label: "Credit refund status filter",
     });
-    query.creditRefundStatus = refundStatus === "pending_review"
-      ? { $in: ["", "pending_review"] }
-      : refundStatus;
     if (refundStatus === "pending_review") {
+      query.$or = [
+        { creditRefundStatus: { $exists: false } },
+        { creditRefundStatus: "" },
+        { creditRefundStatus: "pending_review" },
+      ];
       query.unlockMethod = "credits";
       query.chargedCredits = { $gt: 0 };
+    } else {
+      query.creditRefundStatus = refundStatus;
     }
   }
   if (filters.categorySlug) {
