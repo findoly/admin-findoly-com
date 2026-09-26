@@ -9,6 +9,7 @@ const {
 
 const UNLOCK_METHODS = Object.freeze(["credits", "direct_payment", "admin"]);
 const SALE_OUTCOMES = Object.freeze(["confirmed", "not_confirmed"]);
+const CREDIT_REFUND_STATUSES = Object.freeze(["pending_review", "refunded", "kept_charged"]);
 
 async function list(filters = {}) {
   const { limit, cursor } = getPagination(filters);
@@ -31,6 +32,11 @@ async function list(filters = {}) {
   if (filters.outcome) {
     query.providerSaleOutcome = enumValue(filters.outcome, SALE_OUTCOMES, {
       label: "Provider outcome filter",
+    });
+  }
+  if (filters.refundStatus) {
+    query.creditRefundStatus = enumValue(filters.refundStatus, CREDIT_REFUND_STATUSES, {
+      label: "Credit refund status filter",
     });
   }
   if (filters.categorySlug) {
@@ -64,4 +70,5 @@ module.exports = {
   list,
   UNLOCK_METHODS,
   SALE_OUTCOMES,
+  CREDIT_REFUND_STATUSES,
 };
