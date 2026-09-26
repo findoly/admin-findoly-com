@@ -766,7 +766,7 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
     }
 
     if (effectiveOutcome === "not_confirmed") {
-      await assignmentService.reopenIfAllNotConfirmed(unlock.enquiryId, session, now);
+      await assignmentService.markReadyForReassignment(unlock.enquiryId, session, now);
     } else if (effectiveOutcome === "confirmed") {
       await assignmentService.closeForActiveProvider(unlock.enquiryId, session, now);
     }
