@@ -103,9 +103,15 @@
     if (infoWindow) infoWindow.close();
   }
 
-  function makePin(glyphText, scale) {
+  function makePin(glyphText, scale, options = {}) {
     if (!PinElement) return null;
-    const pin = new PinElement({ glyphText, scale });
+    const pin = new PinElement({
+      glyphText,
+      scale,
+      ...(options.background ? { background: options.background } : {}),
+      ...(options.borderColor ? { borderColor: options.borderColor } : {}),
+      ...(options.glyphColor ? { glyphColor: options.glyphColor } : {}),
+    });
     return pin.element || pin;
   }
 
@@ -143,7 +149,12 @@
     wrapper.appendChild(title);
 
     appendLine(wrapper, payload.lead.locationLabel || 'Customer location');
-    appendLine(wrapper, positiveRadius(payload.radiusKm) + ' km saved nearby-provider radius', true);
+    appendLine(
+      wrapper,
+      positiveRadius(payload.radiusKm)
+        + (payload.assignmentMode ? ' km manual-assignment radius' : ' km saved nearby-provider radius'),
+      true,
+    );
     appendLine(wrapper, 'Distance values use Findoly\'s Haversine calculation.');
 
     infoWindow.setContent(wrapper);
@@ -281,7 +292,11 @@
     clearMarkers();
 
     const radiusKm = positiveRadius(payload.radiusKm || lead.alertDistanceKm);
-    const customerContent = makePin('C', 1.2);
+    const customerContent = makePin('C', 1.2, {
+      background: '#ffffff',
+      borderColor: '#1f2937',
+      glyphColor: '#111827',
+    });
     customerMarker = new AdvancedMarkerElement({
       map,
       position: customer,
@@ -290,7 +305,11 @@
       zIndex: 10000,
       ...(customerContent ? { content: customerContent } : {}),
     });
-    const openCustomer = () => openCustomerInfo({ lead, radiusKm });
+    const openCustomer = () => openCustomerInfo({
+      lead,
+      radiusKm,
+      assignmentMode: payload.assignmentMode === true,
+    });
     if (typeof customerMarker.addEventListener === 'function') customerMarker.addEventListener('gmp-click', openCustomer);
     else if (typeof customerMarker.addListener === 'function') customerMarker.addListener('click', openCustomer);
 
