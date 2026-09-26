@@ -37,6 +37,13 @@
                 Manual WhatsApp is available only while this requirement is published and still available to providers.
               </div>
 
+              <div class="alert alert-info">
+                Manual assignment shows active same-category providers within 100 km of the customer, nearest first. Assignment deducts the normal unlock credits immediately and the requirement is already unlocked for the provider.
+              </div>
+              <div x-show="manualAssignmentBlocked" x-cloak class="alert alert-warning">
+                Another provider is still Pending or Confirmed. A new provider can be assigned only after every earlier provider is Not Confirmed.
+              </div>
+
               <section class="card crm-data-card">
                 <div class="card-header crm-card-heading gap-3">
                   <div>
@@ -82,7 +89,7 @@
                     style="width:100%;min-height:420px;background:#f4f6f8"
                   ></div>
                   <div class="px-3 py-2 text-muted fs-sm">
-                    C = customer · P = provider · Circle = saved nearby-provider radius. Distances shown in the map popup come from the CRM, not Google distance APIs.
+                    C = customer · P = provider · Circle = 100 km manual-assignment radius. WhatsApp still follows the saved alert radius. Distances shown in the map popup come from the CRM, not Google distance APIs.
                   </div>
                 </div>
 
@@ -113,12 +120,13 @@
                         <th>Service location</th>
                         <th>WhatsApp</th>
                         <th>Status</th>
+                        <th>Assignment</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       <template x-if="loading">
-                        <tr><td colspan="8"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
+                        <tr><td colspan="9"><div class="crm-table-loading"><span></span><span></span><span></span></div></td></tr>
                       </template>
                       <template x-for="provider in filteredProviders" :key="provider.providerId">
                         <tr>
@@ -141,6 +149,13 @@
                           <td class="crm-nowrap">
                             <strong x-text="formatCredits(provider.walletBalanceCredits)"></strong>
                             <span class="text-muted fs-sm"> credits</span>
+                            <div class="text-muted fs-sm" x-text="'Cost ' + formatCredits(provider.requirementCostCredits || lead.leadCostCredits || 0)"></div>
+                            <div
+                              x-show="provider.balanceAfterAssignmentCredits !== null"
+                              x-cloak
+                              class="text-muted fs-sm"
+                              x-text="'After ' + formatCredits(provider.balanceAfterAssignmentCredits)"
+                            ></div>
                           </td>
                           <td class="crm-nowrap"><strong x-text="provider.distanceKm.toFixed(1) + ' km'"></strong></td>
                           <td>
@@ -165,6 +180,13 @@
                           <td>
                             <span class="crm-status" :class="provider.portalAccessEnabled === false ? 'status-inactive' : 'status-active'" x-text="provider.portalAccessEnabled === false ? 'Active · portal restricted' : 'Active'"></span>
                           </td>
+                          <td>
+                            <span
+                              class="crm-status"
+                              :class="provider.manualAssignmentEligible ? 'status-active' : 'status-inactive'"
+                              x-text="provider.manualAssignmentEligible ? 'Ready to assign' : assignmentReasonLabel(provider.manualAssignmentReason)"
+                            ></span>
+                          </td>
                           <td class="text-end crm-nowrap">
                             <button
                               x-show="can('requirements.manage')"
@@ -178,8 +200,16 @@
                               x-show="can('requirements.manage')"
                               x-cloak
                               type="button"
+                              class="btn btn-primary btn-sm me-2"
+                              :disabled="assigningProviderId === provider.providerId || !provider.manualAssignmentEligible"
+                              @click="assignProvider(provider)"
+                            ><span x-text="assigningProviderId === provider.providerId ? 'Assigning…' : 'Assign & notify'"></span></button>
+                            <button
+                              x-show="can('requirements.manage')"
+                              x-cloak
+                              type="button"
                               class="btn btn-light btn-sm me-2"
-                              :disabled="copyingProviderId === provider.providerId || provider.portalAccessEnabled === false || provider.previouslyAssigned === true"
+                              :disabled="copyingProviderId === provider.providerId || provider.portalAccessEnabled === false || provider.previouslyAssigned === true || manualAssignmentBlocked"
                               @click="copyDirectLink(provider)"
                             ><span x-text="copyingProviderId === provider.providerId ? 'Preparing…' : 'Copy lead link'"></span></button>
                             <a class="crm-row-action" :href="'/providers/' + provider.providerId">View provider</a>
@@ -187,10 +217,10 @@
                         </tr>
                       </template>
                       <tr x-show="!loading && !filteredProviders.length">
-                        <td colspan="8">
+                        <td colspan="9">
                           <div class="crm-empty-state">
                             <strong x-text="searchText ? 'No matching providers' : 'No nearby providers'"></strong>
-                            <span x-text="searchText ? 'Clear the provider search to see all nearby providers.' : 'No active same-category providers are within the saved radius.'"></span>
+                            <span x-text="searchText ? 'Clear the provider search to see all nearby providers.' : 'No active same-category providers are within 100 km of the customer.'"></span>
                           </div>
                         </td>
                       </tr>
@@ -216,11 +246,14 @@
           providers: [],
           providerCount: 0,
           eligibleCount: 0,
-          radiusKm: 20,
+          assignmentEligibleCount: 0,
+          manualAssignmentBlocked: false,
+          radiusKm: 100,
           searchText: '',
           sortOrder: 'nearest',
           loading: false,
           sendingAlerts: false,
+          assigningProviderId: '',
           copyingProviderId: '',
           selectedProviderIds: [],
           error: '',
@@ -244,7 +277,8 @@
           },
           get providerCountLabel() {
             const total = this.providerCount + ' provider' + (this.providerCount === 1 ? '' : 's')
-              + ' within the saved ' + this.radiusKm + ' km radius';
+              + ' within ' + this.radiusKm + ' km, nearest first'
+              + ' · ' + this.assignmentEligibleCount + ' eligible for assignment';
             if (!this.canSendAlerts) return total;
             return total + ' · ' + this.eligibleCount + ' eligible for manual WhatsApp';
           },
@@ -270,6 +304,15 @@
               whatsapp_contact_missing: 'No WhatsApp number',
               subcategory_not_selected: 'Service not selected',
               previously_assigned: 'Already handled this requirement',
+              outside_alert_radius: 'Outside WhatsApp alert radius',
+            }[String(reason || '')] || 'Not eligible';
+          },
+          assignmentReasonLabel(reason) {
+            return {
+              previously_assigned: 'Already handled',
+              previous_provider_pending: 'Waiting for previous provider',
+              portal_restricted: 'Portal restricted',
+              insufficient_credits: 'Insufficient credits',
             }[String(reason || '')] || 'Not eligible';
           },
           async copyText(value) {
@@ -298,7 +341,7 @@
             this.loading = true;
             this.error = '';
             try {
-              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers');
+              const body = await apiFetch('/api/enquiry/' + encodeURIComponent(this.leadId) + '/nearby-providers?assignmentMode=1');
               this.lead = body.lead || {};
               this.providers = Array.isArray(body.data) ? body.data : [];
               const count = Number(body.count);
@@ -307,7 +350,12 @@
               this.eligibleCount = Number.isFinite(eligibleCount)
                 ? Math.max(0, Math.trunc(eligibleCount))
                 : this.providers.filter((provider) => provider.whatsappAlertEligible).length;
-              this.radiusKm = Number(body.radiusKm || this.lead.alertDistanceKm || 20);
+              const assignmentEligibleCount = Number(body.assignmentEligibleCount);
+              this.assignmentEligibleCount = Number.isFinite(assignmentEligibleCount)
+                ? Math.max(0, Math.trunc(assignmentEligibleCount))
+                : this.providers.filter((provider) => provider.manualAssignmentEligible).length;
+              this.manualAssignmentBlocked = body.manualAssignmentBlocked === true;
+              this.radiusKm = Number(body.assignmentRadiusKm || body.radiusKm || 100);
               this.reason = body.reason || '';
               const availableIds = new Set(this.providers.filter((provider) => provider.whatsappAlertEligible).map((provider) => provider.providerId));
               this.selectedProviderIds = this.selectedProviderIds.filter((providerId) => availableIds.has(providerId));
@@ -315,6 +363,7 @@
                 lead: this.lead,
                 providers: this.providers,
                 radiusKm: this.radiusKm,
+                assignmentMode: true,
               };
               window.__findolyNearbyProviderMapData = mapPayload;
               window.dispatchEvent(new CustomEvent('nearby-providers:loaded', { detail: mapPayload }));
@@ -322,6 +371,47 @@
               this.error = error.message;
             } finally {
               this.loading = false;
+            }
+          },
+          async assignProvider(provider) {
+            const providerId = String(provider?.providerId || '').trim();
+            if (!providerId || this.assigningProviderId || !provider.manualAssignmentEligible) return;
+            const providerName = provider.businessName || provider.name || providerId;
+            const cost = Number(provider.requirementCostCredits || this.lead.leadCostCredits || 0);
+            const before = Number(provider.walletBalanceCredits || 0);
+            const after = Number(provider.balanceAfterAssignmentCredits ?? Math.max(0, before - cost));
+            const confirmed = window.confirm(
+              'Assign this requirement to ' + providerName + '?\n\n'
+              + 'Distance: ' + Number(provider.distanceKm || 0).toFixed(1) + ' km\n'
+              + 'Credits to deduct: ' + this.formatCredits(cost) + '\n'
+              + 'Current balance: ' + this.formatCredits(before) + '\n'
+              + 'Balance after assignment: ' + this.formatCredits(after) + '\n\n'
+              + 'The requirement will be unlocked immediately and the provider will be notified by email.'
+            );
+            if (!confirmed) return;
+
+            this.assigningProviderId = providerId;
+            this.error = '';
+            this.successMessage = '';
+            try {
+              const body = await apiFetch(
+                '/api/enquiry/' + encodeURIComponent(this.leadId)
+                  + '/nearby-providers/' + encodeURIComponent(providerId) + '/assign',
+                { method: 'POST', body: '{}' },
+              );
+              const result = body.data || {};
+              const emailFailed = Array.isArray(result.emailDeliveries)
+                && result.emailDeliveries.some((delivery) => delivery.channel === 'email' && delivery.success === false);
+              this.successMessage = emailFailed
+                ? 'Requirement assigned to ' + providerName + ' and credits deducted. Email delivery needs attention.'
+                : 'Requirement assigned to ' + providerName + '. Credits were deducted and the provider was notified by email.';
+              showCrmToast(this.successMessage, emailFailed ? 'warning' : 'success');
+              await this.load();
+            } catch (error) {
+              this.error = error.message;
+              showCrmToast(error.message, 'error');
+            } finally {
+              this.assigningProviderId = '';
             }
           },
           async copyDirectLink(provider) {
@@ -387,7 +477,7 @@
         };
       }
     </script>
-    <script src="/js/nearby-coverage-map.js?v=20260907-1"></script>
+    <script src="/js/nearby-coverage-map.js?v=20260927-2"></script>
     <%- include('../partials/scripts') %>
   </body>
 </html>
