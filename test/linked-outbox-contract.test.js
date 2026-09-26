@@ -121,7 +121,7 @@ function statusServiceFor({
       validationError: (message) => Object.assign(new Error(message), { status: 400 }),
     },
     "../communication/notification-service": { async triggerSafe() {} },
-    "./provider-assignment-service": { async reopenIfAllNotConfirmed() {}, async closeForActiveProvider() {} },
+    "./provider-assignment-service": { async markReadyForReassignment() {}, async closeForActiveProvider() {} },
   });
   return {
     service,
