@@ -10,4 +10,10 @@ function paiseFromCredits(value) {
   return Math.max(0, Math.round(credits * 100));
 }
 
-module.exports = { creditsFromPaise, paiseFromCredits };
+function leadCostCredits(record = {}) {
+  const explicit = Number(record.leadCostCredits);
+  if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+  return creditsFromPaise(record.leadPricePaise);
+}
+
+module.exports = { creditsFromPaise, paiseFromCredits, leadCostCredits };

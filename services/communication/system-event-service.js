@@ -20,6 +20,7 @@ const INTERNAL_EMAIL_EVENTS = new Set([
 
 const PROVIDER_EMAIL_EVENTS = new Set([
   "provider_lead_unlocked",
+  "provider_lead_assigned",
   "provider_feedback_updated",
   "provider_status_updated",
   "provider_outcome_updated",
@@ -44,6 +45,29 @@ const SYSTEM_TEMPLATES = Object.freeze({
       "Accessed at: {{event_time}}",
       "",
       "Please contact the customer and keep the lead outcome updated in your provider portal.",
+      "",
+      "— Findoly",
+    ].join("\n"),
+  },
+  provider_lead_assigned: {
+    name: "findoly_provider_lead_assigned",
+    displayName: "Provider requirement assigned",
+    subject: "New requirement assigned to you — {{lead_id}}",
+    body: [
+      "Hello {{provider_name}},",
+      "",
+      "Findoly has assigned a new customer requirement to your provider account.",
+      "",
+      "Lead reference: {{lead_id}}",
+      "Requirement: {{requirement_title}}",
+      "Category: {{category}}",
+      "Location: {{location}}",
+      "Credits deducted: {{credits_used}}",
+      "",
+      "The requirement is already unlocked. To view the customer contact details and complete requirement, open:",
+      "{{lead_url}}",
+      "",
+      "Please contact the customer and keep the outcome updated in your Findoly provider portal.",
       "",
       "— Findoly",
     ].join("\n"),
@@ -239,6 +263,7 @@ function variablesFor(context) {
     agent_type: clean(agent.agentType || ""),
     category_name: clean((agent.categories || []).map((item) => item?.categoryName).filter(Boolean).join(", ") || agent.categoryName || agent.categorySlug || ""),
     assigned_location: agentLocation,
+    lead_url: clean(context.leadUrl || ""),
     business_name: clean(joinRequest.businessName || provider.businessName || agent.businessName || ""),
     service_categories: Array.isArray(provider.categorySlugs) ? provider.categorySlugs.map(clean).filter(Boolean).join(", ") : "",
     status: clean(provider.status || agent.status || joinRequest.status || context.status || lead.status || ""),
@@ -255,9 +280,8 @@ function variablesFor(context) {
 }
 
 async function ensureProviderEmailTemplate(event) {
-  const templateDefinition = event === "provider_lead_unlocked"
-    ? SYSTEM_TEMPLATES.provider_lead_unlocked
-    : SYSTEM_TEMPLATES.provider_feedback_updated;
+  const templateDefinition = SYSTEM_TEMPLATES[event]
+    || SYSTEM_TEMPLATES.provider_feedback_updated;
   await CommunicationTemplate.updateOne(
     { channel: "email", name: templateDefinition.name, language: "en_US" },
     {
@@ -396,7 +420,11 @@ async function sendProviderEmail(event, context, variables, actor) {
       templateId: template.templateId,
       recipientName: variables.provider_name,
       recipientContact: providerEmail,
-      purpose: event === "provider_lead_unlocked" ? "provider_lead_access_confirmation" : "provider_status_update_confirmation",
+      purpose: event === "provider_lead_assigned"
+        ? "provider_manual_assignment"
+        : event === "provider_lead_unlocked"
+          ? "provider_lead_access_confirmation"
+          : "provider_status_update_confirmation",
       trigger: event,
       automatic: true,
       enquiryId: context.enquiryId || "",

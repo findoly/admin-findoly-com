@@ -74,6 +74,7 @@ const frontendController = {
   invoiceCreate: render("invoice/form", "Create invoice"),
   invoiceEdit: render("invoice/form", "Edit invoice"),
   providerUnlocks: render("provider-unlock/index", "Provider unlocks"),
+  providerNotConfirmedReviews: render("provider-unlock/not-confirmed", "Not Confirmed Reviews"),
   reports: render("report/index", "Reports"),
   storage: render("storage/index", "File Manager"),
   employees: render("employee/index", "Employees"),

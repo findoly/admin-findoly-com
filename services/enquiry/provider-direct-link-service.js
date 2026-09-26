@@ -3,7 +3,9 @@
 const crypto = require("node:crypto");
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const { identifierValue } = require("../../utils/validation");
+const assignmentService = require("../provider-unlock/provider-assignment-service");
 
 const TOKEN_PREFIX = "findoly_direct_lead_v1";
 
@@ -76,6 +78,14 @@ function leadAllowsDirectLink(lead, now = new Date()) {
   if (!lead.marketplacePublishedAt || new Date(lead.marketplacePublishedAt) > now) return false;
   if (!lead.marketplaceExpiresAt || new Date(lead.marketplaceExpiresAt) <= now) return false;
   if (lead.marketplaceAvailable === true && lead.marketplaceStatus === "published") return true;
+  if (
+    lead.marketplaceStatus === "closed"
+    && lead.marketplaceAvailable === false
+    && lead.marketplaceClosureReason === "provider_pending"
+    && Number(lead.remainingUnlocks || 0) > 0
+  ) {
+    return true;
+  }
   return Number(lead.remainingUnlocks || 0) <= 0
     && lead.marketplaceStatus === "closed"
     && lead.marketplaceClosureReason === "unlock_limit";
@@ -110,6 +120,23 @@ async function createProviderDirectLink(enquiryIdInput, providerIdInput) {
   }
   if (!(Array.isArray(provider.categorySlugs) && provider.categorySlugs.includes(lead.categorySlug))) {
     throw Object.assign(new Error("Provider does not match this lead category"), { status: 409 });
+  }
+  const existingAssignment = await ProviderLeadUnlock.findOne({
+    enquiryId: lead.enquiryId,
+    providerId,
+  }).select({ providerLeadUnlockId: 1 }).lean();
+  if (existingAssignment) {
+    throw Object.assign(
+      new Error("This provider already handled this requirement. Select a different provider for reassignment."),
+      { status: 409, code: "PROVIDER_ALREADY_ASSIGNED" },
+    );
+  }
+  const blocker = await assignmentService.findBlockingUnlock(lead.enquiryId, providerId);
+  if (blocker) {
+    throw Object.assign(
+      new Error("This requirement is still assigned to another provider. Every earlier provider must be Not Confirmed before creating a link for a new provider."),
+      { status: 409, code: "PREVIOUS_PROVIDER_NOT_CLOSED" },
+    );
   }
   if (!leadAllowsDirectLink(lead)) {
     throw Object.assign(new Error("This requirement is not eligible for a direct provider link"), { status: 409 });

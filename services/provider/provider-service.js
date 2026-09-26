@@ -1,4 +1,5 @@
 const Provider = require("../../models/Provider");
+const Enquiry = require("../../models/Enquiry");
 const uuid = require("../../utils/uuid");
 const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const WalletTransaction = require("../../models/WalletTransaction");
@@ -24,6 +25,8 @@ const accountRegistrationService = require("../communication/account-registratio
 const catalogService = require("../catalog/catalog-service");
 const { withTransaction } = require("../../utils/transaction");
 const { assertContactsAvailable, syncEntityContacts } = require("../contact-identity/contact-identity-service");
+const providerCreditService = require("./provider-credit-service");
+const assignmentService = require("../provider-unlock/provider-assignment-service");
 
 const PROVIDER_STATUSES = Object.freeze([
   "active",
@@ -46,6 +49,7 @@ const OUTCOME_VERIFICATION_STATUSES = Object.freeze([
   "under_review",
 ]);
 const PROVIDER_REVIEW_ACTIONS = Object.freeze(["none", "warning", "suspend", "ban"]);
+const CREDIT_REVIEW_ACTIONS = Object.freeze(["none", "refund", "keep_charge"]);
 const WHATSAPP_LEAD_PREFERENCE_MODES = Object.freeze(["all", "selected"]);
 
 function categoryToken(value) {
@@ -606,16 +610,8 @@ async function update(providerId, input = {}, actor = "crm-admin") {
 }
 
 async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {}, actor = "admin") {
-  const provider = await get(providerId);
+  const requestedProviderId = identifierValue(providerId, { label: "Provider ID" });
   const unlockId = identifierValue(providerLeadUnlockId, { label: "Provider lead unlock ID" });
-  const unlock = await ProviderLeadUnlock.findOne({
-    providerId: provider.providerId,
-    providerLeadUnlockId: unlockId,
-  }).lean();
-  if (!unlock) {
-    throw Object.assign(new Error("Unlocked provider lead not found"), { status: 404 });
-  }
-
   const verificationStatus = enumValue(input.verificationStatus, OUTCOME_VERIFICATION_STATUSES, {
     label: "Outcome verification status",
   });
@@ -623,6 +619,14 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
     label: "Provider account action",
     fallback: "none",
   });
+  const creditAction = enumValue(input.creditAction, CREDIT_REVIEW_ACTIONS, {
+    label: "Credit review action",
+    fallback: "none",
+  });
+  const requestedOutcome = String(input.effectiveOutcome || input.outcome || "").trim().toLowerCase();
+  if (requestedOutcome && !["confirmed", "not_confirmed"].includes(requestedOutcome)) {
+    throw validationError("Effective provider outcome must be Confirmed or Not Confirmed");
+  }
   const note = textValue(input.note, {
     label: "Review note",
     required: true,
@@ -633,45 +637,196 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
     throw validationError("Warning or account restriction can be applied only after marking the outcome Incorrect status");
   }
 
-  const now = new Date();
-  await ProviderLeadUnlock.updateOne(
-    { providerLeadUnlockId: unlockId, providerId: provider.providerId },
-    {
-      $set: {
-        outcomeVerificationStatus: verificationStatus,
-        outcomeVerificationNote: note,
-        outcomeVerifiedAt: now,
-        outcomeVerifiedBy: actor,
-        updatedAt: now,
-      },
-    },
-  );
+  const actorLabel = String(actor || "admin").trim() || "admin";
+  let result;
+  try {
+    result = await withTransaction(async (session) => {
+    const provider = await Provider.findOne(providerQuery(requestedProviderId)).session(session);
+    if (!provider) throw Object.assign(new Error("Provider not found"), { status: 404 });
+    const canonicalProviderId = String(provider.providerId || provider.id || requestedProviderId);
+    const unlock = await ProviderLeadUnlock.findOne({
+      providerId: canonicalProviderId,
+      providerLeadUnlockId: unlockId,
+    }).session(session);
+    if (!unlock) {
+      throw Object.assign(new Error("Unlocked provider lead not found"), { status: 404 });
+    }
 
-  const providerSet = { updatedAt: now };
-  const providerUpdate = { $set: providerSet };
-  if (reviewAction === "warning") {
-    providerUpdate.$inc = { outcomeWarningCount: 1 };
-    providerSet.outcomeLastWarningAt = now;
-    providerSet.outcomeLastWarningReason = note;
-  } else if (reviewAction === "suspend") {
-    providerSet.status = "inactive";
-    providerSet.portalAccessEnabled = false;
-    providerSet.platformRestrictionReason = note;
-    providerSet.platformRestrictedAt = now;
-    providerSet.platformRestrictedBy = actor;
-  } else if (reviewAction === "ban") {
-    providerSet.status = "blocked";
-    providerSet.portalAccessEnabled = false;
-    providerSet.platformRestrictionReason = note;
-    providerSet.platformRestrictedAt = now;
-    providerSet.platformRestrictedBy = actor;
+    const currentOutcome = String(unlock.providerSaleOutcome || "");
+    const effectiveOutcome = requestedOutcome || currentOutcome;
+    const oldConfirmed = currentOutcome === "confirmed";
+    const newConfirmed = effectiveOutcome === "confirmed";
+    const outcomeChanged = Boolean(effectiveOutcome) && effectiveOutcome !== currentOutcome;
+    const confirmationDelta = Number(newConfirmed) - Number(oldConfirmed);
+    const now = new Date();
+
+    if (newConfirmed && unlock.creditRefundStatus === "refunded") {
+      throw Object.assign(
+        validationError("Credits were already refunded for this requirement; it cannot be marked Confirmed without a separate billing correction"),
+        { code: "REFUNDED_OUTCOME_LOCKED" },
+      );
+    }
+
+    if (newConfirmed && currentOutcome === "not_confirmed") {
+      const laterUnlock = await ProviderLeadUnlock.findOne({
+        enquiryId: unlock.enquiryId,
+        providerId: { $ne: canonicalProviderId },
+        unlockedAt: { $gt: unlock.unlockedAt },
+      })
+        .select({ providerLeadUnlockId: 1, providerId: 1 })
+        .session(session)
+        .lean();
+      if (laterUnlock) {
+        throw Object.assign(
+          validationError("This requirement was already reassigned to another provider"),
+          { code: "LEAD_ALREADY_REASSIGNED" },
+        );
+      }
+    }
+
+    if (outcomeChanged) {
+      unlock.providerSaleOutcome = effectiveOutcome;
+      unlock.providerSaleOutcomeUpdatedAt = now;
+      unlock.providerSaleOutcomeUpdatedBy = actorLabel;
+    }
+
+    if (
+      effectiveOutcome === "not_confirmed"
+      && unlock.unlockMethod === "credits"
+      && Number(unlock.chargedCredits || 0) > 0
+      && !["refunded", "kept_charged"].includes(unlock.creditRefundStatus)
+    ) {
+      unlock.creditRefundStatus = "pending_review";
+    } else if (effectiveOutcome === "confirmed" && unlock.creditRefundStatus === "pending_review") {
+      unlock.creditRefundStatus = "";
+    }
+
+    let refund = null;
+    if (creditAction === "refund") {
+      if (effectiveOutcome !== "not_confirmed") {
+        throw validationError("Credits can be reverted only after the provider outcome is Not Confirmed");
+      }
+      refund = await providerCreditService.refundLeadUnlockCredits(
+        unlock.toObject(),
+        { note },
+        { email: actorLabel, name: "CRM employee" },
+        session,
+      );
+      unlock.creditRefundStatus = "refunded";
+      unlock.creditRefundedCredits = Number(unlock.chargedCredits || 0);
+      unlock.creditRefundTransactionId = refund.transaction?.walletTransactionId || unlock.creditRefundTransactionId || "";
+      unlock.creditRefundedAt = now;
+      unlock.creditRefundedBy = actorLabel;
+      unlock.creditRefundNote = note;
+    } else if (creditAction === "keep_charge") {
+      if (effectiveOutcome !== "not_confirmed") {
+        throw validationError("Keep Charge applies only to a Not Confirmed provider outcome");
+      }
+      if (unlock.creditRefundStatus === "refunded") {
+        throw validationError("Credits were already refunded and cannot be changed to Keep Charge");
+      }
+      unlock.creditRefundStatus = "kept_charged";
+      unlock.creditRefundNote = note;
+    }
+
+    unlock.outcomeVerificationStatus = verificationStatus;
+    unlock.outcomeVerificationNote = note;
+    unlock.outcomeVerifiedAt = now;
+    unlock.outcomeVerifiedBy = actorLabel;
+    unlock.updatedAt = now;
+    await unlock.save({ session });
+
+    if (outcomeChanged) {
+      const lead = await Enquiry.findOne({
+        $or: [{ enquiryId: unlock.enquiryId }, { id: unlock.enquiryId }],
+      }).session(session);
+      if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+      const confirmedCount = Math.max(
+        0,
+        Number(lead.providerConfirmedCount || 0) + confirmationDelta,
+      );
+      const conversionStatus = confirmedCount > 0 ? "converted" : "not_converted";
+      lead.providerConfirmedCount = confirmedCount;
+      lead.providerSaleConversionStatus = conversionStatus;
+      lead.providerSaleConversionUpdatedAt = now;
+      lead.providerSaleConvertedAt = confirmedCount > 0
+        ? lead.providerSaleConvertedAt || now
+        : null;
+      if (lead.agentId) {
+        lead.agentSaleConversion = conversionStatus;
+        lead.agentSaleConversionNote = confirmedCount > 0
+          ? `${unlock.providerBusinessName || unlock.providerName || canonicalProviderId} currently confirms the lead`
+          : "No unlocked provider currently confirms the lead";
+        lead.agentSaleConvertedAt = confirmedCount > 0
+          ? lead.agentSaleConvertedAt || now
+          : null;
+        lead.agentSaleConvertedBy = confirmedCount > 0 ? canonicalProviderId : actorLabel;
+      }
+      await lead.save({ session });
+    }
+
+    if (effectiveOutcome === "not_confirmed") {
+      await assignmentService.markReadyForReassignment(unlock.enquiryId, session, now);
+    } else if (effectiveOutcome === "confirmed") {
+      await assignmentService.closeForActiveProvider(unlock.enquiryId, session, now);
+    }
+
+    const providerSet = { updatedAt: now };
+    const providerUpdate = { $set: providerSet };
+    if (reviewAction === "warning") {
+      providerUpdate.$inc = { outcomeWarningCount: 1 };
+      providerSet.outcomeLastWarningAt = now;
+      providerSet.outcomeLastWarningReason = note;
+    } else if (reviewAction === "suspend") {
+      providerSet.status = "inactive";
+      providerSet.portalAccessEnabled = false;
+      providerSet.platformRestrictionReason = note;
+      providerSet.platformRestrictedAt = now;
+      providerSet.platformRestrictedBy = actorLabel;
+    } else if (reviewAction === "ban") {
+      providerSet.status = "blocked";
+      providerSet.portalAccessEnabled = false;
+      providerSet.platformRestrictionReason = note;
+      providerSet.platformRestrictedAt = now;
+      providerSet.platformRestrictedBy = actorLabel;
+    }
+    await Provider.updateOne(providerQuery(canonicalProviderId), providerUpdate, { session });
+
+    return {
+      providerId: canonicalProviderId,
+      reviewAction,
+      creditAction,
+      refund,
+    };
+    }, { operationLabel: "Provider outcome and credit review" });
+  } catch (error) {
+    if (error?.code !== 11000 || creditAction !== "refund") throw error;
+    const latestUnlock = await ProviderLeadUnlock.findOne({
+      providerLeadUnlockId: unlockId,
+    }).lean();
+    if (!latestUnlock || latestUnlock.creditRefundStatus !== "refunded") throw error;
+    const existingRefund = await WalletTransaction.findOne({
+      idempotencyKey: `lead-unlock-refund:${latestUnlock.providerId}:${unlockId}`,
+    }).lean();
+    if (!existingRefund) throw error;
+    result = {
+      providerId: latestUnlock.providerId,
+      reviewAction,
+      creditAction,
+      refund: {
+        duplicate: true,
+        transaction: existingRefund,
+        refundedCredits: Number(latestUnlock.creditRefundedCredits || latestUnlock.chargedCredits || 0),
+      },
+    };
   }
-  await Provider.updateOne(providerQuery(provider.providerId), providerUpdate);
 
   return {
-    provider: await get(provider.providerId),
+    provider: await get(result.providerId),
     unlock: await ProviderLeadUnlock.findOne({ providerLeadUnlockId: unlockId }).lean(),
-    reviewAction,
+    reviewAction: result.reviewAction,
+    creditAction: result.creditAction,
+    refund: result.refund,
   };
 }
 
@@ -690,6 +845,7 @@ module.exports = {
   ONBOARDING_STAGES,
   OUTCOME_VERIFICATION_STATUSES,
   PROVIDER_REVIEW_ACTIONS,
+  CREDIT_REVIEW_ACTIONS,
   WHATSAPP_LEAD_PREFERENCE_MODES,
   reviewProviderOutcome,
   assertAvailableProviderCategories,

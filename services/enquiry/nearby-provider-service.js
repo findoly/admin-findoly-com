@@ -2,16 +2,22 @@
 
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
 const providerAlertStateService = require("./provider-alert-state-service");
 const enquiryLocationService = require("../location/enquiry-location-service");
 const { identifierValue, numberValue } = require("../../utils/validation");
 const { resolveRequirementLocation } = require("../../utils/requirement-location");
-const { creditsFromPaise } = require("../../utils/credits");
+const { creditsFromPaise, leadCostCredits } = require("../../utils/credits");
 
 const DEFAULT_RADIUS_KM = 20;
 const MIN_RADIUS_KM = 1;
 const MAX_RADIUS_KM = 100;
+const MANUAL_ASSIGNMENT_RADIUS_KM = 100;
+
+function assignmentModeEnabled(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
 
 function validCoordinate(value, min, max) {
   if (value === null || value === undefined || String(value).trim() === "") return false;
@@ -184,6 +190,8 @@ async function listNearbyProviders(enquiryId, options = {}) {
       serviceType: 1,
       category: 1,
       categorySlug: 1,
+      leadPricePaise: 1,
+      leadCostCredits: 1,
       alertDistanceKm: 1,
       providerWhatsappAlerts: 1,
       marketplaceStatus: 1,
@@ -227,12 +235,23 @@ async function listNearbyProviders(enquiryId, options = {}) {
   }
 
   const fallbackRadiusKm = defaultRadiusKmForLead(workingLead);
-  const radiusKm = normalizeRadiusKm(options.radiusKm, fallbackRadiusKm);
-  const presentedLead = presentLead(workingLead);
+  const assignmentMode = assignmentModeEnabled(options.assignmentMode);
+  const radiusKm = assignmentMode
+    ? MANUAL_ASSIGNMENT_RADIUS_KM
+    : normalizeRadiusKm(options.radiusKm, fallbackRadiusKm);
+  const requirementCostCredits = Math.max(0, leadCostCredits(workingLead));
+  const presentedLead = {
+    ...presentLead(workingLead),
+    leadCostCredits: requirementCostCredits,
+    manualAssignmentRadiusKm: MANUAL_ASSIGNMENT_RADIUS_KM,
+  };
   if (!resolveRequirementLocation(workingLead)) {
     return {
       lead: presentedLead,
       radiusKm,
+      assignmentMode,
+      assignmentRadiusKm: MANUAL_ASSIGNMENT_RADIUS_KM,
+      manualAssignmentBlocked: false,
       count: 0,
       data: [],
       reason: "lead_coordinates_missing",
@@ -270,19 +289,69 @@ async function listNearbyProviders(enquiryId, options = {}) {
     })
     .lean();
 
-  const data = buildNearbyProviderRows(workingLead, providers, radiusKm);
+  const previousAssignments = await ProviderLeadUnlock.find({
+    enquiryId: presentedLead.enquiryId,
+  }).select({ providerId: 1, providerLeadUnlockId: 1, providerSaleOutcome: 1 }).lean();
+  const assignedProviderIds = new Set(
+    previousAssignments.map((row) => String(row.providerId || "")).filter(Boolean),
+  );
+  const blockingAssignment = previousAssignments.find(
+    (row) => String(row.providerSaleOutcome || "") !== "not_confirmed",
+  ) || null;
+
+  const data = buildNearbyProviderRows(workingLead, providers, radiusKm).map((provider) => {
+    const previouslyAssigned = assignedProviderIds.has(provider.providerId);
+    const withinAlertRadius = Number(provider.distanceKm || 0) <= fallbackRadiusKm;
+    const enoughCredits = Number(provider.walletBalanceCredits || 0) >= requirementCostCredits;
+    let manualAssignmentReason = "";
+    if (previouslyAssigned) manualAssignmentReason = "previously_assigned";
+    else if (blockingAssignment) manualAssignmentReason = "previous_provider_pending";
+    else if (provider.portalAccessEnabled === false) manualAssignmentReason = "portal_restricted";
+    else if (!enoughCredits) manualAssignmentReason = "insufficient_credits";
+
+    const whatsappEligible = !previouslyAssigned
+      && withinAlertRadius
+      && provider.whatsappAlertEligible;
+
+    return {
+      ...provider,
+      previouslyAssigned,
+      withinAlertRadius,
+      whatsappAlertEligible: whatsappEligible,
+      whatsappAlertReason: previouslyAssigned
+        ? "previously_assigned"
+        : !withinAlertRadius
+          ? "outside_alert_radius"
+          : provider.whatsappAlertReason,
+      manualAssignmentEligible: assignmentMode
+        && !manualAssignmentReason,
+      manualAssignmentReason,
+      requirementCostCredits,
+      balanceAfterAssignmentCredits: enoughCredits
+        ? Number((Number(provider.walletBalanceCredits || 0) - requirementCostCredits).toFixed(2))
+        : null,
+    };
+  });
   const eligibleCount = data.filter((provider) => provider.whatsappAlertEligible).length;
+  const assignmentEligibleCount = data.filter((provider) => provider.manualAssignmentEligible).length;
   return {
     lead: presentedLead,
     radiusKm,
+    assignmentMode,
+    assignmentRadiusKm: MANUAL_ASSIGNMENT_RADIUS_KM,
+    manualAssignmentBlocked: Boolean(blockingAssignment),
+    manualAssignmentBlockingProviderId: blockingAssignment?.providerId || "",
     count: data.length,
     eligibleCount,
+    assignmentEligibleCount,
     data,
     reason: !data.length
       ? "no_providers_in_radius"
-      : eligibleCount === 0
-        ? "no_eligible_providers"
-        : "",
+      : assignmentMode && assignmentEligibleCount === 0
+        ? "no_assignment_eligible_providers"
+        : eligibleCount === 0
+          ? "no_eligible_providers"
+          : "",
   };
 }
 
@@ -301,6 +370,18 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
     throw Object.assign(new Error("This requirement is not currently available to providers"), { status: 409 });
+  }
+
+  const previousAssignments = await ProviderLeadUnlock.find({
+    enquiryId: lead.enquiryId || lead.id,
+    providerId: { $in: providerIds },
+  }).select({ providerId: 1 }).lean();
+  const previouslyAssignedIds = new Set(previousAssignments.map((row) => String(row.providerId || "")));
+  if (previouslyAssignedIds.size) {
+    throw Object.assign(
+      new Error("A provider who already handled this requirement cannot be selected again"),
+      { status: 409, code: "PROVIDER_ALREADY_ASSIGNED" },
+    );
   }
 
   const alreadyAlertedProviderIds = providerIds.filter((providerId) =>
@@ -336,6 +417,8 @@ module.exports = {
   DEFAULT_RADIUS_KM,
   MIN_RADIUS_KM,
   MAX_RADIUS_KM,
+  MANUAL_ASSIGNMENT_RADIUS_KM,
+  assignmentModeEnabled,
   validCoordinate,
   hasCoordinates,
   providerHasVerifiedCoordinates,

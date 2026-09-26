@@ -8,6 +8,7 @@ router.post("/", requirePermission("requirements.create"), c.create);
 router.get("/:enquiryId/nearby-providers", requirePermission("requirements.view"), c.nearbyProviders);
 router.post("/:enquiryId/nearby-providers/alerts", requirePermission("requirements.manage"), c.sendNearbyProviderAlerts);
 router.post("/:enquiryId/nearby-providers/:providerId/direct-link", requirePermission("requirements.manage"), directLinkController.create);
+router.post("/:enquiryId/nearby-providers/:providerId/assign", requirePermission("requirements.manage"), c.assignNearbyProvider);
 router.get("/:enquiryId/providers", requirePermission("requirements.view"), c.providerStatuses);
 router.get("/:enquiryId/providers/:providerLeadUnlockId", requirePermission("requirements.view"), c.providerStatus);
 router.get("/:enquiryId/validation", requirePermission("requirements.view"), c.validation);

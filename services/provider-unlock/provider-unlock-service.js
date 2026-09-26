@@ -9,6 +9,7 @@ const {
 
 const UNLOCK_METHODS = Object.freeze(["credits", "direct_payment", "admin"]);
 const SALE_OUTCOMES = Object.freeze(["confirmed", "not_confirmed"]);
+const CREDIT_REFUND_STATUSES = Object.freeze(["pending_review", "refunded", "kept_charged"]);
 
 async function list(filters = {}) {
   const { limit, cursor } = getPagination(filters);
@@ -33,6 +34,22 @@ async function list(filters = {}) {
       label: "Provider outcome filter",
     });
   }
+  if (filters.refundStatus) {
+    const refundStatus = enumValue(filters.refundStatus, CREDIT_REFUND_STATUSES, {
+      label: "Credit refund status filter",
+    });
+    if (refundStatus === "pending_review") {
+      query.$or = [
+        { creditRefundStatus: { $exists: false } },
+        { creditRefundStatus: "" },
+        { creditRefundStatus: "pending_review" },
+      ];
+      query.unlockMethod = "credits";
+      query.chargedCredits = { $gt: 0 };
+    } else {
+      query.creditRefundStatus = refundStatus;
+    }
+  }
   if (filters.categorySlug) {
     query.categorySlug = tokenValue(filters.categorySlug, {
       label: "Category filter",
@@ -49,7 +66,7 @@ async function list(filters = {}) {
     defaultField: "unlockedAt",
   });
 
-  return cursorPaginate(ProviderLeadUnlock, {
+  const result = await cursorPaginate(ProviderLeadUnlock, {
     query,
     sort: dateSort(filters, {
       fields: ["unlockedAt", "updatedAt", "providerSaleOutcomeUpdatedAt"],
@@ -58,10 +75,28 @@ async function list(filters = {}) {
     limit,
     cursor,
   });
+
+  const enquiryIds = [...new Set(result.data.map((row) => row.enquiryId).filter(Boolean))];
+  const blockers = enquiryIds.length
+    ? await ProviderLeadUnlock.find({
+        enquiryId: { $in: enquiryIds },
+        providerSaleOutcome: { $ne: "not_confirmed" },
+      }).select({ enquiryId: 1 }).lean()
+    : [];
+  const blockedIds = new Set(blockers.map((row) => row.enquiryId));
+
+  return {
+    ...result,
+    data: result.data.map((row) => ({
+      ...row,
+      reassignmentEligible: !blockedIds.has(row.enquiryId),
+    })),
+  };
 }
 
 module.exports = {
   list,
   UNLOCK_METHODS,
   SALE_OUTCOMES,
+  CREDIT_REFUND_STATUSES,
 };

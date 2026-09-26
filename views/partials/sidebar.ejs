@@ -47,6 +47,7 @@
           </li>
         <% } %>
         <% if (canAccess('provider_unlocks.view')) { %><li class="nav-item"><a href="/provider-unlocks" title="Provider unlocks" class="nav-link" :class="{active:pathIs('/provider-unlocks')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>Provider unlocks</span></a></li><% } %>
+        <% if (canAccess('provider_unlocks.view')) { %><li class="nav-item"><a href="/provider-unlocks/not-confirmed" title="Not Confirmed Reviews" class="nav-link" :class="{active:window.location.pathname==='/provider-unlocks/not-confirmed'}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"/><path d="M3 4v5h5M8 12h8M12 8v8"/></svg><span>Not Confirmed Reviews</span></a></li><% } %>
 
         <% if (showOperations) { %><li class="nav-item-header"><span>Operations</span></li><% } %>
         <% if (canAccess('followUps.view')) { %><li class="nav-item"><a href="/follow-ups" title="Follow-ups" class="nav-link" :class="{active:pathIs('/follow-ups')}" @click="sidebarOpen=false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M4.5 5.5 3 8"/></svg><span>Follow-ups</span></a></li><% } %>

@@ -32,7 +32,7 @@ const enquirySchema = new mongoose.Schema(
     locationSource: { type: String, default: "" },
     marketplaceStatus: { type: String, enum: ["draft", "published", "paused", "closed", "expired"], default: "draft", index: true },
     marketplaceAvailable: { type: Boolean, default: false, index: true },
-    marketplaceClosureReason: { type: String, enum: ["", "unlock_limit", "status_change", "invalid", "deactivated", "expired"], default: "" },
+    marketplaceClosureReason: { type: String, enum: ["", "unlock_limit", "provider_pending", "status_change", "invalid", "deactivated", "expired"], default: "" },
     marketplacePublishedAt: { type: Date, default: null, index: true },
     marketplaceExpiresAt: { type: Date, default: null, index: true },
     category: { type: String, default: "", trim: true },

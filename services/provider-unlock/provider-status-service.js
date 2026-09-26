@@ -14,6 +14,7 @@ const {
   validationError,
 } = require("../../utils/validation");
 const notificationService = require("../communication/notification-service");
+const assignmentService = require("./provider-assignment-service");
 
 const REASON_REQUIRED_STATUSES = Object.freeze([
   "rejected",
@@ -221,8 +222,33 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
     const now = new Date();
     const updateActor = actor || statusActor(unlock);
     const oldConfirmed = unlock.providerSaleOutcome === "confirmed";
+    const wasNotConfirmed = unlock.providerSaleOutcome === "not_confirmed";
     const newConfirmed = feedback.outcome === "confirmed";
     const confirmationDelta = Number(newConfirmed) - Number(oldConfirmed);
+
+    if (newConfirmed && unlock.creditRefundStatus === "refunded") {
+      throw Object.assign(
+        validationError("This requirement was already closed and its credits were refunded"),
+        { code: "REFUNDED_OUTCOME_LOCKED" },
+      );
+    }
+
+    if (newConfirmed && wasNotConfirmed) {
+      const laterUnlock = await ProviderLeadUnlock.findOne({
+        enquiryId: unlock.enquiryId,
+        providerId: { $ne: unlock.providerId },
+        unlockedAt: { $gt: unlock.unlockedAt },
+      })
+        .select({ providerLeadUnlockId: 1, providerId: 1 })
+        .session(session)
+        .lean();
+      if (laterUnlock) {
+        throw Object.assign(
+          validationError("This requirement was already reassigned to another provider"),
+          { code: "LEAD_ALREADY_REASSIGNED" },
+        );
+      }
+    }
     const outcomeChanged = unlock.providerSaleOutcome !== feedback.outcome
       || String(unlock.providerSaleOutcomeNote || "") !== feedback.outcomeNote;
     const activityChanged = String(unlock.providerLeadStatus || "") !== feedback.activityStatus
@@ -263,6 +289,16 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
       unlock.outcomeVerifiedAt = null;
       unlock.outcomeVerifiedBy = "";
     }
+    if (
+      feedback.outcome === "not_confirmed"
+      && unlock.unlockMethod === "credits"
+      && Number(unlock.chargedCredits || 0) > 0
+      && !["refunded", "kept_charged"].includes(unlock.creditRefundStatus)
+    ) {
+      unlock.creditRefundStatus = "pending_review";
+    } else if (feedback.outcome === "confirmed" && unlock.creditRefundStatus === "pending_review") {
+      unlock.creditRefundStatus = "";
+    }
     await unlock.save({ session });
 
     const lead = await Enquiry.findOne(enquiryQuery(unlock.enquiryId)).session(session);
@@ -292,6 +328,11 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
     }
     await lead.save({ session });
 
+    if (feedback.outcome === "not_confirmed") {
+      await assignmentService.markReadyForReassignment(unlock.enquiryId, session, now);
+    } else {
+      await assignmentService.closeForActiveProvider(unlock.enquiryId, session, now);
+    }
     return {
       unlock: unlock.toObject(),
       lead: lead.toObject(),

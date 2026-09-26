@@ -107,6 +107,7 @@ router.get("/billing/provider-subscriptions", ...protectedPage("billing.view"), 
 router.get("/billing/new", ...protectedPage("billing.create"), page.invoiceCreate);
 router.get("/billing/:invoiceId/edit", ...protectedPage("billing.edit"), page.invoiceEdit);
 router.get("/provider-unlocks", ...protectedPage("provider_unlocks.view"), page.providerUnlocks);
+router.get("/provider-unlocks/not-confirmed", ...protectedPage("provider_unlocks.view"), page.providerNotConfirmedReviews);
 router.get("/reports", ...protectedPage("reports.view"), page.reports);
 router.get("/storage", ...protectedPage("storage.view"), page.storage);
 router.get("/employees", ...protectedPage("employees.view"), page.employees);

@@ -5,6 +5,7 @@ const leadQualificationService = require("../services/lead-qualification/lead-qu
 const leadValidationService = require("../services/lead-validation/lead-validation-service");
 const requirementAiService = require("../services/requirement-ai/requirement-ai-service");
 const enquiryLocationService = require("../services/location/enquiry-location-service");
+const providerManualAssignmentService = require("../services/provider-unlock/provider-manual-assignment-service");
 const { resolveLeadStatusTransition } = require("../utils/lead-journey");
 const { resolveRequirementLocation } = require("../utils/requirement-location");
 
@@ -352,6 +353,22 @@ async function sendNearbyProviderAlerts(req, res, next) {
   }
 }
 
+async function assignNearbyProvider(req, res, next) {
+  try {
+    const result = await providerManualAssignmentService.assignRequirement(
+      req.params.enquiryId,
+      req.params.providerId,
+      req.admin || { email: "admin" },
+    );
+    res.status(result.duplicate ? 200 : 201).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function providerStatus(req, res, next) {
   try {
     res.json({
@@ -388,5 +405,6 @@ module.exports = {
   providerStatuses,
   nearbyProviders,
   sendNearbyProviderAlerts,
+  assignNearbyProvider,
   providerStatus,
 };

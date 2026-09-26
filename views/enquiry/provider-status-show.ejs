@@ -21,10 +21,27 @@
         </section>
 
         <section class="card"><div class="card-header"><h2 class="card-title mb-0">CRM outcome review</h2></div><div class="card-body">
-          <div class="row g-3"><div class="col-md-4"><label class="form-label">Verification</label><select class="form-select" x-model="form.verificationStatus"><option value="pending_review">Pending review</option><option value="verified">Verified</option><option value="unable_to_verify">Unable to verify</option><option value="incorrect_status">Incorrect status</option><option value="under_review">Under review</option></select></div>
-          <div class="col-md-4"><label class="form-label">Provider action</label><select class="form-select" x-model="form.reviewAction"><option value="none">No account action</option><option value="warning">Issue warning</option><option value="suspend">Suspend provider</option><option value="ban">Block provider</option></select></div>
-          <div class="col-md-12"><label class="form-label">Review note</label><textarea class="form-control" rows="4" maxlength="2000" x-model="form.note" placeholder="Record how the outcome was verified"></textarea></div></div>
-          <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" @click="saveReview()" :disabled="saving || !form.note.trim()" x-text="saving ? 'Saving…' : 'Save review'"></button></div>
+          <div class="alert alert-info mb-3">
+            Unlock credits stay charged by default. Set the effective outcome to Not Confirmed and choose Revert credits only when your team approves a credit reversal.
+          </div>
+          <div class="row g-3">
+            <div class="col-md-3"><label class="form-label">Effective outcome</label><select class="form-select" x-model="form.effectiveOutcome"><option value="">Keep current outcome</option><option value="confirmed">Confirmed</option><option value="not_confirmed">Not Confirmed</option></select></div>
+            <div class="col-md-3"><label class="form-label">Verification</label><select class="form-select" x-model="form.verificationStatus"><option value="pending_review">Pending review</option><option value="verified">Verified</option><option value="unable_to_verify">Unable to verify</option><option value="incorrect_status">Incorrect status</option><option value="under_review">Under review</option></select></div>
+            <div class="col-md-3"><label class="form-label">Credit decision</label><select class="form-select" x-model="form.creditAction" :disabled="!creditDecisionAvailable"><option value="none">No credit change</option><option value="refund" :disabled="!canRefundCredits">Revert credits</option><option value="keep_charge">Keep charge</option></select></div>
+            <div class="col-md-3"><label class="form-label">Provider action</label><select class="form-select" x-model="form.reviewAction"><option value="none">No account action</option><option value="warning">Issue warning</option><option value="suspend">Suspend provider</option><option value="ban">Block provider</option></select></div>
+            <div class="col-md-12"><label class="form-label">Review note</label><textarea class="form-control" rows="4" maxlength="2000" x-model="form.note" placeholder="Record how the outcome was verified and why credits were or were not returned"></textarea></div>
+          </div>
+
+          <div class="border rounded p-3 mt-3" x-show="unlock.creditRefundStatus" x-cloak>
+            <div class="text-muted fs-sm">Credit review status</div>
+            <div class="fw-semibold" x-text="refundStatusLabel"></div>
+            <div class="text-muted fs-sm mt-1" x-show="unlock.creditRefundNote" x-text="unlock.creditRefundNote"></div>
+          </div>
+
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+            <a x-show="effectiveOutcome === 'not_confirmed'" x-cloak class="btn btn-light" :href="'/enquiries/' + enquiryId + '/nearby-providers'">Nearby Providers / Copy link</a>
+            <button class="btn btn-primary ms-auto" @click="saveReview()" :disabled="saving || !form.note.trim()" x-text="saving ? 'Saving…' : 'Save review'"></button>
+          </div>
         </div></section>
       </main></div><%- include('../partials/footer') %>
     </div></div></div>
@@ -32,9 +49,49 @@
       function providerUnlockShow() {
         const parts = pathParts();
         return {
-          enquiryId: parts[1] || '', unlockId: parts[3] || '', lead: {}, unlock: {}, saving: false, error: '', form: { verificationStatus: 'pending_review', reviewAction: 'none', note: '' },
-          async load() { try { const body = await apiFetch('/api/enquiry/' + this.enquiryId + '/providers/' + this.unlockId); this.lead = body.data?.lead || {}; this.unlock = body.data?.unlock || {}; this.form.verificationStatus = this.unlock.outcomeVerificationStatus || 'pending_review'; this.form.note = this.unlock.outcomeVerificationNote || ''; } catch (error) { this.error = error.message; } },
-          async saveReview() { if (this.saving) return; this.saving = true; try { const body = await apiFetch('/api/provider/' + this.unlock.providerId + '/unlocks/' + this.unlockId + '/outcome-review', { method: 'PATCH', body: JSON.stringify(this.form) }); this.unlock = body.data?.unlock || this.unlock; showCrmToast('Provider outcome review saved.', 'success'); } catch (error) { showCrmToast(error.message, 'error'); } finally { this.saving = false; } }
+          enquiryId: parts[1] || '',
+          unlockId: parts[3] || '',
+          lead: {},
+          unlock: {},
+          saving: false,
+          error: '',
+          form: { effectiveOutcome: '', verificationStatus: 'pending_review', creditAction: 'none', reviewAction: 'none', note: '' },
+          get effectiveOutcome() { return this.form.effectiveOutcome || this.unlock.providerSaleOutcome || ''; },
+          get creditDecisionAvailable() {
+            return this.effectiveOutcome === 'not_confirmed'
+              && this.unlock.unlockMethod === 'credits'
+              && Number(this.unlock.chargedCredits || 0) > 0
+              && this.unlock.creditRefundStatus !== 'refunded';
+          },
+          get canRefundCredits() { return this.creditDecisionAvailable; },
+          get refundStatusLabel() {
+            if (this.unlock.creditRefundStatus === 'refunded') return 'Credits reverted · ' + Number(this.unlock.creditRefundedCredits || this.unlock.chargedCredits || 0) + ' credits';
+            if (this.unlock.creditRefundStatus === 'kept_charged') return 'Charge kept after review';
+            if (this.unlock.creditRefundStatus === 'pending_review') return 'Pending credit review';
+            return 'No credit review';
+          },
+          async load() {
+            try {
+              const body = await apiFetch('/api/enquiry/' + this.enquiryId + '/providers/' + this.unlockId);
+              this.lead = body.data?.lead || {};
+              this.unlock = body.data?.unlock || {};
+              this.form.effectiveOutcome = this.unlock.providerSaleOutcome || '';
+              this.form.verificationStatus = this.unlock.outcomeVerificationStatus || 'pending_review';
+              this.form.creditAction = 'none';
+              this.form.note = this.unlock.outcomeVerificationNote || this.unlock.creditRefundNote || '';
+            } catch (error) { this.error = error.message; }
+          },
+          async saveReview() {
+            if (this.saving) return;
+            this.saving = true;
+            try {
+              const body = await apiFetch('/api/provider/' + this.unlock.providerId + '/unlocks/' + this.unlockId + '/outcome-review', { method: 'PATCH', body: JSON.stringify(this.form) });
+              this.unlock = body.data?.unlock || this.unlock;
+              this.form.effectiveOutcome = this.unlock.providerSaleOutcome || this.form.effectiveOutcome;
+              this.form.creditAction = 'none';
+              showCrmToast('Provider outcome review saved.', 'success');
+            } catch (error) { showCrmToast(error.message, 'error'); } finally { this.saving = false; }
+          }
         };
       }
     </script>
