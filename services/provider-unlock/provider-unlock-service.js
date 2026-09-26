@@ -35,9 +35,16 @@ async function list(filters = {}) {
     });
   }
   if (filters.refundStatus) {
-    query.creditRefundStatus = enumValue(filters.refundStatus, CREDIT_REFUND_STATUSES, {
+    const refundStatus = enumValue(filters.refundStatus, CREDIT_REFUND_STATUSES, {
       label: "Credit refund status filter",
     });
+    query.creditRefundStatus = refundStatus === "pending_review"
+      ? { $in: ["", "pending_review"] }
+      : refundStatus;
+    if (refundStatus === "pending_review") {
+      query.unlockMethod = "credits";
+      query.chargedCredits = { $gt: 0 };
+    }
   }
   if (filters.categorySlug) {
     query.categorySlug = tokenValue(filters.categorySlug, {
