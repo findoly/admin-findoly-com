@@ -275,5 +275,143 @@ module.exports.addCredits = async function addCredits(
   }
 };
 
+
+async function refundLeadUnlockCredits(unlock = {}, input = {}, actor = {}, session) {
+  if (!session) {
+    throw Object.assign(new Error("Credit refund must run inside a transaction"), {
+      status: 500,
+      code: "CREDIT_REFUND_TRANSACTION_REQUIRED",
+    });
+  }
+
+  const providerId = identifierValue(unlock.providerId, { label: "Provider ID" });
+  const providerLeadUnlockId = identifierValue(unlock.providerLeadUnlockId, {
+    label: "Provider lead unlock ID",
+  });
+  const amountCredits = Number(unlock.chargedCredits || 0);
+  const amountMinorCredits = paiseFromCredits(amountCredits);
+  if (unlock.unlockMethod !== "credits" || amountMinorCredits <= 0) {
+    throw Object.assign(new Error("This unlock does not have a refundable credit charge"), {
+      status: 409,
+      code: "CREDIT_REFUND_NOT_APPLICABLE",
+    });
+  }
+
+  const note = textValue(input.note, {
+    label: "Refund review note",
+    required: true,
+    minLength: 3,
+    maxLength: 2000,
+    preserveWhitespace: true,
+  });
+  const idempotencyKey = `lead-unlock-refund:${providerId}:${providerLeadUnlockId}`;
+  const existingTransaction = await WalletTransaction.findOne({ idempotencyKey })
+    .session(session)
+    .lean();
+  const provider = await Provider.findOne(providerQuery(providerId)).session(session);
+  if (!provider) {
+    throw Object.assign(new Error("Provider not found"), { status: 404 });
+  }
+  if (existingTransaction) {
+    return presentResult(provider, existingTransaction, true);
+  }
+
+  await ensureLegacyAllocation(provider, session);
+
+  const now = new Date();
+  const employee = actorDetails(actor);
+  const creditAllocationId = uuid();
+  const walletTransactionId = uuid();
+  const balanceBeforePaise = Number(provider.walletBalancePaise || 0);
+  const balanceAfterPaise = balanceBeforePaise + amountMinorCredits;
+
+  await CreditAllocation.create(
+    [
+      {
+        creditAllocationId,
+        providerId,
+        source: "lead_unlock_refund",
+        referenceId: providerLeadUnlockId,
+        amountMinorCredits,
+        remainingMinorCredits: amountMinorCredits,
+        status: "active",
+        allocatedAt: now,
+        expiresAt: null,
+        metadata: {
+          providerLeadUnlockId,
+          enquiryId: unlock.enquiryId || "",
+          originalWalletTransactionId: unlock.walletTransactionId || "",
+          reviewNote: note,
+          refundedBy: employee,
+        },
+      },
+    ],
+    { session },
+  );
+
+  const balanceQuery = { _id: provider._id };
+  if (balanceBeforePaise === 0) {
+    balanceQuery.$or = [
+      { walletBalancePaise: 0 },
+      { walletBalancePaise: null },
+      { walletBalancePaise: { $exists: false } },
+    ];
+  } else {
+    balanceQuery.walletBalancePaise = balanceBeforePaise;
+  }
+
+  const updatedProvider = await Provider.findOneAndUpdate(
+    balanceQuery,
+    {
+      $inc: { walletBalancePaise: amountMinorCredits },
+      $set: { walletUpdatedAt: now, updatedAt: now },
+    },
+    { new: true, session, runValidators: true },
+  );
+  if (!updatedProvider) {
+    throw Object.assign(new Error("Provider credit balance changed. Please try again."), {
+      status: 409,
+      code: "CREDIT_BALANCE_CHANGED",
+    });
+  }
+
+  const [transaction] = await WalletTransaction.create(
+    [
+      {
+        walletTransactionId,
+        providerId,
+        type: "credit",
+        amountPaise: amountMinorCredits,
+        currency: "INR",
+        balanceBeforePaise,
+        balanceAfterPaise,
+        status: "posted",
+        source: "lead_unlock_refund",
+        referenceId: providerLeadUnlockId,
+        idempotencyKey,
+        description: `${amountCredits} credits returned after Not Confirmed review`,
+        expiresAt: null,
+        metadata: {
+          providerLeadUnlockId,
+          enquiryId: unlock.enquiryId || "",
+          originalWalletTransactionId: unlock.walletTransactionId || "",
+          creditAllocationId,
+          reviewNote: note,
+          refundedBy: employee,
+        },
+      },
+    ],
+    { session },
+  );
+
+  return {
+    ...presentResult(updatedProvider, transaction.toObject(), false),
+    creditAllocationId,
+    refundedCredits: amountCredits,
+  };
+}
+
+module.exports.refundLeadUnlockCredits = refundLeadUnlockCredits;
+
 module.exports.MANUAL_CREDIT_REASONS = MANUAL_CREDIT_REASONS;
 module.exports.REASON_LABELS = REASON_LABELS;
