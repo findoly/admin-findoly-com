@@ -6,7 +6,7 @@
     <div class="page-content">
       <%- include('../partials/sidebar') %>
       <div class="content-wrapper"><div class="content-inner">
-        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Provider marketplace</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Inspect only leads that providers actually unlocked. Marketplace visibility creates no provider-specific rows.</p></div></div></div>
+        <div class="page-header page-header-light crm-page-header"><div class="page-header-content crm-page-heading"><div><div class="crm-page-eyebrow">Provider marketplace</div><h1 class="page-title mb-1"><%= title %></h1><p class="crm-page-subtitle mb-0">Inspect only leads that providers actually unlocked. Marketplace visibility creates no provider-specific rows.</p></div><a href="/provider-unlocks/not-confirmed" class="btn btn-light crm-primary-action">Not Confirmed Reviews</a></div></div>
         <div class="content">
           <div x-show="shellError" x-cloak class="alert alert-danger" x-text="shellError"></div>
           <main x-data="providerUnlockList()" x-init="load()">
