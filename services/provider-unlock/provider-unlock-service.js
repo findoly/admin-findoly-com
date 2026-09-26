@@ -55,7 +55,7 @@ async function list(filters = {}) {
     defaultField: "unlockedAt",
   });
 
-  return cursorPaginate(ProviderLeadUnlock, {
+  const result = await cursorPaginate(ProviderLeadUnlock, {
     query,
     sort: dateSort(filters, {
       fields: ["unlockedAt", "updatedAt", "providerSaleOutcomeUpdatedAt"],
@@ -64,6 +64,23 @@ async function list(filters = {}) {
     limit,
     cursor,
   });
+
+  const enquiryIds = [...new Set(result.data.map((row) => row.enquiryId).filter(Boolean))];
+  const blockers = enquiryIds.length
+    ? await ProviderLeadUnlock.find({
+        enquiryId: { $in: enquiryIds },
+        providerSaleOutcome: { $ne: "not_confirmed" },
+      }).select({ enquiryId: 1 }).lean()
+    : [];
+  const blockedIds = new Set(blockers.map((row) => row.enquiryId));
+
+  return {
+    ...result,
+    data: result.data.map((row) => ({
+      ...row,
+      reassignmentEligible: !blockedIds.has(row.enquiryId),
+    })),
+  };
 }
 
 module.exports = {
