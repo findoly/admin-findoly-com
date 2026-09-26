@@ -329,7 +329,7 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
     await lead.save({ session });
 
     if (feedback.outcome === "not_confirmed") {
-      await assignmentService.reopenIfAllNotConfirmed(unlock.enquiryId, session, now);
+      await assignmentService.markReadyForReassignment(unlock.enquiryId, session, now);
     } else {
       await assignmentService.closeForActiveProvider(unlock.enquiryId, session, now);
     }
