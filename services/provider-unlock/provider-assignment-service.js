@@ -51,46 +51,37 @@ async function closeForActiveProvider(enquiryId, session = null, now = new Date(
   return { closed: true, lead: lead.toObject() };
 }
 
-async function reopenIfAllNotConfirmed(enquiryId, session = null, now = new Date()) {
+async function markReadyForReassignment(enquiryId, session = null, now = new Date()) {
   const blocker = await findBlockingUnlock(enquiryId, "", session);
-  if (blocker) return { reopened: false, blocked: true, blocker };
+  if (blocker) return { eligible: false, blocked: true, blocker };
 
   let query = Enquiry.findOne({ $or: [{ enquiryId }, { id: enquiryId }] });
   if (session) query = query.session(session);
   const lead = await query;
-  if (!lead) return { reopened: false, blocked: false, reason: "lead_missing" };
+  if (!lead) return { eligible: false, blocked: false, reason: "lead_missing" };
 
-  const eligible =
+  const activeLifecycle =
     lead.status === "approved"
     && lead.isActive !== false
     && lead.marketplacePublishedAt
     && new Date(lead.marketplacePublishedAt) <= now
     && lead.marketplaceExpiresAt
-    && new Date(lead.marketplaceExpiresAt) > now
-    && Number(lead.reservedUnlockCount || 0) === 0;
+    && new Date(lead.marketplaceExpiresAt) > now;
+  if (!activeLifecycle) return { eligible: false, blocked: false, reason: "lead_not_eligible" };
 
-  if (!eligible) return { reopened: false, blocked: false, reason: "lead_not_eligible" };
-
-  if (Number(lead.remainingUnlocks || 0) <= 0) {
-    lead.marketplaceAvailable = false;
-    lead.marketplaceStatus = "closed";
-    lead.marketplaceClosureReason = "unlock_limit";
-    lead.updatedAt = now;
-    await lead.save({ session });
-    return { reopened: false, blocked: false, reason: "unlock_limit" };
-  }
-
-  lead.marketplaceAvailable = true;
-  lead.marketplaceStatus = "published";
-  lead.marketplaceClosureReason = "";
+  lead.marketplaceAvailable = false;
+  lead.marketplaceStatus = "closed";
+  lead.marketplaceClosureReason = Number(lead.remainingUnlocks || 0) <= 0
+    ? "unlock_limit"
+    : "provider_pending";
   lead.updatedAt = now;
   await lead.save({ session });
-  return { reopened: true, blocked: false, lead: lead.toObject() };
+  return { eligible: true, blocked: false, lead: lead.toObject() };
 }
 
 module.exports = {
   blockingQuery,
   findBlockingUnlock,
   closeForActiveProvider,
-  reopenIfAllNotConfirmed,
+  markReadyForReassignment,
 };
