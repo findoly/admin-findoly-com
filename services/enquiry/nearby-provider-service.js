@@ -2,6 +2,7 @@
 
 const Enquiry = require("../../models/Enquiry");
 const Provider = require("../../models/Provider");
+const ProviderLeadUnlock = require("../../models/ProviderLeadUnlock");
 const nearbyLeadAlertService = require("../communication/nearby-lead-alert-service");
 const providerAlertStateService = require("./provider-alert-state-service");
 const enquiryLocationService = require("../location/enquiry-location-service");
@@ -270,7 +271,21 @@ async function listNearbyProviders(enquiryId, options = {}) {
     })
     .lean();
 
-  const data = buildNearbyProviderRows(workingLead, providers, radiusKm);
+  const previousAssignments = await ProviderLeadUnlock.find({
+    enquiryId: presentedLead.enquiryId,
+  }).select({ providerId: 1 }).lean();
+  const assignedProviderIds = new Set(
+    previousAssignments.map((row) => String(row.providerId || "")).filter(Boolean),
+  );
+  const data = buildNearbyProviderRows(workingLead, providers, radiusKm).map((provider) => {
+    const previouslyAssigned = assignedProviderIds.has(provider.providerId);
+    return {
+      ...provider,
+      previouslyAssigned,
+      whatsappAlertEligible: previouslyAssigned ? false : provider.whatsappAlertEligible,
+      whatsappAlertReason: previouslyAssigned ? "previously_assigned" : provider.whatsappAlertReason,
+    };
+  });
   const eligibleCount = data.filter((provider) => provider.whatsappAlertEligible).length;
   return {
     lead: presentedLead,
@@ -301,6 +316,18 @@ async function sendSelectedProviderAlerts(enquiryId, input = {}, actor = "admin"
     || Number(lead.remainingUnlocks || 0) <= 0
   ) {
     throw Object.assign(new Error("This requirement is not currently available to providers"), { status: 409 });
+  }
+
+  const previousAssignments = await ProviderLeadUnlock.find({
+    enquiryId: lead.enquiryId || lead.id,
+    providerId: { $in: providerIds },
+  }).select({ providerId: 1 }).lean();
+  const previouslyAssignedIds = new Set(previousAssignments.map((row) => String(row.providerId || "")));
+  if (previouslyAssignedIds.size) {
+    throw Object.assign(
+      new Error("A provider who already handled this requirement cannot be selected again"),
+      { status: 409, code: "PROVIDER_ALREADY_ASSIGNED" },
+    );
   }
 
   const alreadyAlertedProviderIds = providerIds.filter((providerId) =>
