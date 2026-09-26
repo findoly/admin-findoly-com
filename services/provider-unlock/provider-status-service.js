@@ -333,11 +333,9 @@ async function updateProviderLeadFeedback(input = {}, actor = "provider-integrat
     } else {
       await assignmentService.closeForActiveProvider(unlock.enquiryId, session, now);
     }
-    const finalLead = await Enquiry.findOne(enquiryQuery(unlock.enquiryId)).session(session).lean();
-
     return {
       unlock: unlock.toObject(),
-      lead: finalLead || lead.toObject(),
+      lead: lead.toObject(),
       conversionChanged: previousConversionStatus !== conversionStatus,
       conversionStatus,
       confirmedCount,
