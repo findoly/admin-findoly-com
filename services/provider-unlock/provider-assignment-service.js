@@ -30,6 +30,17 @@ async function closeForActiveProvider(enquiryId, session = null, now = new Date(
   const lead = await query;
   if (!lead) return { closed: false, reason: "lead_missing" };
 
+  const terminalClosure = ["status_change", "invalid", "deactivated", "expired"]
+    .includes(String(lead.marketplaceClosureReason || ""));
+  const activeLifecycle =
+    lead.status === "approved"
+    && lead.isActive !== false
+    && lead.marketplaceExpiresAt
+    && new Date(lead.marketplaceExpiresAt) > now;
+  if (terminalClosure || !activeLifecycle) {
+    return { closed: false, reason: "lead_not_active" };
+  }
+
   lead.marketplaceAvailable = false;
   lead.marketplaceStatus = "closed";
   lead.marketplaceClosureReason = Number(lead.remainingUnlocks || 0) <= 0
