@@ -1,6 +1,7 @@
 const PincodeLocation = require("../../models/PincodeLocation");
 
 const LOCATION_ENRICHMENT_VERSION = 2;
+const MAX_POSTCODE_LOCALITIES = 3;
 
 function validationError(message, status = 400, code = "PINCODE_INVALID") {
   return Object.assign(new Error(message), { status, code });
@@ -92,6 +93,7 @@ function specificPostcodeLocalities(details = {}) {
     if (!text || !normalized || generic.has(normalized) || seen.has(normalized)) continue;
     seen.add(normalized);
     output.push(text);
+    if (output.length >= MAX_POSTCODE_LOCALITIES) break;
   }
   return output;
 }
@@ -167,6 +169,25 @@ async function geocodePincode(value, options = {}) {
 
   const cached = await PincodeLocation.findOne({ pincode }).lean();
   const cachedLocation = validCachedLocation(cached);
+  if (cachedLocation && Array.isArray(cached?.postcodeLocalities)) {
+    const storedLocalities = cleanTextList(cached.postcodeLocalities);
+    const normalizedLocalities = cachedLocation.postcodeLocalities;
+    const localitiesChanged = storedLocalities.length !== normalizedLocalities.length
+      || storedLocalities.some((value, index) => value !== normalizedLocalities[index]);
+    if (localitiesChanged) {
+      try {
+        await PincodeLocation.updateOne(
+          { pincode },
+          { $set: { postcodeLocalities: normalizedLocalities } },
+        );
+      } catch (error) {
+        logGeocodingFailure("geocoding_cache_locality_normalize_failed", {
+          pincode,
+          errorMessage: error?.message || error,
+        });
+      }
+    }
+  }
   if (cachedLocation && Number(cached.enrichmentVersion || 0) >= LOCATION_ENRICHMENT_VERSION) {
     return cachedLocation;
   }
@@ -346,4 +367,4 @@ async function geocodePincode(value, options = {}) {
   return data;
 }
 
-module.exports = { geocodePincode, normalizePincode, specificPostcodeLocalities };
+module.exports = { geocodePincode, normalizePincode, specificPostcodeLocalities, MAX_POSTCODE_LOCALITIES };

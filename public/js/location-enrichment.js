@@ -23,7 +23,7 @@
       if (seen.has(key)) continue;
       seen.add(key);
       output.push(text);
-      if (output.length >= 100) break;
+      if (output.length >= 3) break;
     }
     return output;
   }
