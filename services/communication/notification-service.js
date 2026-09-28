@@ -139,6 +139,7 @@ const leadPostalAreas = function (lead = {}) {
     if (!text || !normalized || generic.has(normalized) || seen.has(normalized)) continue;
     seen.add(normalized);
     output.push(text);
+    if (output.length >= MAX_NEARBY_LEAD_AREAS) break;
   }
   return output;
 };
