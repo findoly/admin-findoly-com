@@ -1,3 +1,5 @@
+const MAX_NEARBY_LEAD_AREAS = 3;
+
 const CommunicationRule = require("../../models/CommunicationRule");
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const communicationService = require("./communication-service");
