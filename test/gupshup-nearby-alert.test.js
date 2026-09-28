@@ -90,6 +90,7 @@ function loadGeocodingService(cachedLocation, capture = {}) {
 }
 
 test("PIN geocoding prefers a specific cached postal locality over the generic city", async () => {
+  const capture = {};
   const geocoding = loadGeocodingService({
     pincode: "400095",
     latitude: 19.186,
@@ -100,14 +101,15 @@ test("PIN geocoding prefers a specific cached postal locality over the generic c
     state: "Maharashtra",
     country: "India",
     formattedAddress: "Malvani, Mumbai, Maharashtra 400095, India",
-    postcodeLocalities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
+    postcodeLocalities: ["Gorai", "Malvani", "Kharodi", "Aksa", "Manori", "Mumbai"],
     enrichmentVersion: 2,
     source: "google_geocoding",
-  });
+  }, capture);
 
   const location = await geocoding.geocodePincode("400095");
   assert.equal(location.locality, "Malvani");
   assert.deepEqual(location.postcodeLocalities, ["Gorai", "Malvani", "Kharodi"]);
+  assert.deepEqual(capture.update.update.$set.postcodeLocalities, ["Gorai", "Malvani", "Kharodi"]);
 });
 
 test("fresh PIN geocoding prefers postcode locality when Google locality is only the city", async () => {
@@ -131,7 +133,7 @@ test("fresh PIN geocoding prefers postcode locality when Google locality is only
             { long_name: "India", short_name: "IN", types: ["country"] },
           ],
           formatted_address: "Malvani, Mumbai, Maharashtra 400095, India",
-          postcode_localities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
+          postcode_localities: ["Gorai", "Malvani", "Kharodi", "Aksa", "Manori", "Mumbai"],
         }],
       };
     },
@@ -155,7 +157,7 @@ test("nearby alert replaces generic city locality with the specific PIN area", a
     calls: [],
     location: {
       locality: "Gorai",
-      postcodeLocalities: ["Gorai", "Malvani", "Kharodi"],
+      postcodeLocalities: ["Gorai", "Malvani", "Kharodi", "Aksa", "Manori"],
       district: "Mumbai Suburban",
       latitude: 19.186,
       longitude: 72.84,
@@ -710,7 +712,7 @@ test("nearby lead area mapping prefers Google locality and exact coordinates wit
     event: "nearby_lead_available",
     lead: {
       locationLocality: "Gorai",
-      locationPostcodeLocalities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Malvani"],
+      locationPostcodeLocalities: ["Gorai", "Malvani", "Mumbai", "Kharodi", "Aksa", "Manori"],
       city: "Mumbai",
       locationDistrict: "Mumbai Suburban",
       state: "Maharashtra",
