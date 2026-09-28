@@ -49,7 +49,10 @@ async function withSpecificLeadArea(lead = {}) {
     const location = await geocodePincode(pincode);
     const locality = String(location?.locality || "").trim();
     const postcodeLocalities = Array.isArray(location?.postcodeLocalities)
-      ? location.postcodeLocalities.map((value) => String(value || "").trim()).filter(Boolean)
+      ? location.postcodeLocalities
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .slice(0, 3)
       : [];
     return {
       ...lead,
