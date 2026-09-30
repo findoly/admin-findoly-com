@@ -34,8 +34,8 @@ const weakestAnswers = {
   genuine_confidence: "very_low",
 };
 
-test("qualification V2 uses exactly six distinct questions with employee-friendly urgency labels", () => {
-  assert.equal(QUALIFICATION_VERSION, 2);
+test("qualification V3 uses exactly six distinct questions with employee-friendly urgency labels", () => {
+  assert.equal(QUALIFICATION_VERSION, 3);
   assert.equal(QUESTIONS.length, 6);
   assert.deepEqual(QUESTIONS.map((question) => question.id), [
     "readiness",
