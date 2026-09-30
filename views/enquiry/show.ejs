@@ -151,14 +151,9 @@
                         <div x-show="qualificationPreviewing" class="text-muted mb-2">Calculating qualification…</div>
                         <div x-show="qualification.system" x-cloak>
                           <div class="alert alert-light border mb-3">
-                            <div class="fw-semibold mb-1">System calculation</div>
+                            <div class="fw-semibold mb-1">Qualification result</div>
                             <div class="small">
-                              Price score <strong x-text="qualification.system?.priceScorePercent + '%'"></strong>
-                              → rounded to <strong x-text="qualification.system?.roundedPricePercent + '%'"></strong>
-                              of Category maximum <strong x-text="money(qualification.system?.categoryMaxLeadPricePaise)"></strong>.
-                            </div>
-                            <div class="small mt-1">
-                              Suggested price <strong x-text="money(qualification.system?.leadPricePaise)"></strong>
+                              Category lead price <strong x-text="money(qualification.system?.leadPricePaise)"></strong>
                               · Intent <strong x-text="humanize(qualification.system?.leadIntent)"></strong>
                               · Priority <strong x-text="humanize(qualification.system?.priority)"></strong>
                             </div>
@@ -166,8 +161,9 @@
 
                           <div class="row g-2 mb-3">
                             <div class="col-md-4">
-                              <label class="form-label">Final lead price (₹)</label>
-                              <input type="number" class="form-control" min="0" step="10" :max="Number(qualification.categoryMaxLeadPricePaise || 0) / 100" x-model.number="qualificationFinal.leadPriceRupees">
+                              <label class="form-label">Lead price</label>
+                              <input type="text" class="form-control bg-light" :value="money(qualification.system?.leadPricePaise || qualification.categoryMaxLeadPricePaise)" readonly>
+                              <div class="form-text">Fixed from Category pricing.</div>
                             </div>
                             <div class="col-md-4">
                               <label class="form-label">Final intent</label>
@@ -191,7 +187,7 @@
                           <button class="btn btn-primary w-100" @click="saveQualification()" :disabled="qualificationSaving || !qualificationAnswersComplete || isRejected">
                             <span x-text="qualificationSaving ? 'Saving…' : (qualificationComplete ? 'Update qualification' : 'Complete qualification')"></span>
                           </button>
-                          <p class="crm-action-help mb-0 mt-2">System values are suggestions. Final price, intent and priority remain editable until approval. Price cannot exceed the Category maximum.</p>
+                          <p class="crm-action-help mb-0 mt-2">Lead price is fixed from Category pricing. Qualification answers calculate intent and priority only; final intent and priority remain editable until approval.</p>
                         </div>
                         <div x-show="!qualification.system && !qualificationPreviewing" class="crm-action-help">Answer all six questions to calculate the qualification.</div>
                       </div>
@@ -486,7 +482,7 @@
                   referralForm: { status: '', method: '', reason: '', note: '' },
                   qualification: { questions: [], answers: {}, system: null, final: null, completed: false, locked: false, categoryMaxLeadPricePaise: 10000 },
                   qualificationAnswers: {},
-                  qualificationFinal: { leadPriceRupees: 0, leadIntent: '', priority: '' },
+                  qualificationFinal: { leadIntent: '', priority: '' },
                   requirementForm: {
                     raw: '',
                     status: '',
@@ -695,7 +691,6 @@
                     });
                     const selected = data.final || data.system || {};
                     this.qualificationFinal = {
-                      leadPriceRupees: Number(selected.leadPricePaise || 0) / 100,
                       leadIntent: selected.leadIntent || '',
                       priority: selected.priority || ''
                     };
@@ -722,7 +717,6 @@
                       this.qualification.system = data.system || null;
                       this.qualification.categoryMaxLeadPricePaise = Number(data.system?.categoryMaxLeadPricePaise ?? this.qualification.categoryMaxLeadPricePaise ?? 10000);
                       this.qualificationFinal = {
-                        leadPriceRupees: Number(data.system?.leadPricePaise || 0) / 100,
                         leadIntent: data.system?.leadIntent || '',
                         priority: data.system?.priority || ''
                       };
@@ -746,12 +740,6 @@
                       await this.qualificationAnswerChanged();
                       if (!this.qualification.system) return;
                     }
-                    const priceRupees = Number(this.qualificationFinal.leadPriceRupees);
-                    const maxRupees = Number(this.qualification.categoryMaxLeadPricePaise || 0) / 100;
-                    if (!Number.isInteger(priceRupees) || priceRupees < 0 || priceRupees > maxRupees || priceRupees % 10 !== 0) {
-                      this.notify('Final lead price must be within the Category maximum and use ₹10 increments.', 'error');
-                      return;
-                    }
                     this.qualificationSaving = true;
                     try {
                       const data = (await apiFetch('/api/enquiry/' + this.recordId + '/qualification', {
@@ -759,7 +747,6 @@
                         body: JSON.stringify({
                           answers: this.qualificationAnswers,
                           overrides: {
-                            leadPricePaise: priceRupees * 100,
                             leadIntent: this.qualificationFinal.leadIntent,
                             priority: this.qualificationFinal.priority
                           }

@@ -1,7 +1,7 @@
 const DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE = 10000;
 const MAX_LEAD_PRICE_PAISE = 1_000_000_000;
 const PRICE_ROUNDING_PAISE = 1000;
-const QUALIFICATION_VERSION = 2;
+const QUALIFICATION_VERSION = 3;
 
 const QUESTIONS = Object.freeze([
   Object.freeze({
@@ -266,18 +266,14 @@ function calculateLeadPricePaise(maxLeadPricePaise, roundedPricePercent) {
 
 function calculateQualification(inputAnswers = {}, maxLeadPricePaise = DEFAULT_CATEGORY_MAX_LEAD_PRICE_PAISE) {
   const answers = normalizeAnswers(inputAnswers);
-  const maximum = normalizeCategoryMaxLeadPricePaise(maxLeadPricePaise);
-  const priceScorePercent = calculatePriceScore(answers);
-  const roundedPricePercent = roundScoreToTen(priceScorePercent);
+  const categoryLeadPricePaise = normalizeCategoryMaxLeadPricePaise(maxLeadPricePaise);
   const intentScorePercent = applyIntentGuardrails(answers, weightedScore(answers, INTENT_WEIGHTS));
   const priorityScorePercent = applyPriorityGuardrails(answers, weightedScore(answers, PRIORITY_WEIGHTS));
   return {
     answers: answerDetails(answers),
     system: {
-      priceScorePercent,
-      roundedPricePercent,
-      categoryMaxLeadPricePaise: maximum,
-      leadPricePaise: calculateLeadPricePaise(maximum, roundedPricePercent),
+      categoryMaxLeadPricePaise: categoryLeadPricePaise,
+      leadPricePaise: categoryLeadPricePaise,
       intentScorePercent,
       leadIntent: leadIntentFromScore(intentScorePercent),
       priorityScorePercent,
@@ -287,16 +283,7 @@ function calculateQualification(inputAnswers = {}, maxLeadPricePaise = DEFAULT_C
 }
 
 function normalizeFinalSelection(input = {}, system = {}) {
-  const maxLeadPricePaise = normalizeCategoryMaxLeadPricePaise(system.categoryMaxLeadPricePaise);
-  const priceValue = input.leadPricePaise === undefined || input.leadPricePaise === null || input.leadPricePaise === ""
-    ? Number(system.leadPricePaise)
-    : Number(input.leadPricePaise);
-  if (!Number.isInteger(priceValue) || priceValue < 0 || priceValue > maxLeadPricePaise) {
-    throw qualificationError("Final lead price must be between ₹0 and the Category maximum lead price");
-  }
-  if (priceValue % PRICE_ROUNDING_PAISE !== 0) {
-    throw qualificationError("Final lead price must be set in ₹10 increments");
-  }
+  const categoryLeadPricePaise = normalizeCategoryMaxLeadPricePaise(system.categoryMaxLeadPricePaise);
 
   const leadIntent = String(input.leadIntent || system.leadIntent || "").trim().toLowerCase();
   if (!["low", "medium", "high"].includes(leadIntent)) {
@@ -308,7 +295,7 @@ function normalizeFinalSelection(input = {}, system = {}) {
   }
 
   return {
-    leadPricePaise: priceValue,
+    leadPricePaise: categoryLeadPricePaise,
     leadIntent,
     priority,
   };

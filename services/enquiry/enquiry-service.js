@@ -145,6 +145,16 @@ async function normalizeInput(input = {}, current = {}) {
     && currentMaxProviderUnlocks <= 1000
     ? currentMaxProviderUnlocks
     : await catalogService.getCategoryDefaultProviderUnlocks(categorySlug);
+  const categoryLeadPricePaise = await catalogService.getCategoryLeadPricePaise(categorySlug);
+  const leadPriceLocked = canonicalLeadStatus(current.status) === "approved"
+    || current.marketplaceAvailable === true
+    || String(current.marketplaceStatus || "").toLowerCase() === "published"
+    || Number(current.unlockedCount || 0) > 0
+    || Number(current.reservedUnlockCount || 0) > 0;
+  const currentLeadPricePaise = Number(current.leadPricePaise);
+  const leadPricePaise = leadPriceLocked && Number.isInteger(currentLeadPricePaise) && currentLeadPricePaise >= 0
+    ? currentLeadPricePaise
+    : categoryLeadPricePaise;
 
   const name = humanTextValue(input.name ?? current.name, {
     label: "Customer name",
@@ -218,13 +228,7 @@ async function normalizeInput(input = {}, current = {}) {
       label: "Preferred slot",
       maxLength: 100,
     }),
-    leadPricePaise: numberValue(input.leadPricePaise, {
-      label: "Lead price",
-      fallback: current.leadPricePaise ?? 10000,
-      min: 0,
-      max: 1_000_000_000,
-      integer: true,
-    }),
+    leadPricePaise,
     maxProviderUnlocks: numberValue(input.maxProviderUnlocks, {
       label: "Maximum provider unlocks",
       fallback: maxProviderUnlockFallback,

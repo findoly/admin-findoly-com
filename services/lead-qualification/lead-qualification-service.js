@@ -163,7 +163,7 @@ async function saveQualification(enquiryId, input = {}, actor = "admin") {
     system: calculated.system,
     final,
     overrides: {
-      leadPrice: final.leadPricePaise !== calculated.system.leadPricePaise,
+      leadPrice: false,
       leadIntent: final.leadIntent !== calculated.system.leadIntent,
       priority: final.priority !== calculated.system.priority,
     },
@@ -174,8 +174,6 @@ async function saveQualification(enquiryId, input = {}, actor = "admin") {
     timelineId: uuid(),
     type: requalifying ? "lead_requalified" : "lead_qualification",
     message: requalifying ? "Lead qualification updated" : "Lead qualification completed",
-    priceScorePercent: calculated.system.priceScorePercent,
-    roundedPricePercent: calculated.system.roundedPricePercent,
     categoryMaxLeadPricePaise,
     systemLeadPricePaise: calculated.system.leadPricePaise,
     finalLeadPricePaise: final.leadPricePaise,
@@ -308,16 +306,24 @@ async function assertDirectLeadValueEditAllowed(enquiryId, input = {}) {
   );
   if (!changedFields.length) return;
 
+  if (changedFields.includes("leadPricePaise")) {
+    throw qualificationError(
+      "Lead price is fixed by Category pricing and cannot be changed on a requirement",
+      400,
+      "LEAD_PRICE_CATEGORY_FIXED",
+    );
+  }
+
   if (isProviderControlled(lead)) {
     throw qualificationError(
-      "Lead price, intent and priority are locked after approval or provider access",
+      "Lead intent and priority are locked after approval or provider access",
       409,
       "LEAD_QUALIFICATION_LOCKED",
     );
   }
   if (isQualificationComplete(lead)) {
     throw qualificationError(
-      "Use Lead Qualification to change price, intent or priority so the override is recorded",
+      "Use Lead Qualification to change intent or priority so the override is recorded",
       400,
       "LEAD_QUALIFICATION_OVERRIDE_REQUIRED",
     );

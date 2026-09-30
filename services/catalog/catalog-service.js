@@ -20,6 +20,9 @@ const {
 
 const DEFAULT_ALERT_DISTANCE_KM = 20;
 const DEFAULT_PROVIDER_UNLOCKS = 3;
+const DEFAULT_CATEGORY_LEAD_PRICE_PAISE = 10000;
+const MAX_CATEGORY_LEAD_PRICE_PAISE = 1_000_000_000;
+const CATEGORY_LEAD_PRICE_STEP_PAISE = 1000;
 const CATEGORY_PROVIDER_UNLOCK_CACHE_TTL_MS = 5 * 60 * 1000;
 const categoryProviderUnlockCache = new Map();
 
@@ -399,6 +402,28 @@ async function getCategoryDefaultProviderUnlocks(categorySlug) {
   return value;
 }
 
+async function getCategoryLeadPricePaise(categorySlug) {
+  const slug = tokenValue(categorySlug, {
+    label: "Category",
+    required: true,
+    maxLength: 80,
+    lowercase: true,
+  });
+  const category = await Category.findOne({ slug })
+    .select({ maxLeadPricePaise: 1 })
+    .lean();
+  const value = Number(category?.maxLeadPricePaise);
+  if (
+    Number.isInteger(value)
+    && value >= 0
+    && value <= MAX_CATEGORY_LEAD_PRICE_PAISE
+    && value % CATEGORY_LEAD_PRICE_STEP_PAISE === 0
+  ) {
+    return value;
+  }
+  return DEFAULT_CATEGORY_LEAD_PRICE_PAISE;
+}
+
 async function listServiceTypes(options = {}) {
   const query = {};
   const activeFilter = String(options.active || "").trim().toLowerCase();
@@ -610,6 +635,7 @@ module.exports = {
   resolveLeadServiceTypes,
   getCategoryAlertDistanceKm,
   getCategoryDefaultProviderUnlocks,
+  getCategoryLeadPricePaise,
   slugify,
   normalizeCategoryInput,
   normalizeServiceTypeInput,

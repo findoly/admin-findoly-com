@@ -7,7 +7,7 @@ function source(relativePath) {
   return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 }
 
-test("category model exposes a maximum lead price cap", () => {
+test("category model keeps the configured lead price field", () => {
   const model = source("models/Category.js");
   assert.match(model, /maxLeadPricePaise:\s*\{\s*type:\s*Number,\s*default:\s*10000/);
 });
@@ -25,7 +25,7 @@ test("enquiry controller gates forward journey and protected direct edits", () =
   assert.match(controller, /assertDirectLeadValueEditAllowed\(\s*req\.params\.enquiryId,\s*req\.body/);
 });
 
-test("lead action centre inserts qualification between validation and journey", () => {
+test("lead action centre keeps qualification order and fixed Category pricing message", () => {
   const view = source("views/enquiry/show.ejs");
   const validation = view.indexOf("<h3>Lead validation</h3>");
   const qualification = view.indexOf("<h3>Lead qualification</h3>");
@@ -37,7 +37,10 @@ test("lead action centre inserts qualification between validation and journey", 
   assert.ok(conversion > journey);
   assert.match(view, /qualificationAnswersComplete/);
   assert.match(view, /Complete lead qualification before moving the journey forward/);
-  assert.match(view, /System values are suggestions/);
+  assert.match(view, /Lead price is fixed from Category pricing/);
+  assert.doesNotMatch(view, /Price score/);
+  assert.doesNotMatch(view, /Suggested price/);
+  assert.doesNotMatch(view, /qualificationFinal\.leadPriceRupees/);
 });
 
 test("qualification UI rehydrates saved answers after dynamic options render", () => {
@@ -47,20 +50,53 @@ test("qualification UI rehydrates saved answers after dynamic options render", (
   assert.match(view, /this\.\$nextTick\(\(\) => \{\s*this\.qualificationAnswers = \{ \.\.\.savedAnswers \};\s*\}\);/);
 });
 
-test("qualification service preserves system and final values with audit history", () => {
+test("qualification service persists fixed price and audit history", () => {
   const service = source("services/lead-qualification/lead-qualification-service.js");
   assert.match(service, /leadQualification:\s*snapshot/);
   assert.match(service, /leadQualificationHistory/);
   assert.match(service, /system:\s*calculated\.system/);
   assert.match(service, /final,/);
   assert.match(service, /completedBy/);
+  assert.match(service, /leadPrice:\s*false/);
   assert.match(service, /leadPricePaise:\s*final\.leadPricePaise/);
   assert.match(service, /leadIntent:\s*final\.leadIntent/);
   assert.match(service, /priority:\s*final\.priority/);
+  assert.match(service, /LEAD_PRICE_CATEGORY_FIXED/);
   assert.match(service, /LEAD_QUALIFICATION_LOCKED/);
+  assert.doesNotMatch(service, /priceScorePercent:\s*calculated\.system/);
+  assert.doesNotMatch(service, /roundedPricePercent:\s*calculated\.system/);
 });
 
-test("category UI configures the maximum lead price in ₹10 increments", () => {
+test("normal enquiry form shows Category price as read-only and never submits a manual lead price", () => {
+  const view = source("views/enquiry/form.ejs");
+  assert.match(view, /Fixed from the selected Category pricing and cannot be overridden/);
+  assert.match(view, /category\?\.maxLeadPricePaise/);
+  assert.doesNotMatch(view, /leadPricePaise:\s*Math\.round/);
+});
+
+test("enquiry normalization derives active requirement price from Category pricing", () => {
+  const service = source("services/enquiry/enquiry-service.js");
+  assert.match(service, /getCategoryLeadPricePaise\(categorySlug\)/);
+  assert.match(service, /leadPriceLocked/);
+  assert.match(service, /leadPricePaise,/);
+  assert.doesNotMatch(service, /numberValue\(input\.leadPricePaise/);
+});
+
+test("category service exposes fixed lead price lookup", () => {
+  const service = source("services/catalog/catalog-service.js");
+  assert.match(service, /async function getCategoryLeadPricePaise/);
+  assert.match(service, /select\(\{ maxLeadPricePaise: 1 \}\)/);
+  assert.match(service, /getCategoryLeadPricePaise,/);
+});
+
+test("qualification review no longer presents AI/system price scoring", () => {
+  const view = source("views/enquiry/review.ejs");
+  assert.match(view, /Category lead price/);
+  assert.doesNotMatch(view, /Price score/);
+  assert.doesNotMatch(view, /Suggested price/);
+});
+
+test("category UI keeps the existing configured price in ₹10 increments", () => {
   const view = source("views/category/index.ejs");
   assert.match(view, /Maximum lead price \(₹\)/);
   assert.match(view, /step="10"[^>]*x-model\.number="form\.maxLeadPriceRupees"/);
