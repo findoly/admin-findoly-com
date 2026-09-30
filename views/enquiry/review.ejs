@@ -129,7 +129,7 @@
                       <div>
                         <div class="crm-page-eyebrow">Step 2</div>
                         <h2 class="card-title mb-1">Lead qualification</h2>
-                        <p class="text-muted mb-0">Saved qualification answers and calculated final values.</p>
+                        <p class="text-muted mb-0">Saved qualification answers, fixed Category price and final intent/priority.</p>
                       </div>
                       <span class="crm-status" :class="qualification.completed ? 'status-approved' : 'status-pending'" x-text="qualification.completed ? 'Qualified' : 'Pending'"></span>
                     </div>
@@ -147,14 +147,9 @@
                       </template>
 
                       <div class="alert alert-light border mt-3 mb-3" x-show="qualification.system" x-cloak>
-                        <div class="fw-semibold mb-2">System calculation</div>
+                        <div class="fw-semibold mb-2">Qualification result</div>
                         <div class="small">
-                          Price score <strong x-text="(qualification.system?.priceScorePercent ?? '—') + '%'"></strong>
-                          → rounded to <strong x-text="(qualification.system?.roundedPricePercent ?? '—') + '%'"></strong>
-                          of category maximum <strong x-text="money(qualification.system?.categoryMaxLeadPricePaise)"></strong>.
-                        </div>
-                        <div class="small mt-1">
-                          Suggested price <strong x-text="money(qualification.system?.leadPricePaise)"></strong>
+                          Category lead price <strong x-text="money(qualification.system?.leadPricePaise)"></strong>
                           · Intent <strong x-text="humanize(qualification.system?.leadIntent)"></strong>
                           · Priority <strong x-text="humanize(qualification.system?.priority)"></strong>
                         </div>
