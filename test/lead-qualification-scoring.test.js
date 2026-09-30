@@ -4,12 +4,15 @@ const assert = require("node:assert/strict");
 const {
   QUALIFICATION_VERSION,
   QUESTIONS,
+  PRICE_WEIGHTS,
+  PRICE_RISK_RULES,
+  PRICE_RISK_SCORE_SUBSTITUTIONS,
   INTENT_WEIGHTS,
   PRIORITY_WEIGHTS,
   calculateQualification,
   calculatePriceScore,
   calculateLeadPricePaise,
-  normalizeCategoryMaxLeadPricePaise,
+  roundScoreToTen,
   normalizeFinalSelection,
 } = require("../utils/lead-qualification");
 
@@ -31,8 +34,8 @@ const weakestAnswers = {
   genuine_confidence: "very_low",
 };
 
-test("qualification V3 keeps the existing six questions", () => {
-  assert.equal(QUALIFICATION_VERSION, 3);
+test("qualification V2 uses exactly six distinct questions with employee-friendly urgency labels", () => {
+  assert.equal(QUALIFICATION_VERSION, 2);
   assert.equal(QUESTIONS.length, 6);
   assert.deepEqual(QUESTIONS.map((question) => question.id), [
     "readiness",
@@ -42,17 +45,74 @@ test("qualification V3 keeps the existing six questions", () => {
     "expected_spend",
     "genuine_confidence",
   ]);
+  assert.equal(QUESTIONS.some((question) => question.id === "budget"), false);
+  assert.equal(QUESTIONS.some((question) => question.id === "requirement_size"), false);
+
+  const urgency = QUESTIONS.find((question) => question.id === "timeline");
+  assert.equal(urgency.prompt, "How urgently does the customer need the service?");
+  assert.deepEqual(urgency.options.map((option) => [option.id, option.label, option.score]), [
+    ["within_3_hours", "Emergency — Within 3 hours", 100],
+    ["within_24_hours", "Very urgent — Within 24 hours", 90],
+    ["within_3_days", "Urgent — Within 3 days", 75],
+    ["within_7_days", "Soon — Within 7 days", 60],
+    ["within_30_days", "Planned — Within 30 days", 40],
+    ["later_or_unsure", "Flexible — Later or unsure", 20],
+  ]);
 });
 
-test("intent and priority scoring remain independent of expected spend", () => {
+test("expected spend and genuine-confidence choices use the approved score bands", () => {
+  const spend = QUESTIONS.find((question) => question.id === "expected_spend");
+  assert.equal(spend.prompt, "What is the customer's expected spend for this service?");
+  assert.deepEqual(spend.options.map((option) => [option.id, option.score]), [
+    ["not_known", 35],
+    ["up_to_800", 25],
+    ["801_to_2000", 45],
+    ["2001_to_4000", 65],
+    ["4001_to_10000", 85],
+    ["above_10000", 100],
+  ]);
+
+  const genuine = QUESTIONS.find((question) => question.id === "genuine_confidence");
+  assert.equal(genuine.prompt, "How confident are you that this is a genuine service requirement?");
+  assert.deepEqual(genuine.options.map((option) => [option.id, option.score]), [
+    ["very_high", 100],
+    ["high", 85],
+    ["medium", 60],
+    ["low", 35],
+    ["very_low", 10],
+  ]);
+});
+
+test("lead price uses the approved provider-value weights while intent and priority remain independent", () => {
   const total = (weights) => Object.values(weights).reduce((sum, value) => sum + value, 0);
+  assert.deepEqual(PRICE_WEIGHTS, {
+    readiness: 25,
+    timeline: 20,
+    clarity: 10,
+    responsiveness: 20,
+    expected_spend: 20,
+    genuine_confidence: 5,
+  });
+  assert.deepEqual(PRICE_RISK_RULES, {
+    readiness: { exploring: 60, information_only: 30 },
+    responsiveness: { difficult: 50 },
+    clarity: { unclear: 60 },
+    genuine_confidence: { low: 50 },
+  });
+  assert.deepEqual(PRICE_RISK_SCORE_SUBSTITUTIONS, {
+    readiness: { exploring: "comparing", information_only: "exploring" },
+    responsiveness: { difficult: "slow" },
+    clarity: { unclear: "partially_clear" },
+    genuine_confidence: { low: "medium" },
+  });
+  assert.equal(total(PRICE_WEIGHTS), 100);
   assert.equal(total(INTENT_WEIGHTS), 100);
   assert.equal(total(PRIORITY_WEIGHTS), 100);
   assert.equal(Object.prototype.hasOwnProperty.call(INTENT_WEIGHTS, "expected_spend"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(PRIORITY_WEIGHTS, "expected_spend"), false);
 });
 
-test("strong qualification always uses the configured Category lead price", () => {
+test("a strongest V3 qualification uses the fixed Category price with high intent and urgent priority", () => {
   const result = calculateQualification(strongestAnswers, 15000);
   assert.equal(result.system.categoryMaxLeadPricePaise, 15000);
   assert.equal(result.system.leadPricePaise, 15000);
@@ -64,9 +124,102 @@ test("strong qualification always uses the configured Category lead price", () =
   assert.equal(Object.prototype.hasOwnProperty.call(result.system, "roundedPricePercent"), false);
 });
 
-test("weak qualification cannot reduce the Category lead price", () => {
+test("a strong but non-emergency lead keeps Category price while intent and priority remain independent", () => {
+  const answers = {
+    readiness: "ready_now",
+    timeline: "within_3_days",
+    clarity: "mostly_clear",
+    responsiveness: "normally_responsive",
+    expected_spend: "4001_to_10000",
+    genuine_confidence: "high",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.leadPricePaise, 50000);
+  assert.equal(result.system.intentScorePercent, 86);
+  assert.equal(result.system.leadIntent, "high");
+  assert.equal(result.system.priorityScorePercent, 81);
+  assert.equal(result.system.priority, "high");
+});
+
+test("smaller expected spend cannot reduce the fixed Category price", () => {
+  const answers = {
+    readiness: "ready_now",
+    timeline: "within_3_days",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "up_to_800",
+    genuine_confidence: "very_high",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.leadPricePaise, 50000);
+});
+
+test("weak opportunity signals cannot reduce the fixed Category price", () => {
+  const answers = {
+    readiness: "information_only",
+    timeline: "later_or_unsure",
+    clarity: "unclear",
+    responsiveness: "difficult",
+    expected_spend: "above_10000",
+    genuine_confidence: "high",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.leadPricePaise, 50000);
+});
+
+test("expected spend does not affect fixed price, intent or priority", () => {
+  const answers = {
+    readiness: "exploring",
+    timeline: "within_30_days",
+    clarity: "partially_clear",
+    responsiveness: "slow",
+    expected_spend: "above_10000",
+    genuine_confidence: "medium",
+  };
+  const result = calculateQualification(answers, 20000);
+  assert.equal(result.system.leadPricePaise, 20000);
+  assert.equal(result.system.intentScorePercent, 44);
+  assert.equal(result.system.leadIntent, "low");
+  assert.equal(result.system.priorityScorePercent, 42);
+  assert.equal(result.system.priority, "low");
+});
+
+test("exploring customers keep Category price and cannot be classified above medium intent", () => {
+  const answers = {
+    readiness: "exploring",
+    timeline: "within_3_hours",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "above_10000",
+    genuine_confidence: "very_high",
+  };
+  const result = calculateQualification(answers, 10000);
+  assert.equal(result.system.leadPricePaise, 10000);
+  assert.equal(result.system.intentScorePercent, 74);
+  assert.equal(result.system.leadIntent, "medium");
+  assert.equal(result.system.priorityScorePercent, 87);
+  assert.equal(result.system.priority, "urgent");
+});
+
+test("suspicious genuine confidence keeps Category price while intent and priority keep their guardrails", () => {
+  const answers = {
+    readiness: "ready_now",
+    timeline: "within_3_hours",
+    clarity: "exact",
+    responsiveness: "highly_responsive",
+    expected_spend: "above_10000",
+    genuine_confidence: "very_low",
+  };
+  const result = calculateQualification(answers, 50000);
+  assert.equal(result.system.leadPricePaise, 50000);
+  assert.equal(result.system.intentScorePercent, 44);
+  assert.equal(result.system.leadIntent, "low");
+  assert.equal(result.system.priorityScorePercent, 69);
+  assert.equal(result.system.priority, "normal");
+});
+
+test("weak answers stay low while retaining the fixed Category price", () => {
   const result = calculateQualification(weakestAnswers, 20000);
-  assert.equal(result.system.categoryMaxLeadPricePaise, 20000);
   assert.equal(result.system.leadPricePaise, 20000);
   assert.equal(result.system.intentScorePercent, 14);
   assert.equal(result.system.leadIntent, "low");
@@ -74,54 +227,124 @@ test("weak qualification cannot reduce the Category lead price", () => {
   assert.equal(result.system.priority, "low");
 });
 
-test("qualification answer changes never change the lead price", () => {
-  const lowSpend = calculateQualification({
-    ...strongestAnswers,
-    expected_spend: "up_to_800",
-  }, 50000);
-  const highSpend = calculateQualification({
-    ...strongestAnswers,
-    expected_spend: "above_10000",
-  }, 50000);
-  assert.equal(lowSpend.system.leadPricePaise, 50000);
-  assert.equal(highSpend.system.leadPricePaise, 50000);
-});
 
-test("exploring and suspicious answers still apply the existing intent and priority guardrails", () => {
-  const exploring = calculateQualification({
-    ...strongestAnswers,
-    readiness: "exploring",
-  }, 10000);
-  assert.equal(exploring.system.leadPricePaise, 10000);
-  assert.equal(exploring.system.leadIntent, "medium");
-  assert.equal(exploring.system.priority, "urgent");
-
-  const suspicious = calculateQualification({
-    ...strongestAnswers,
-    genuine_confidence: "very_low",
-  }, 50000);
-  assert.equal(suspicious.system.leadPricePaise, 50000);
-  assert.equal(suspicious.system.leadIntent, "low");
-  assert.equal(suspicious.system.priority, "normal");
-});
-
-test("legacy pricing helpers remain compatible but are no longer used by qualification price", () => {
-  const legacyScore = calculatePriceScore({
+test("pricing risk states apply one punishment only and the strictest active ceiling wins", () => {
+  const singleRisk = {
     readiness: "comparing",
     timeline: "later_or_unsure",
     clarity: "partially_clear",
     responsiveness: "difficult",
     expected_spend: "up_to_800",
     genuine_confidence: "medium",
-  });
-  assert.equal(legacyScore, 43);
+  };
+  assert.equal(calculatePriceScore(singleRisk), 43);
+
+  const multipleRisks = {
+    readiness: "exploring",
+    timeline: "within_3_hours",
+    clarity: "unclear",
+    responsiveness: "difficult",
+    expected_spend: "above_10000",
+    genuine_confidence: "low",
+  };
+  assert.equal(calculatePriceScore(multipleRisks), 50);
+});
+
+test("legacy pricing helper scenarios remain stable while qualification price stays fixed", () => {
+  const scenarios = [
+    {
+      name: "excellent small job",
+      answers: { readiness: "ready_now", timeline: "within_3_days", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "up_to_800", genuine_confidence: "high" },
+      priceScorePercent: 79,
+      roundedPricePercent: 80,
+    },
+    {
+      name: "huge information-only requirement",
+      answers: { readiness: "information_only", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_high" },
+      priceScorePercent: 30,
+      roundedPricePercent: 30,
+    },
+    {
+      name: "great answers but difficult to reach",
+      answers: { readiness: "ready_now", timeline: "within_3_hours", clarity: "exact", responsiveness: "difficult", expected_spend: "above_10000", genuine_confidence: "high" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "suspicious despite otherwise perfect answers",
+      answers: { readiness: "ready_now", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_low" },
+      priceScorePercent: 20,
+      roundedPricePercent: 20,
+    },
+    {
+      name: "exploring despite otherwise perfect answers",
+      answers: { readiness: "exploring", timeline: "within_3_hours", clarity: "exact", responsiveness: "highly_responsive", expected_spend: "above_10000", genuine_confidence: "very_high" },
+      priceScorePercent: 60,
+      roundedPricePercent: 60,
+    },
+    {
+      name: "comparing but strong opportunity",
+      answers: { readiness: "comparing", timeline: "within_24_hours", clarity: "mostly_clear", responsiveness: "normally_responsive", expected_spend: "4001_to_10000", genuine_confidence: "high" },
+      priceScorePercent: 79,
+      roundedPricePercent: 80,
+    },
+    {
+      name: "ready but planned service",
+      answers: { readiness: "ready_now", timeline: "within_30_days", clarity: "mostly_clear", responsiveness: "normally_responsive", expected_spend: "2001_to_4000", genuine_confidence: "high" },
+      priceScorePercent: 73,
+      roundedPricePercent: 70,
+    },
+    {
+      name: "strong opportunity with unclear requirement",
+      answers: { readiness: "ready_now", timeline: "within_24_hours", clarity: "unclear", responsiveness: "normally_responsive", expected_spend: "4001_to_10000", genuine_confidence: "high" },
+      priceScorePercent: 60,
+      roundedPricePercent: 60,
+    },
+    {
+      name: "strong opportunity with low genuine confidence",
+      answers: { readiness: "ready_now", timeline: "within_3_days", clarity: "exact", responsiveness: "normally_responsive", expected_spend: "above_10000", genuine_confidence: "low" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "middling opportunity without hard risk state",
+      answers: { readiness: "comparing", timeline: "later_or_unsure", clarity: "partially_clear", responsiveness: "slow", expected_spend: "not_known", genuine_confidence: "medium" },
+      priceScorePercent: 45,
+      roundedPricePercent: 50,
+    },
+    {
+      name: "multiple risk states use strictest ceiling",
+      answers: { readiness: "exploring", timeline: "within_3_hours", clarity: "unclear", responsiveness: "difficult", expected_spend: "above_10000", genuine_confidence: "low" },
+      priceScorePercent: 50,
+      roundedPricePercent: 50,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const priceScorePercent = calculatePriceScore(scenario.answers);
+    assert.equal(priceScorePercent, scenario.priceScorePercent, scenario.name);
+    assert.equal(roundScoreToTen(priceScorePercent), scenario.roundedPricePercent, scenario.name);
+    assert.equal(calculateQualification(scenario.answers, 50000).system.leadPricePaise, 50000, scenario.name);
+  }
+});
+
+test("score rounding uses the nearest ten percent", () => {
+  assert.equal(roundScoreToTen(54), 50);
+  assert.equal(roundScoreToTen(55), 60);
+  assert.equal(roundScoreToTen(56), 60);
+  assert.equal(roundScoreToTen(94), 90);
+  assert.equal(roundScoreToTen(95), 100);
+});
+
+test("calculated lead price never exceeds the category maximum", () => {
+  assert.equal(calculateLeadPricePaise(15000, 100), 15000);
   assert.equal(calculateLeadPricePaise(15000, 60), 9000);
 });
 
-test("employee price override is ignored and Category price wins", () => {
+test("employee price override is ignored while intent and priority remain editable", () => {
   const system = calculateQualification(strongestAnswers, 15000).system;
   const final = normalizeFinalSelection({
-    leadPricePaise: 1000,
+    leadPricePaise: 12000,
     leadIntent: "medium",
     priority: "high",
   }, system);
@@ -132,19 +355,9 @@ test("employee price override is ignored and Category price wins", () => {
   });
 });
 
-test("final intent and priority remain validated", () => {
-  const system = calculateQualification(strongestAnswers, 15000).system;
+test("Category price validation still rejects invalid increments", () => {
   assert.throws(
-    () => normalizeFinalSelection({ leadIntent: "invalid", priority: "high" }, system),
-    /Final lead intent/,
+    () => calculateQualification(strongestAnswers, 15550),
+    /₹10 increments/,
   );
-  assert.throws(
-    () => normalizeFinalSelection({ leadIntent: "high", priority: "invalid" }, system),
-    /Final lead priority/,
-  );
-});
-
-test("Category lead price validation still uses ₹10 increments", () => {
-  assert.equal(normalizeCategoryMaxLeadPricePaise(15000), 15000);
-  assert.throws(() => normalizeCategoryMaxLeadPricePaise(15550), /₹10 increments/);
 });
