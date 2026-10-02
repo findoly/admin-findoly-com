@@ -74,6 +74,32 @@
                 </template>
               </div>
 
+              <section class="card mt-3">
+                <div class="card-header crm-card-heading">
+                  <div>
+                    <h5 class="mb-1">Managed provider outcomes</h5>
+                    <p class="text-muted mb-0">Provider unlock outcomes from 28 Sep 2026 onward. Provider updates and Findoly admin reviews use the same effective outcome.</p>
+                  </div>
+                  <span class="badge bg-light text-dark" x-text="formatNumber(managedOutcomeTotal) + ' managed unlocks'"></span>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <template x-for="item in managedOutcomeCards" :key="item.label">
+                      <div class="col-12 col-md-4">
+                        <div class="border rounded p-3 h-100">
+                          <div class="text-muted fs-sm" x-text="item.label"></div>
+                          <div class="crm-stat-value mt-1" x-text="formatNumber(item.value)"></div>
+                          <div class="text-muted fs-sm mt-1" x-text="item.note"></div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="text-muted fs-sm mt-3">
+                    No status update means the managed provider unlock has neither Confirmed nor Not Confirmed as its current effective outcome.
+                  </div>
+                </div>
+              </section>
+
               <div class="row g-3 mt-1">
                 <div class="col-lg-7">
                   <section class="card h-100">
@@ -137,7 +163,7 @@
           <script>
             function requirementReport() {
               return {
-                data: { summary: {}, status: {}, trend: [] },
+                data: { summary: {}, status: {}, trend: [], managedProviderOutcomes: {} },
                 loading: false,
                 error: '',
                 filters: { preset: 'today', from: '', to: '' },
@@ -174,6 +200,31 @@
                       value: this.formatMoney(s.estimatedMissedOpportunityRupees)
                     },
                     { label: 'Taken / converted', value: this.formatNumber(s.takenConverted) }
+                  ];
+                },
+
+                get managedOutcomeTotal() {
+                  return Number(this.data.managedProviderOutcomes?.total || 0);
+                },
+
+                get managedOutcomeCards() {
+                  const outcomes = this.data.managedProviderOutcomes || {};
+                  return [
+                    {
+                      label: 'Confirmed',
+                      value: Number(outcomes.confirmed || 0),
+                      note: 'Provider or Findoly admin confirmed the requirement'
+                    },
+                    {
+                      label: 'Not Confirmed',
+                      value: Number(outcomes.notConfirmed || 0),
+                      note: 'Provider or Findoly admin marked the requirement not confirmed'
+                    },
+                    {
+                      label: 'No status update',
+                      value: Number(outcomes.noStatusUpdate || 0),
+                      note: 'No effective provider outcome has been recorded yet'
+                    }
                   ];
                 },
 
@@ -243,7 +294,7 @@
                       query.set('to', this.filters.to || '');
                     }
                     const body = await apiFetch('/api/reports/requirements?' + query.toString());
-                    this.data = body.data || { summary: {}, status: {}, trend: [] };
+                    this.data = body.data || { summary: {}, status: {}, trend: [], managedProviderOutcomes: {} };
                   } catch (error) {
                     this.error = error.message;
                   } finally {
