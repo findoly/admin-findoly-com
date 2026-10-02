@@ -360,7 +360,7 @@ async function assignNearbyProvider(req, res, next) {
       req.params.providerId,
       req.admin || { email: "admin" },
     );
-    res.status(result.duplicate ? 200 : 201).json({
+    res.status(201).json({
       success: true,
       data: result,
     });

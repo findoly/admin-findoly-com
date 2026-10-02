@@ -314,12 +314,14 @@ async function assignRequirement(enquiryIdInput, providerIdInput, actor = {}) {
         providerId: canonicalProviderId,
       }).lean();
       if (existingUnlock) {
-        return {
-          duplicate: true,
-          unlock: existingUnlock,
-          leadUrl: providerPortalLeadUrl(existingUnlock.enquiryId),
-          emailDeliveries: [],
-        };
+        throw Object.assign(
+          new Error("This provider already handled this requirement. Select a different provider."),
+          {
+            status: 409,
+            code: "PROVIDER_ALREADY_ASSIGNED",
+            providerLeadUnlockId: existingUnlock.providerLeadUnlockId || "",
+          },
+        );
       }
     }
     throw error;

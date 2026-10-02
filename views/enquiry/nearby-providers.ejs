@@ -425,7 +425,11 @@
                 || (emailDelivery?.success === false && !emailSkipped);
               this.successMessage = 'Requirement assigned to ' + providerName + '. Credits were deducted successfully.';
 
-              if (emailFailed) {
+              if (!emailDelivery) {
+                this.emailWarning = 'Assignment succeeded, but no provider email delivery result was returned. Check Communication Center and provider email settings.';
+                showCrmToast(this.successMessage, 'success');
+                showCrmToast(this.emailWarning, 'warning');
+              } else if (emailFailed) {
                 this.failedEmailCommunicationId = String(emailDelivery?.communicationId || '');
                 this.emailWarning = 'Assignment succeeded, but the provider email could not be sent after retry.'
                   + (emailDelivery?.error ? ' ' + emailDelivery.error : '')
@@ -438,7 +442,7 @@
                 showCrmToast(this.successMessage, 'success');
                 showCrmToast(this.emailWarning, 'warning');
               } else {
-                this.successMessage += ' Provider email sent successfully.';
+                this.successMessage += ' Provider email submitted for delivery.';
                 showCrmToast(this.successMessage, 'success');
               }
               await this.load();
