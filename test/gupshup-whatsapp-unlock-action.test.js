@@ -629,6 +629,9 @@ test("provider-facing Maps link falls back to full address and then pincode", ()
   assert.match(pincodeMessage, /Address: 400095/);
   assert.match(pincodeMessage, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=400095/);
 
+  const unavailable = actionService.responseMessage({ status: "lead_unavailable" });
+  assert.equal(unavailable, "This enquiry has already been assigned to another provider and is no longer available.");
+
   const failure = actionService.responseMessage({ status: "failed" });
-  assert.match(failure, /could not open this enquiry from WhatsApp/i);
+  assert.equal(failure, "This enquiry has already been assigned to another provider and is no longer available.");
 });

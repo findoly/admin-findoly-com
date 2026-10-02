@@ -244,6 +244,7 @@ test("runtime configuration keeps optional incomplete S3 disabled without crashi
     CRM_GUPSHUP_SOURCE_NUMBER: "917058313770",
     CRM_GUPSHUP_WEBHOOK_TOKEN: "w".repeat(48),
     PROVIDER_PORTAL_BASE_URL: "https://provider.findoly.com",
+    SES_FROM_EMAIL: "no-reply@findoly.com",
   });
   assert.deepEqual(result.errors, []);
   assert.ok(result.warnings.some((message) => message.includes("S3 configuration is incomplete")));
@@ -358,4 +359,42 @@ test("declared Node runtime matches the locked AWS SDK requirement", () => {
   const lock = JSON.parse(source("package-lock.json"));
   assert.equal(pkg.engines.node, ">=20");
   assert.equal(lock.packages[""].engines.node, ">=20");
+});
+
+
+test("production local email delivery requires an SES sender but Lambda delivery does not", () => {
+  const { validateRuntimeConfig } = require("../utils/runtime-config");
+  const base = {
+    NODE_ENV: "production",
+    MONGODB_URI: "mongodb://localhost/findoly",
+    AUTH_COOKIE_SECRET: "x".repeat(40),
+    CORS_ORIGINS: "https://admin.findoly.com",
+    CRM_ADMIN_ORIGIN: "https://admin.findoly.com",
+    PUBLIC_INTAKE_API_TOKEN: "p".repeat(48),
+    COMMUNICATION_EVENT_API_TOKEN: "e".repeat(48),
+    CRM_PROVIDER_ACTION_API_URL: "https://provider.findoly.com/api/internal/whatsapp/lead-unlock",
+    CRM_PROVIDER_ACTION_API_TOKEN: "a".repeat(48),
+    CRM_WHATSAPP_ACTION_SIGNING_SECRET: "s".repeat(48),
+    CRM_GUPSHUP_API_KEY: "g".repeat(48),
+    CRM_GUPSHUP_APP_ID: "app-12345678",
+    CRM_GUPSHUP_APP_NAME: "FindolyWhatsapp",
+    CRM_GUPSHUP_SOURCE_NUMBER: "917058313770",
+    CRM_GUPSHUP_WEBHOOK_TOKEN: "w".repeat(48),
+    PROVIDER_PORTAL_BASE_URL: "https://provider.findoly.com",
+  };
+
+  const local = validateRuntimeConfig(base);
+  assert.ok(local.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)));
+
+  const lambda = validateRuntimeConfig({
+    ...base,
+    MESSAGE_DELIVERY_MODE: "lambda",
+  });
+  assert.equal(lambda.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
+
+  const configured = validateRuntimeConfig({
+    ...base,
+    SES_FROM_EMAIL: "no-reply@findoly.com",
+  });
+  assert.equal(configured.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
 });

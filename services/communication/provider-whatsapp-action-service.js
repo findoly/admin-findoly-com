@@ -313,26 +313,9 @@ function failureMessage(result = {}) {
     return "Your provider account is not currently eligible to view this enquiry. Please contact Findoly support.";
   }
   if (status === "lead_unavailable") {
-    const context = result.messageContext || {};
-    if (context.providerSaleConversionStatus === "converted" || Number(context.providerConfirmedCount || 0) > 0) {
-      return "This enquiry has already been confirmed with a provider and is no longer available.";
-    }
-    const closureReason = textFrom(context.marketplaceClosureReason);
-    const expiredAt = context.marketplaceExpiresAt ? new Date(context.marketplaceExpiresAt) : null;
-    if (closureReason === "expired"
-      || context.marketplaceStatus === "expired"
-      || (expiredAt && !Number.isNaN(expiredAt.getTime()) && expiredAt <= new Date())) {
-      return "This enquiry is no longer active. Please check the latest available enquiries.";
-    }
-    if (closureReason === "unlock_limit" || (!closureReason && Number(context.remainingUnlocks) === 0)) {
-      return [
-        "This enquiry has received enough provider interest and is now closed.",
-        "To maintain lead quality and customer experience, we limit how many providers can access each enquiry. It may already be progressing with one of the connected providers.",
-      ].join("\n");
-    }
-    return "This enquiry is no longer available. Please check the latest available enquiries.";
+    return "This enquiry has already been assigned to another provider and is no longer available.";
   }
-  return "We could not open this enquiry from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
+  return "This enquiry has already been assigned to another provider and is no longer available.";
 }
 
 function responseMessage(result) {

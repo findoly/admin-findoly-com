@@ -24,6 +24,22 @@ const fromAddress = function () {
   return name ? `${name.replace(/[<>\r\n"]/g, "")} <${email}>` : email;
 };
 
+function configurationSetRejected(error) {
+  const message = String(error?.message || "");
+  const code = String(error?.name || error?.code || "");
+  if (!/configuration\s*set/i.test(message)) return false;
+  return [
+    "BadRequestException",
+    "NotFoundException",
+    "ValidationException",
+    "MessageRejected",
+  ].includes(code) || /does not exist|not found|invalid/i.test(message);
+}
+
+async function sendSes(input) {
+  return getClient().send(new SendEmailCommand(input));
+}
+
 const sendEmail = async function (payload) {
   const to = emailValue(payload.to, { label: "Recipient email", required: true });
   const subject = textValue(payload.subject, {
@@ -66,13 +82,30 @@ const sendEmail = async function (payload) {
     input.ReplyToAddresses = [emailValue(process.env.SES_REPLY_TO_EMAIL, { label: "SES reply-to email" })];
   }
 
-  const result = await getClient().send(new SendEmailCommand(input));
+  let result;
+  let configurationSetFallback = false;
+  try {
+    result = await sendSes(input);
+  } catch (error) {
+    if (!input.ConfigurationSetName || !configurationSetRejected(error)) throw error;
+    const rejectedConfigurationSet = input.ConfigurationSetName;
+    const fallbackInput = { ...input };
+    delete fallbackInput.ConfigurationSetName;
+    configurationSetFallback = true;
+    console.warn({
+      event: "ses_configuration_set_fallback",
+      configurationSet: rejectedConfigurationSet,
+      code: String(error?.name || error?.code || "SES_CONFIGURATION_SET_REJECTED"),
+    });
+    result = await sendSes(fallbackInput);
+  }
   return {
     provider: "ses",
     providerMessageId: result.MessageId || "",
     status: "sent",
     response: result,
+    configurationSetFallback,
   };
 };
 
-module.exports = { sendEmail };
+module.exports = { sendEmail, configurationSetRejected };

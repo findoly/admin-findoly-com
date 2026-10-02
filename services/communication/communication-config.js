@@ -30,6 +30,8 @@ const retentionDays = function (value, fallback) {
 
 const configurationStatus = function () {
   const mode = deliveryMode();
+  const fromEmailConfigured = Boolean(String(process.env.SES_FROM_EMAIL || "").trim());
+  const localSesRequired = mode === "local";
   return {
     deliveryMode: mode,
     whatsapp: {
@@ -49,9 +51,13 @@ const configurationStatus = function () {
           || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
           || process.env.AWS_WEB_IDENTITY_TOKEN_FILE,
       ),
-      fromEmail: Boolean(process.env.SES_FROM_EMAIL),
+      fromEmail: fromEmailConfigured,
       fromName: process.env.SES_FROM_NAME || process.env.APP_NAME || "Findoly",
       configurationSet: process.env.SES_CONFIGURATION_SET || "",
+      ready: !localSesRequired || fromEmailConfigured,
+      issues: localSesRequired && !fromEmailConfigured
+        ? ["SES_FROM_EMAIL is required for local email delivery"]
+        : [],
     },
     systemRouting: {
       internalAlertEmail: process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com",
