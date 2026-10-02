@@ -22,6 +22,7 @@ const INTERNAL_ALERT_EVENTS = Object.freeze([
   "agent_created",
   "provider_join_request_submitted",
   "provider_created",
+  "provider_credit_reverted",
 ]);
 const EVENTS = Object.freeze([
   "lead_created",
@@ -47,6 +48,7 @@ const EVENTS = Object.freeze([
   "employee_created",
   "partner_lead_submitted",
   "provider_join_request_submitted",
+  "provider_credit_reverted",
 ]);
 
 const COMMON_VARIABLES = Object.freeze([
@@ -90,6 +92,12 @@ const EVENT_VARIABLES = Object.freeze({
   provider_join_request_submitted: Object.freeze([
     "provider_join_request_id", "provider_name", "business_name", "category",
     "service_location", "city", "state", "registration_date", ...COMMON_VARIABLES,
+  ]),
+  provider_credit_reverted: Object.freeze([
+    "provider_name", "provider_id", "provider_lead_unlock_id", "lead_id",
+    "requirement_title", "category", "location", "credits_reverted",
+    "balance_before", "balance_after", "refund_transaction_id", "refund_reason",
+    "reviewed_by", "event_time", ...COMMON_VARIABLES,
   ]),
   default: COMMON_VARIABLES,
 });
