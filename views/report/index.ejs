@@ -191,8 +191,10 @@
                     { label: 'Total provider unlocks', value: this.formatNumber(s.totalProviderUnlocks) },
                     {
                       label: 'Unlock value',
-                      value: this.formatMoney(s.unlockValueRupees),
-                      note: this.formatNumber(s.unlockCredits) + ' credits consumed'
+                      value: this.formatMoney(s.netUnlockValueRupees),
+                      note: this.formatNumber(s.netUnlockCredits) + ' net credits · '
+                        + this.formatNumber(s.grossUnlockCredits) + ' charged · '
+                        + this.formatNumber(s.refundedUnlockCredits) + ' refunded'
                     },
                     { label: 'Approved but not unlocked', value: this.formatNumber(s.notUnlocked) },
                     {

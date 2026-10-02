@@ -123,6 +123,12 @@ function summaryDefaults() {
     managedProviderNotConfirmed: 0,
     managedProviderNoStatusUpdate: 0,
     unlockCredits: 0,
+    grossUnlockCredits: 0,
+    refundedUnlockCredits: 0,
+    netUnlockCredits: 0,
+    grossUnlockValueRupees: 0,
+    refundedUnlockValueRupees: 0,
+    netUnlockValueRupees: 0,
     directPaymentRupees: 0,
     notUnlocked: 0,
     estimatedMissedOpportunityRupees: 0,
@@ -162,6 +168,21 @@ async function getRequirementReport(filters = {}, now = new Date()) {
               _id: null,
               count: { $sum: 1 },
               credits: { $sum: { $ifNull: ["$chargedCredits", 0] } },
+              refundedCredits: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$creditRefundStatus", "refunded"] },
+                    {
+                      $cond: [
+                        { $gt: [{ $ifNull: ["$creditRefundedCredits", 0] }, 0] },
+                        { $ifNull: ["$creditRefundedCredits", 0] },
+                        { $ifNull: ["$chargedCredits", 0] },
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
               directPaymentPaise: {
                 $sum: {
                   $cond: [
@@ -232,6 +253,7 @@ async function getRequirementReport(filters = {}, now = new Date()) {
             {
               count: 0,
               credits: 0,
+              refundedCredits: 0,
               directPaymentPaise: 0,
               managedProviderUnlocks: 0,
               managedProviderConfirmed: 0,
@@ -246,6 +268,7 @@ async function getRequirementReport(filters = {}, now = new Date()) {
       $set: {
         unlockCount: { $ifNull: ["$unlockStats.count", 0] },
         unlockCredits: { $ifNull: ["$unlockStats.credits", 0] },
+        refundedUnlockCredits: { $ifNull: ["$unlockStats.refundedCredits", 0] },
         directPaymentPaise: { $ifNull: ["$unlockStats.directPaymentPaise", 0] },
         managedProviderUnlocks: { $ifNull: ["$unlockStats.managedProviderUnlocks", 0] },
         managedProviderConfirmed: { $ifNull: ["$unlockStats.managedProviderConfirmed", 0] },
@@ -271,6 +294,7 @@ async function getRequirementReport(filters = {}, now = new Date()) {
               managedProviderNotConfirmed: { $sum: "$managedProviderNotConfirmed" },
               managedProviderNoStatusUpdate: { $sum: "$managedProviderNoStatusUpdate" },
               unlockCredits: { $sum: "$unlockCredits" },
+              refundedUnlockCredits: { $sum: "$refundedUnlockCredits" },
               directPaymentPaise: { $sum: "$directPaymentPaise" },
               notUnlocked: {
                 $sum: {
@@ -346,11 +370,21 @@ async function getRequirementReport(filters = {}, now = new Date()) {
 
   const aggregate = rows[0] || {};
   const rawSummary = aggregate.summary?.[0] || summaryDefaults();
+  const grossUnlockCredits = money(rawSummary.unlockCredits);
+  const refundedUnlockCredits = money(rawSummary.refundedUnlockCredits);
+  const netUnlockCredits = money(Math.max(0, grossUnlockCredits - refundedUnlockCredits));
   const summary = {
     ...summaryDefaults(),
     ...rawSummary,
-    unlockCredits: money(rawSummary.unlockCredits),
-    unlockValueRupees: money(rawSummary.unlockCredits),
+    // Backward compatibility: existing fields remain gross charged values.
+    unlockCredits: grossUnlockCredits,
+    unlockValueRupees: grossUnlockCredits,
+    grossUnlockCredits,
+    refundedUnlockCredits,
+    netUnlockCredits,
+    grossUnlockValueRupees: grossUnlockCredits,
+    refundedUnlockValueRupees: refundedUnlockCredits,
+    netUnlockValueRupees: netUnlockCredits,
     directPaymentRupees: money(Number(rawSummary.directPaymentPaise || 0) / 100),
     estimatedMissedOpportunityRupees: money(rawSummary.estimatedMissedOpportunityRupees),
   };

@@ -62,12 +62,13 @@ test("trend fills days with zero requirements", () => {
   assert.deepEqual(trend.map((row) => row.date), ["2026-08-26", "2026-08-27", "2026-08-28"]);
 });
 
-test("report aggregation excludes Testing category and uses credits for unlock value", () => {
+test("report aggregation excludes Testing category and preserves gross unlock value compatibility", () => {
   const service = source("services/report/requirement-report-service.js");
   assert.match(service, /categorySlug:\s*\/\^testing\$\/i/);
   assert.match(service, /category:\s*\/\^testing\$\/i/);
   assert.match(service, /chargedCredits/);
-  assert.match(service, /unlockValueRupees:\s*money\(rawSummary\.unlockCredits\)/);
+  assert.match(service, /unlockCredits:\s*grossUnlockCredits/);
+  assert.match(service, /unlockValueRupees:\s*grossUnlockCredits/);
   assert.match(service, /estimatedMissedOpportunityRupees/);
   assert.match(service, /"closed", "expired"/);
 });
@@ -149,4 +150,35 @@ test("Reports UI shows the three managed provider outcome states", () => {
   assert.match(view, /No status update/);
   assert.match(view, /28 Sep 2026/);
   assert.match(view, /managedProviderOutcomes/);
+});
+
+
+test("requirement report subtracts only completed credit refunds from net unlock credits", () => {
+  const service = source("services/report/requirement-report-service.js");
+
+  assert.match(service, /creditRefundStatus", "refunded"/);
+  assert.match(service, /creditRefundedCredits/);
+  assert.match(service, /refundedUnlockCredits/);
+  assert.match(service, /Math\.max\(0, grossUnlockCredits - refundedUnlockCredits\)/);
+  assert.match(service, /netUnlockValueRupees: netUnlockCredits/);
+});
+
+test("requirement report falls back to charged credits for historical refunded rows", () => {
+  const service = source("services/report/requirement-report-service.js");
+
+  assert.match(service, /\$gt: \[\{ \$ifNull: \["\$creditRefundedCredits", 0\] \}, 0\]/);
+  assert.match(service, /\$ifNull: \["\$creditRefundedCredits", 0\]/);
+  assert.match(service, /\$ifNull: \["\$chargedCredits", 0\]/);
+});
+
+test("Reports UI uses net unlock value and explains gross and refunded credits", () => {
+  const view = source("views/report/index.ejs");
+
+  assert.match(view, /formatMoney\(s\.netUnlockValueRupees\)/);
+  assert.match(view, /s\.netUnlockCredits/);
+  assert.match(view, /s\.grossUnlockCredits/);
+  assert.match(view, /s\.refundedUnlockCredits/);
+  assert.match(view, /net credits/);
+  assert.match(view, /charged/);
+  assert.match(view, /refunded/);
 });
