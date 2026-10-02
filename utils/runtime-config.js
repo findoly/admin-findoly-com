@@ -187,6 +187,15 @@ function validateRuntimeConfig(env = process.env) {
   }
 
   if (production) {
+    const localEmailDelivery = String(env.MESSAGE_DELIVERY_MODE || "local").trim().toLowerCase() !== "lambda";
+    const providerEmailEnabled = env.PROVIDER_EVENT_EMAIL_ENABLED === undefined
+      || ["1", "true", "yes", "on"].includes(String(env.PROVIDER_EVENT_EMAIL_ENABLED || "").trim().toLowerCase());
+    const internalEmailEnabled = env.INTERNAL_ALERT_EMAIL_ENABLED === undefined
+      || ["1", "true", "yes", "on"].includes(String(env.INTERNAL_ALERT_EMAIL_ENABLED || "").trim().toLowerCase());
+    if (localEmailDelivery && (providerEmailEnabled || internalEmailEnabled) && !present(env.SES_FROM_EMAIL)) {
+      errors.push("SES_FROM_EMAIL is required when local email delivery is enabled in production");
+    }
+
     if (!validHttpUrl(env.CRM_PROVIDER_ACTION_API_URL, { httpsOnly: true })) {
       errors.push("CRM_PROVIDER_ACTION_API_URL must be a valid HTTPS URL");
     }
