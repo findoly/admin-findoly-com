@@ -26,6 +26,18 @@
             <main x-data="nearbyProviderList()" :class="loading && 'crm-loading'">
               <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
               <div x-show="successMessage" x-cloak class="alert alert-success" x-text="successMessage"></div>
+              <div x-show="emailWarning" x-cloak class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span x-text="emailWarning"></span>
+                <button
+                  x-show="failedEmailCommunicationId && can('communications.send')"
+                  x-cloak
+                  type="button"
+                  class="btn btn-sm btn-outline-dark"
+                  :disabled="retryingAssignmentEmail"
+                  @click="retryAssignmentEmail()"
+                  x-text="retryingAssignmentEmail ? 'Retrying email…' : 'Retry email'"
+                ></button>
+              </div>
 
               <div x-show="reason === 'lead_coordinates_missing'" x-cloak class="alert alert-warning">
                 This requirement does not have saved coordinates yet, so nearby-provider distance cannot be calculated.
@@ -258,6 +270,9 @@
           selectedProviderIds: [],
           error: '',
           successMessage: '',
+          emailWarning: '',
+          failedEmailCommunicationId: '',
+          retryingAssignmentEmail: false,
           reason: '',
           get canSendAlerts() {
             return this.lead.providerAlertStatus?.canSend === true;
@@ -393,6 +408,8 @@
             this.assigningProviderId = providerId;
             this.error = '';
             this.successMessage = '';
+            this.emailWarning = '';
+            this.failedEmailCommunicationId = '';
             try {
               const body = await apiFetch(
                 '/api/enquiry/' + encodeURIComponent(this.leadId)
@@ -400,18 +417,56 @@
                 { method: 'POST', body: '{}' },
               );
               const result = body.data || {};
-              const emailFailed = Array.isArray(result.emailDeliveries)
-                && result.emailDeliveries.some((delivery) => delivery.channel === 'email' && delivery.success === false);
-              this.successMessage = emailFailed
-                ? 'Requirement assigned to ' + providerName + ' and credits deducted. Email delivery needs attention.'
-                : 'Requirement assigned to ' + providerName + '. Credits were deducted and the provider was notified by email.';
-              showCrmToast(this.successMessage, emailFailed ? 'warning' : 'success');
+              const emailDelivery = Array.isArray(result.emailDeliveries)
+                ? result.emailDeliveries.find((delivery) => delivery.channel === 'email')
+                : null;
+              const emailSkipped = emailDelivery?.deliveryState === 'skipped' || emailDelivery?.skipped === true;
+              const emailFailed = emailDelivery?.deliveryState === 'failed'
+                || (emailDelivery?.success === false && !emailSkipped);
+              this.successMessage = 'Requirement assigned to ' + providerName + '. Credits were deducted successfully.';
+
+              if (emailFailed) {
+                this.failedEmailCommunicationId = String(emailDelivery?.communicationId || '');
+                this.emailWarning = 'Assignment succeeded, but the provider email could not be sent after retry.'
+                  + (emailDelivery?.error ? ' ' + emailDelivery.error : '')
+                  + (this.failedEmailCommunicationId ? ' You can retry only the email.' : ' Check Communication Center for delivery details.');
+                showCrmToast(this.successMessage, 'success');
+                showCrmToast(this.emailWarning, 'warning');
+              } else if (emailSkipped) {
+                this.emailWarning = 'Assignment succeeded. Provider email was not sent: '
+                  + String(emailDelivery?.reason || 'email notification is unavailable') + '.';
+                showCrmToast(this.successMessage, 'success');
+                showCrmToast(this.emailWarning, 'warning');
+              } else {
+                this.successMessage += ' Provider email sent successfully.';
+                showCrmToast(this.successMessage, 'success');
+              }
               await this.load();
             } catch (error) {
               this.error = error.message;
               showCrmToast(error.message, 'error');
             } finally {
               this.assigningProviderId = '';
+            }
+          },
+          async retryAssignmentEmail() {
+            const communicationId = String(this.failedEmailCommunicationId || '').trim();
+            if (!communicationId || this.retryingAssignmentEmail) return;
+            this.retryingAssignmentEmail = true;
+            try {
+              await apiFetch(
+                '/api/communication/' + encodeURIComponent(communicationId) + '/retry',
+                { method: 'POST', body: '{}' },
+              );
+              this.failedEmailCommunicationId = '';
+              this.emailWarning = '';
+              this.successMessage = 'Provider assignment email sent successfully on retry.';
+              showCrmToast(this.successMessage, 'success');
+            } catch (error) {
+              this.emailWarning = 'Provider remains assigned, but the email retry failed. ' + error.message;
+              showCrmToast(this.emailWarning, 'warning');
+            } finally {
+              this.retryingAssignmentEmail = false;
             }
           },
           async copyDirectLink(provider) {

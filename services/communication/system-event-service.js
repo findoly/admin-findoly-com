@@ -414,36 +414,87 @@ async function sendProviderEmail(event, context, variables, actor) {
   const template = await ensureProviderEmailTemplate(event);
   const reference = context.providerLeadUnlockId || context.enquiryId || context.providerId || "provider";
   const eventIdentity = context.integrationEventId || context.idempotencySuffix || context.eventAt;
-  return communicationService.send(
-    {
-      channel: "email",
-      templateId: template.templateId,
-      recipientName: variables.provider_name,
-      recipientContact: providerEmail,
-      purpose: event === "provider_lead_assigned"
-        ? "provider_manual_assignment"
-        : event === "provider_lead_unlocked"
-          ? "provider_lead_access_confirmation"
-          : "provider_status_update_confirmation",
-      trigger: event,
-      automatic: true,
-      enquiryId: context.enquiryId || "",
-      providerId: context.providerId || "",
-      variables,
-      idempotencyKey: `system-event:email:${token(event)}:${token(reference)}:${token(eventIdentity)}`,
-      metadata: { event, providerLeadUnlockId: context.providerLeadUnlockId || "", source: context.source || "provider-portal" },
-    },
-    actor || "system-event",
-  );
+  const payload = {
+    channel: "email",
+    templateId: template.templateId,
+    recipientName: variables.provider_name,
+    recipientContact: providerEmail,
+    purpose: event === "provider_lead_assigned"
+      ? "provider_manual_assignment"
+      : event === "provider_lead_unlocked"
+        ? "provider_lead_access_confirmation"
+        : "provider_status_update_confirmation",
+    trigger: event,
+    automatic: true,
+    enquiryId: context.enquiryId || "",
+    providerId: context.providerId || "",
+    variables,
+    idempotencyKey: `system-event:email:${token(event)}:${token(reference)}:${token(eventIdentity)}`,
+    metadata: { event, providerLeadUnlockId: context.providerLeadUnlockId || "", source: context.source || "provider-portal" },
+  };
+  const terminalFailureStatuses = new Set(["failed", "bounced", "complained", "rejected"]);
+  const shouldRetryAssignmentEmail = event === "provider_lead_assigned";
+  let communication;
+  let retried = false;
+
+  try {
+    communication = await communicationService.send(payload, actor || "system-event");
+  } catch (error) {
+    if (!shouldRetryAssignmentEmail || !error?.communicationId) throw error;
+    retried = true;
+    communication = await communicationService.retry(
+      error.communicationId,
+      actor || "system-event",
+      { markOriginalRecovered: true },
+    );
+  }
+
+  if (
+    shouldRetryAssignmentEmail
+    && !retried
+    && terminalFailureStatuses.has(String(communication?.status || "").toLowerCase())
+    && communication?.communicationId
+  ) {
+    retried = true;
+    communication = await communicationService.retry(
+      communication.communicationId,
+      actor || "system-event",
+      { markOriginalRecovered: true },
+    );
+  }
+
+  if (terminalFailureStatuses.has(String(communication?.status || "").toLowerCase())) {
+    throw Object.assign(
+      new Error(communication?.failureReason || "Provider email delivery failed"),
+      {
+        code: "PROVIDER_EMAIL_DELIVERY_FAILED",
+        status: 503,
+        communicationId: communication?.communicationId || "",
+      },
+    );
+  }
+
+  return communication;
 }
 
 async function settle(channel, task) {
   try {
     const data = await task();
-    return { channel, success: !data?.skipped, ...data };
+    return {
+      channel,
+      success: !data?.skipped,
+      deliveryState: data?.skipped ? "skipped" : "sent",
+      ...data,
+    };
   } catch (error) {
     console.error(`System ${channel} event delivery failed:`, error.message);
-    return { channel, success: false, error: String(error.message || `${channel} delivery failed`).slice(0, 1000) };
+    return {
+      channel,
+      success: false,
+      deliveryState: "failed",
+      communicationId: String(error?.communicationId || ""),
+      error: String(error.message || `${channel} delivery failed`).slice(0, 1000),
+    };
   }
 }
 
@@ -456,8 +507,8 @@ async function dispatch(eventInput, contextInput = {}, actor = "system-event") {
   } catch (error) {
     console.error("System event context hydration failed:", error.message);
     const results = [];
-    if (INTERNAL_EMAIL_EVENTS.has(event)) results.push({ channel: "email", success: false, error: String(error.message).slice(0, 1000) });
-    if (PROVIDER_EMAIL_EVENTS.has(event)) results.push({ channel: "email", success: false, error: String(error.message).slice(0, 1000) });
+    if (INTERNAL_EMAIL_EVENTS.has(event)) results.push({ channel: "email", success: false, deliveryState: "failed", error: String(error.message).slice(0, 1000) });
+    if (PROVIDER_EMAIL_EVENTS.has(event)) results.push({ channel: "email", success: false, deliveryState: "failed", error: String(error.message).slice(0, 1000) });
     return results;
   }
 
@@ -492,5 +543,6 @@ module.exports = {
   hydrateContext,
   variablesFor,
   sendInternalEmail,
+  sendProviderEmail,
   testInternalAlert,
 };

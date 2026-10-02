@@ -348,6 +348,8 @@ async function assignRequirement(enquiryIdInput, providerIdInput, actor = {}) {
     emailDeliveries = [{
       channel: "email",
       success: false,
+      deliveryState: "failed",
+      communicationId: String(error?.communicationId || ""),
       error: String(error.message || "Provider assignment email failed").slice(0, 1000),
     }];
   }

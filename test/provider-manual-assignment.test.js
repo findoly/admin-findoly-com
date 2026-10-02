@@ -165,3 +165,39 @@ test("customer map marker is white and provider marker styling remains default",
   assert.match(map, /makePin\('P', 1\)/);
   assert.match(map, /km manual-assignment radius/);
 });
+
+
+test("assignment email failure never rolls back or repeats the committed provider assignment", () => {
+  const assignment = source("services/provider-unlock/provider-manual-assignment-service.js");
+  const communication = source("services/communication/communication-service.js");
+  const systemEvents = source("services/communication/system-event-service.js");
+
+  const transactionEnd = assignment.indexOf('operationLabel: "CRM manual provider assignment"');
+  const emailDispatch = assignment.indexOf('systemEventService.dispatch(');
+  assert.ok(transactionEnd >= 0 && emailDispatch > transactionEnd, "email dispatch must remain after assignment transaction");
+  assert.match(communication, /error\.communicationId = communication\.communicationId/);
+  assert.match(systemEvents, /shouldRetryAssignmentEmail = event === "provider_lead_assigned"/);
+  assert.match(systemEvents, /communicationService\.retry\(/);
+  assert.match(systemEvents, /PROVIDER_EMAIL_DELIVERY_FAILED/);
+});
+
+test("Nearby Providers UI distinguishes sent, skipped and failed assignment emails", () => {
+  const view = source("views/enquiry/nearby-providers.ejs");
+
+  assert.match(view, /deliveryState === 'skipped'/);
+  assert.match(view, /deliveryState === 'failed'/);
+  assert.match(view, /Assignment succeeded, but the provider email could not be sent after retry/);
+  assert.match(view, /Assignment succeeded\. Provider email was not sent:/);
+  assert.match(view, /Provider email sent successfully/);
+  assert.match(view, /Retry email/);
+});
+
+test("assignment email retry calls Communication Center only and cannot repeat assignment debit", () => {
+  const view = source("views/enquiry/nearby-providers.ejs");
+  const retryMethod = view.match(/async retryAssignmentEmail\(\)[\s\S]*?async copyDirectLink/)?.[0] || "";
+
+  assert.match(retryMethod, /\/api\/communication\//);
+  assert.match(retryMethod, /\/retry/);
+  assert.doesNotMatch(retryMethod, /nearby-providers.*assign/);
+  assert.match(view, /can\('communications\.send'\)/);
+});

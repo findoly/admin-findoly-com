@@ -493,6 +493,10 @@ const send = async function (input, actor) {
       const failedCommunication = await get(communication.communicationId).catch(() => null);
       await recordWhatsappInboxSafely(failedCommunication);
     }
+    // Preserve the persisted failed delivery identity so callers can retry the
+    // notification without repeating the business action that triggered it.
+    if (!error.communicationId) error.communicationId = communication.communicationId;
+    error.deliveryStatus = "failed";
     throw error;
   }
   const completedCommunication = await get(communication.communicationId);
