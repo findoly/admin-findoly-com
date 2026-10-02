@@ -23,7 +23,7 @@ test("active Slack integration is removed while historical Slack records remain 
 test("internal alert templates and rules cover all approved operational events", () => {
   const defaults = read("services/communication/default-template-service.js");
   const system = read("services/communication/system-event-service.js");
-  for (const event of ["lead_created", "partner_lead_submitted", "agent_created", "provider_join_request_submitted", "provider_created"]) {
+  for (const event of ["lead_created", "partner_lead_submitted", "agent_created", "provider_join_request_submitted", "provider_created", "provider_credit_reverted"]) {
     assert.match(defaults, new RegExp(event));
     assert.match(system, new RegExp(event));
   }
@@ -51,4 +51,15 @@ test("new manual communication records are restricted to WhatsApp and email", ()
   assert.match(service, /enumValue\(requestedChannel, ACTIVE_COMMUNICATION_CHANNELS/);
   assert.doesNotMatch(form, /<option>call<\/option>/);
   assert.doesNotMatch(form, /<option>sms<\/option>/);
+});
+
+
+test("credit revert internal alert is manageable in Communication Center", () => {
+  const rules = read("services/communication/rule-service.js");
+  const view = read("views/communication/internal-alerts.ejs");
+
+  assert.match(rules, /INTERNAL_ALERT_EVENTS[\s\S]*provider_credit_reverted/);
+  assert.match(rules, /provider_credit_reverted: Object\.freeze/);
+  assert.match(view, /provider_credit_reverted/);
+  assert.match(view, /Provider credits reverted/);
 });
