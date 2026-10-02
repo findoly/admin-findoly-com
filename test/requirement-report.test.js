@@ -125,6 +125,7 @@ test("managed provider report outcomes use the 28 September cutover and canonica
   assert.match(service, /managedProviderNotConfirmed/);
   assert.match(service, /managedProviderNoStatusUpdate/);
   assert.match(service, /\$ifNull: \["\$providerSaleOutcome", ""\]/);
+  assert.match(service, /\$not: \[\{ \$in: \[/);
   assert.match(service, /noStatusUpdate: summary\.managedProviderNoStatusUpdate/);
 });
 
