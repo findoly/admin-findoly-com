@@ -151,6 +151,9 @@ async function getRequirementReport(filters = {}, now = new Date()) {
         enquiryId: 1,
         status: 1,
         marketplaceStatus: 1,
+        marketplaceClosureReason: 1,
+        marketplaceExpiresAt: 1,
+        isActive: 1,
         remainingUnlocks: 1,
         leadPricePaise: 1,
         providerSaleConversionStatus: 1,
@@ -311,8 +314,18 @@ async function getRequirementReport(filters = {}, now = new Date()) {
                     {
                       $and: [
                         { $eq: ["$status", "approved"] },
-                        { $in: ["$marketplaceStatus", ["closed", "expired"]] },
+                        { $ne: ["$isActive", false] },
                         { $gt: [{ $ifNull: ["$remainingUnlocks", 0] }, 0] },
+                        { $ne: [{ $ifNull: ["$marketplaceExpiresAt", null] }, null] },
+                        { $lte: ["$marketplaceExpiresAt", now] },
+                        {
+                          $not: [{
+                            $in: [
+                              { $ifNull: ["$marketplaceClosureReason", ""] },
+                              ["invalid", "deactivated", "status_change"],
+                            ],
+                          }],
+                        },
                       ],
                     },
                     {

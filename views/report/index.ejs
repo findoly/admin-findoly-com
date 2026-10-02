@@ -60,19 +60,45 @@
             </div>
 
             <div x-show="!loading" x-cloak>
-              <div class="row g-3">
-                <template x-for="card in cards" :key="card.label">
-                  <div class="col-6 col-lg-3">
-                    <div class="card h-100">
-                      <div class="card-body">
-                        <div class="text-muted fs-sm" x-text="card.label"></div>
-                        <div class="crm-stat-value mt-1" x-text="card.value"></div>
-                        <div class="text-muted fs-sm mt-1" x-show="card.note" x-text="card.note"></div>
+              <section>
+                <div class="mb-2">
+                  <h5 class="mb-1">Requirement activity</h5>
+                  <p class="text-muted mb-0">Volume, provider access, conversion and expired unused capacity.</p>
+                </div>
+                <div class="row g-3">
+                  <template x-for="card in activityCards" :key="card.label">
+                    <div class="col-6 col-lg-3">
+                      <div class="card h-100">
+                        <div class="card-body">
+                          <div class="text-muted fs-sm" x-text="card.label"></div>
+                          <div class="crm-stat-value mt-1" x-text="card.value"></div>
+                          <div class="text-muted fs-sm mt-1" x-show="card.note" x-text="card.note"></div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </template>
-              </div>
+                  </template>
+                </div>
+              </section>
+
+              <section class="mt-3">
+                <div class="mb-2">
+                  <h5 class="mb-1">Credit & revenue</h5>
+                  <p class="text-muted mb-0">Charges, refunds, retained credits and direct payments for the selected period.</p>
+                </div>
+                <div class="row g-3">
+                  <template x-for="card in financialCards" :key="card.label">
+                    <div class="col-12 col-sm-6 col-lg-3">
+                      <div class="card h-100">
+                        <div class="card-body">
+                          <div class="text-muted fs-sm" x-text="card.label"></div>
+                          <div class="crm-stat-value mt-1" x-text="card.value"></div>
+                          <div class="text-muted fs-sm mt-1" x-show="card.note" x-text="card.note"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </section>
 
               <section class="card mt-3">
                 <div class="card-header crm-card-heading">
@@ -180,7 +206,7 @@
                   }).format(Number(value || 0));
                 },
 
-                get cards() {
+                get activityCards() {
                   const s = this.data.summary || {};
                   return [
                     { label: 'Requirements received', value: this.formatNumber(s.requirementsReceived) },
@@ -189,19 +215,51 @@
                     { label: 'Rejected', value: this.formatNumber(s.rejected) },
                     { label: 'Requirements unlocked', value: this.formatNumber(s.requirementsUnlocked) },
                     { label: 'Total provider unlocks', value: this.formatNumber(s.totalProviderUnlocks) },
-                    {
-                      label: 'Unlock value',
-                      value: this.formatMoney(s.netUnlockValueRupees),
-                      note: this.formatNumber(s.netUnlockCredits) + ' net credits · '
-                        + this.formatNumber(s.grossUnlockCredits) + ' charged · '
-                        + this.formatNumber(s.refundedUnlockCredits) + ' refunded'
-                    },
                     { label: 'Approved but not unlocked', value: this.formatNumber(s.notUnlocked) },
+                    { label: 'Taken / converted', value: this.formatNumber(s.takenConverted) },
                     {
                       label: 'Estimated missed opportunity',
-                      value: this.formatMoney(s.estimatedMissedOpportunityRupees)
+                      value: this.formatMoney(s.estimatedMissedOpportunityRupees),
+                      note: 'Expired unused provider slots only'
+                    }
+                  ];
+                },
+
+                get refundRate() {
+                  const s = this.data.summary || {};
+                  const gross = Number(s.grossUnlockCredits || 0);
+                  if (gross <= 0) return 0;
+                  return Math.max(0, Math.min(100, (Number(s.refundedUnlockCredits || 0) / gross) * 100));
+                },
+
+                get financialCards() {
+                  const s = this.data.summary || {};
+                  return [
+                    {
+                      label: 'Gross unlock value',
+                      value: this.formatMoney(s.grossUnlockValueRupees),
+                      note: this.formatNumber(s.grossUnlockCredits) + ' credits charged'
                     },
-                    { label: 'Taken / converted', value: this.formatNumber(s.takenConverted) }
+                    {
+                      label: 'Refunded value',
+                      value: this.formatMoney(s.refundedUnlockValueRupees),
+                      note: this.formatNumber(s.refundedUnlockCredits) + ' credits returned'
+                    },
+                    {
+                      label: 'Net unlock value',
+                      value: this.formatMoney(s.netUnlockValueRupees),
+                      note: this.formatNumber(s.netUnlockCredits) + ' credits retained'
+                    },
+                    {
+                      label: 'Direct payment value',
+                      value: this.formatMoney(s.directPaymentRupees),
+                      note: 'Provider unlocks paid directly'
+                    },
+                    {
+                      label: 'Refund rate',
+                      value: this.formatNumber(this.refundRate) + '%',
+                      note: 'Refunded credits ÷ gross charged credits'
+                    }
                   ];
                 },
 
