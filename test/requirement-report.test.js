@@ -70,7 +70,8 @@ test("report aggregation excludes Testing category and preserves gross unlock va
   assert.match(service, /unlockCredits:\s*grossUnlockCredits/);
   assert.match(service, /unlockValueRupees:\s*grossUnlockCredits/);
   assert.match(service, /estimatedMissedOpportunityRupees/);
-  assert.match(service, /"closed", "expired"/);
+  assert.match(service, /marketplaceExpiresAt/);
+  assert.match(service, /marketplaceClosureReason/);
 });
 
 test("requirement report API is read-only and protected by reports.view", () => {
@@ -107,10 +108,14 @@ test("report cards cover the agreed requirement KPIs", () => {
     "Rejected",
     "Requirements unlocked",
     "Total provider unlocks",
-    "Unlock value",
     "Approved but not unlocked",
     "Estimated missed opportunity",
     "Taken / converted",
+    "Gross unlock value",
+    "Refunded value",
+    "Net unlock value",
+    "Direct payment value",
+    "Refund rate",
   ]) {
     assert.ok(view.includes(label), "Missing report KPI: " + label);
   }
@@ -171,14 +176,51 @@ test("requirement report falls back to charged credits for historical refunded r
   assert.match(service, /\$ifNull: \["\$chargedCredits", 0\]/);
 });
 
-test("Reports UI uses net unlock value and explains gross and refunded credits", () => {
+test("Reports UI promotes gross, refund and net values to mobile-visible cards", () => {
   const view = source("views/report/index.ejs");
 
+  assert.match(view, /Credit & revenue/);
+  assert.match(view, /Gross unlock value/);
+  assert.match(view, /Refunded value/);
+  assert.match(view, /Net unlock value/);
+  assert.match(view, /Direct payment value/);
+  assert.match(view, /Refund rate/);
+  assert.match(view, /col-12 col-sm-6 col-lg-3/);
+  assert.match(view, /formatMoney\(s\.refundedUnlockValueRupees\)/);
   assert.match(view, /formatMoney\(s\.netUnlockValueRupees\)/);
-  assert.match(view, /s\.netUnlockCredits/);
-  assert.match(view, /s\.grossUnlockCredits/);
-  assert.match(view, /s\.refundedUnlockCredits/);
-  assert.match(view, /net credits/);
-  assert.match(view, /charged/);
-  assert.match(view, /refunded/);
+  assert.match(view, /formatMoney\(s\.directPaymentRupees\)/);
+  assert.match(view, /refundedUnlockCredits/);
+  assert.match(view, /grossUnlockCredits/);
+});
+
+test("refund rate is calculated from refunded credits over gross charged credits", () => {
+  const view = source("views/report/index.ejs");
+
+  assert.match(view, /const gross = Number\(s\.grossUnlockCredits \|\| 0\)/);
+  assert.match(view, /if \(gross <= 0\) return 0/);
+  assert.match(view, /Number\(s\.refundedUnlockCredits \|\| 0\) \/ gross/);
+  assert.match(view, /Math\.max\(0, Math\.min\(100,/);
+});
+
+test("missed opportunity uses actual marketplace expiry and excludes deliberate terminal closures", () => {
+  const service = source("services/report/requirement-report-service.js");
+
+  assert.match(service, /\$lte: \["\$marketplaceExpiresAt", now\]/);
+  assert.match(service, /\$ne: \["\$isActive", false\]/);
+  assert.match(service, /\$gt: \[\{ \$ifNull: \["\$remainingUnlocks", 0\] \}, 0\]/);
+  for (const reason of ["invalid", "deactivated", "status_change"]) {
+    assert.ok(service.includes(`"${reason}"`), "Missing missed-opportunity exclusion: " + reason);
+  }
+  assert.doesNotMatch(
+    service,
+    /estimatedMissedOpportunityRupees:[\s\S]{0,900}\$in: \["\$marketplaceStatus", \["closed", "expired"\]\]/,
+  );
+});
+
+test("missed opportunity value remains remaining unlocks multiplied by lead price", () => {
+  const service = source("services/report/requirement-report-service.js");
+
+  assert.match(service, /\$multiply: \[/);
+  assert.match(service, /\$ifNull: \["\$remainingUnlocks", 0\]/);
+  assert.match(service, /\$divide: \[\{ \$ifNull: \["\$leadPricePaise", 0\] \}, 100\]/);
 });
