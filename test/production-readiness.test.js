@@ -129,6 +129,7 @@ test("provider creation falls back to validated manual city/state without creati
       geocodePincode: async () => { throw Object.assign(new Error("maps unavailable"), { status: 503 }); },
     },
     "../communication/account-registration-service": { dispatch: async () => [] },
+    "../communication/system-event-service": { dispatch: async () => [] },
     "../catalog/catalog-service": {
       listCategories: async () => [{ slug: "painter", active: true }],
     },
