@@ -285,6 +285,11 @@ async function ensureProviderEmailTemplate(event) {
   await CommunicationTemplate.updateOne(
     { channel: "email", name: templateDefinition.name, language: "en_US" },
     {
+      $set: {
+        status: "active",
+        isActive: true,
+        updatedBy: "system",
+      },
       $setOnInsert: {
         displayName: templateDefinition.displayName,
         channel: "email",
@@ -293,10 +298,7 @@ async function ensureProviderEmailTemplate(event) {
         subject: templateDefinition.subject,
         body: templateDefinition.body,
         bodyHtml: "",
-        status: "active",
-        isActive: true,
         createdBy: "system",
-        updatedBy: "system",
       },
     },
     { upsert: true },
