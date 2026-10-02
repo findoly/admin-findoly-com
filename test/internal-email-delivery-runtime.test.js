@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, "..");
 function loadService({ sendResult, retryResult, sendError, retryError } = {}) {
   const absolute = require.resolve(path.join(root, "services/communication/system-event-service.js"));
   delete require.cache[absolute];
-  const calls = { send: 0, retry: 0 };
+  const calls = { send: 0, retry: 0, templateUpdate: null };
   const communicationService = {
     async send() {
       calls.send += 1;
@@ -30,7 +30,10 @@ function loadService({ sendResult, retryResult, sendError, retryError } = {}) {
       },
     },
     "../../models/CommunicationTemplate": {
-      async updateOne() { return { acknowledged: true }; },
+      async updateOne(_query, update) {
+        calls.templateUpdate = update;
+        return { acknowledged: true };
+      },
       findOne() {
         return { lean: async () => ({ templateId: "provider-email-template" }) };
       },
@@ -224,4 +227,25 @@ test("provider assignment remains a delivery failure after one unsuccessful auto
   assert.equal(result[0].communicationId, "failed-comm-2");
   assert.match(result[0].error, /SES unavailable/);
   assert.equal(service.__testCalls.retry, 1);
+});
+
+
+test("provider assignment self-heals an existing disabled system email template", async () => {
+  const service = loadService({
+    sendResult: { communicationId: "comm-1", status: "sent" },
+  });
+  const result = await service.dispatch(
+    "provider_lead_assigned",
+    providerAssignmentContext(),
+    "ops@findoly.com",
+  );
+
+  assert.equal(result[0].deliveryState, "sent");
+  assert.equal(service.__testCalls.templateUpdate.$set.status, "active");
+  assert.equal(service.__testCalls.templateUpdate.$set.isActive, true);
+  assert.equal(service.__testCalls.templateUpdate.$set.updatedBy, "system");
+  assert.equal(Object.hasOwn(service.__testCalls.templateUpdate.$set, "subject"), false);
+  assert.equal(Object.hasOwn(service.__testCalls.templateUpdate.$set, "body"), false);
+  assert.equal(Object.hasOwn(service.__testCalls.templateUpdate.$setOnInsert, "status"), false);
+  assert.equal(Object.hasOwn(service.__testCalls.templateUpdate.$setOnInsert, "isActive"), false);
 });
