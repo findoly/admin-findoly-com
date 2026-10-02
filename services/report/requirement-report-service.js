@@ -8,6 +8,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 184;
 const PRESETS = Object.freeze(["today", "yesterday", "7d", "30d", "custom"]);
 const VERIFICATION_STATUSES = Object.freeze(["verification", "verification_pending", "verified"]);
+const MANAGED_PROVIDER_OUTCOME_CUTOFF_DATE = "2026-09-28";
+const MANAGED_PROVIDER_OUTCOME_CUTOFF = dateBoundary(MANAGED_PROVIDER_OUTCOME_CUTOFF_DATE, false);
 
 function dateOnlyInIndia(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -116,6 +118,10 @@ function summaryDefaults() {
     rejected: 0,
     requirementsUnlocked: 0,
     totalProviderUnlocks: 0,
+    managedProviderUnlocks: 0,
+    managedProviderConfirmed: 0,
+    managedProviderNotConfirmed: 0,
+    managedProviderNoStatusUpdate: 0,
     unlockCredits: 0,
     directPaymentRupees: 0,
     notUnlocked: 0,
@@ -165,6 +171,53 @@ async function getRequirementReport(filters = {}, now = new Date()) {
                   ],
                 },
               },
+              managedProviderUnlocks: {
+                $sum: {
+                  $cond: [{ $gte: ["$unlockedAt", MANAGED_PROVIDER_OUTCOME_CUTOFF] }, 1, 0],
+                },
+              },
+              managedProviderConfirmed: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ["$unlockedAt", MANAGED_PROVIDER_OUTCOME_CUTOFF] },
+                        { $eq: [{ $ifNull: ["$providerSaleOutcome", ""] }, "confirmed"] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              managedProviderNotConfirmed: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ["$unlockedAt", MANAGED_PROVIDER_OUTCOME_CUTOFF] },
+                        { $eq: [{ $ifNull: ["$providerSaleOutcome", ""] }, "not_confirmed"] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              managedProviderNoStatusUpdate: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ["$unlockedAt", MANAGED_PROVIDER_OUTCOME_CUTOFF] },
+                        { $eq: [{ $ifNull: ["$providerSaleOutcome", ""] }, ""] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
             },
           },
         ],
@@ -176,7 +229,15 @@ async function getRequirementReport(filters = {}, now = new Date()) {
         unlockStats: {
           $ifNull: [
             { $arrayElemAt: ["$unlockSummary", 0] },
-            { count: 0, credits: 0, directPaymentPaise: 0 },
+            {
+              count: 0,
+              credits: 0,
+              directPaymentPaise: 0,
+              managedProviderUnlocks: 0,
+              managedProviderConfirmed: 0,
+              managedProviderNotConfirmed: 0,
+              managedProviderNoStatusUpdate: 0,
+            },
           ],
         },
       },
@@ -186,6 +247,10 @@ async function getRequirementReport(filters = {}, now = new Date()) {
         unlockCount: { $ifNull: ["$unlockStats.count", 0] },
         unlockCredits: { $ifNull: ["$unlockStats.credits", 0] },
         directPaymentPaise: { $ifNull: ["$unlockStats.directPaymentPaise", 0] },
+        managedProviderUnlocks: { $ifNull: ["$unlockStats.managedProviderUnlocks", 0] },
+        managedProviderConfirmed: { $ifNull: ["$unlockStats.managedProviderConfirmed", 0] },
+        managedProviderNotConfirmed: { $ifNull: ["$unlockStats.managedProviderNotConfirmed", 0] },
+        managedProviderNoStatusUpdate: { $ifNull: ["$unlockStats.managedProviderNoStatusUpdate", 0] },
       },
     },
     {
@@ -201,6 +266,10 @@ async function getRequirementReport(filters = {}, now = new Date()) {
               rejected: { $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] } },
               requirementsUnlocked: { $sum: { $cond: [{ $gt: ["$unlockCount", 0] }, 1, 0] } },
               totalProviderUnlocks: { $sum: "$unlockCount" },
+              managedProviderUnlocks: { $sum: "$managedProviderUnlocks" },
+              managedProviderConfirmed: { $sum: "$managedProviderConfirmed" },
+              managedProviderNotConfirmed: { $sum: "$managedProviderNotConfirmed" },
+              managedProviderNoStatusUpdate: { $sum: "$managedProviderNoStatusUpdate" },
               unlockCredits: { $sum: "$unlockCredits" },
               directPaymentPaise: { $sum: "$directPaymentPaise" },
               notUnlocked: {
@@ -304,6 +373,13 @@ async function getRequirementReport(filters = {}, now = new Date()) {
       unlocked: summary.requirementsUnlocked,
       taken: summary.takenConverted,
     },
+    managedProviderOutcomes: {
+      cutoffDate: MANAGED_PROVIDER_OUTCOME_CUTOFF_DATE,
+      total: summary.managedProviderUnlocks,
+      confirmed: summary.managedProviderConfirmed,
+      notConfirmed: summary.managedProviderNotConfirmed,
+      noStatusUpdate: summary.managedProviderNoStatusUpdate,
+    },
     trend: fillTrend(aggregate.trend || [], period.startDate, period.endDate),
     exclusions: { testingCategory: true },
   };
@@ -317,4 +393,5 @@ module.exports = {
   summaryDefaults,
   PRESETS,
   MAX_RANGE_DAYS,
+  MANAGED_PROVIDER_OUTCOME_CUTOFF_DATE,
 };
