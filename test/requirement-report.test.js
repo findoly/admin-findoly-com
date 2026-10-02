@@ -114,3 +114,39 @@ test("report cards cover the agreed requirement KPIs", () => {
     assert.ok(view.includes(label), "Missing report KPI: " + label);
   }
 });
+
+
+test("managed provider report outcomes use the 28 September cutover and canonical provider outcome", () => {
+  const service = source("services/report/requirement-report-service.js");
+
+  assert.match(service, /MANAGED_PROVIDER_OUTCOME_CUTOFF_DATE = "2026-09-28"/);
+  assert.match(service, /managedProviderUnlocks/);
+  assert.match(service, /managedProviderConfirmed/);
+  assert.match(service, /managedProviderNotConfirmed/);
+  assert.match(service, /managedProviderNoStatusUpdate/);
+  assert.match(service, /\$ifNull: \["\$providerSaleOutcome", ""\]/);
+  assert.match(service, /\$not: \[\{ \$in: \[/);
+  assert.match(service, /noStatusUpdate: summary\.managedProviderNoStatusUpdate/);
+});
+
+test("managed provider report treats provider and CRM admin outcome writers identically", () => {
+  const reportService = source("services/report/requirement-report-service.js");
+  const providerStatusService = source("services/provider-unlock/provider-status-service.js");
+  const providerAdminService = source("services/provider/provider-service.js");
+
+  assert.match(reportService, /\$providerSaleOutcome/);
+  assert.match(providerStatusService, /unlock\.providerSaleOutcome = feedback\.outcome/);
+  assert.match(providerAdminService, /unlock\.providerSaleOutcome = effectiveOutcome/);
+  assert.doesNotMatch(reportService, /providerSaleOutcomeUpdatedBy/);
+});
+
+test("Reports UI shows the three managed provider outcome states", () => {
+  const view = source("views/report/index.ejs");
+
+  assert.match(view, /Managed provider outcomes/);
+  assert.match(view, /Confirmed/);
+  assert.match(view, /Not Confirmed/);
+  assert.match(view, /No status update/);
+  assert.match(view, /28 Sep 2026/);
+  assert.match(view, /managedProviderOutcomes/);
+});
