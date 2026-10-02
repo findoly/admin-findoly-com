@@ -117,31 +117,39 @@ function refundContext() {
 }
 
 test("credit revert event emails alert@findoly.com and the affected provider", async () => {
-  const runtime = loadSystemEventService();
-  const result = await runtime.service.dispatch(
-    "provider_credit_reverted",
-    refundContext(),
-    "ops@findoly.com",
-  );
+  const previousInternalEmail = process.env.INTERNAL_ALERT_EMAIL;
+  process.env.INTERNAL_ALERT_EMAIL = "other-internal@example.com";
+  try {
+    const runtime = loadSystemEventService();
+    const result = await runtime.service.dispatch(
+      "provider_credit_reverted",
+      refundContext(),
+      "ops@findoly.com",
+    );
 
-  assert.equal(result.length, 2);
-  assert.equal(runtime.sent.length, 2);
+    assert.equal(result.length, 2);
+    assert.equal(runtime.sent.length, 2);
 
-  const internal = runtime.sent.find((item) => item.recipientContact === "alert@findoly.com");
-  const provider = runtime.sent.find((item) => item.recipientContact === "provider@example.com");
+    const internal = runtime.sent.find((item) => item.recipientContact === "alert@findoly.com");
+    const provider = runtime.sent.find((item) => item.recipientContact === "provider@example.com");
 
-  assert.ok(internal);
-  assert.ok(provider);
-  assert.equal(internal.trigger, "provider_credit_reverted");
-  assert.equal(provider.trigger, "provider_credit_reverted");
-  assert.equal(provider.purpose, "provider_credit_reverted");
-  assert.equal(internal.variables.credits_reverted, "10");
-  assert.equal(internal.variables.balance_before, "50");
-  assert.equal(internal.variables.balance_after, "60");
-  assert.equal(internal.variables.refund_transaction_id, "refund-tx-1");
-  assert.equal(provider.variables.credits_reverted, "10");
-  assert.match(provider.idempotencyKey, /refund-tx-1$/);
-  assert.match(internal.idempotencyKey, /provider_credit_reverted/);
+    assert.ok(internal);
+    assert.ok(provider);
+    assert.equal(runtime.sent.some((item) => item.recipientContact === "other-internal@example.com"), false);
+    assert.equal(internal.trigger, "provider_credit_reverted");
+    assert.equal(provider.trigger, "provider_credit_reverted");
+    assert.equal(provider.purpose, "provider_credit_reverted");
+    assert.equal(internal.variables.credits_reverted, "10");
+    assert.equal(internal.variables.balance_before, "50");
+    assert.equal(internal.variables.balance_after, "60");
+    assert.equal(internal.variables.refund_transaction_id, "refund-tx-1");
+    assert.equal(provider.variables.credits_reverted, "10");
+    assert.match(provider.idempotencyKey, /refund-tx-1$/);
+    assert.match(internal.idempotencyKey, /provider_credit_reverted/);
+  } finally {
+    if (previousInternalEmail === undefined) delete process.env.INTERNAL_ALERT_EMAIL;
+    else process.env.INTERNAL_ALERT_EMAIL = previousInternalEmail;
+  }
 });
 
 test("credit revert provider template preserves non-empty custom HTML", async () => {
