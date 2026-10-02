@@ -181,14 +181,16 @@ test("assignment email failure never rolls back or repeats the committed provide
   assert.match(systemEvents, /PROVIDER_EMAIL_DELIVERY_FAILED/);
 });
 
-test("Nearby Providers UI distinguishes sent, skipped and failed assignment emails", () => {
+test("Nearby Providers UI distinguishes submitted, missing, skipped and failed assignment emails", () => {
   const view = source("views/enquiry/nearby-providers.ejs");
 
   assert.match(view, /deliveryState === 'skipped'/);
   assert.match(view, /deliveryState === 'failed'/);
+  assert.match(view, /no provider email delivery result was returned/);
   assert.match(view, /Assignment succeeded, but the provider email could not be sent after retry/);
   assert.match(view, /Assignment succeeded\. Provider email was not sent:/);
-  assert.match(view, /Provider email sent successfully/);
+  assert.match(view, /Provider email submitted for delivery/);
+  assert.doesNotMatch(view, /Provider email sent successfully\./);
   assert.match(view, /Retry email/);
 });
 
@@ -200,4 +202,35 @@ test("assignment email retry calls Communication Center only and cannot repeat a
   assert.match(retryMethod, /\/retry/);
   assert.doesNotMatch(retryMethod, /nearby-providers.*assign/);
   assert.match(view, /can\('communications\.send'\)/);
+});
+
+
+test("duplicate manual assignment is a conflict and never a successful email-less response", () => {
+  const assignment = source("services/provider-unlock/provider-manual-assignment-service.js");
+  const controller = source("controllers/enquiryController.js");
+
+  assert.match(assignment, /code: "PROVIDER_ALREADY_ASSIGNED"/);
+  assert.match(assignment, /providerLeadUnlockId: existingUnlock\.providerLeadUnlockId/);
+  assert.doesNotMatch(assignment, /duplicate: true[\s\S]{0,250}emailDeliveries: \[\]/);
+  assert.doesNotMatch(controller, /result\.duplicate \? 200 : 201/);
+  assert.match(controller, /res\.status\(201\)\.json/);
+});
+
+test("duplicate-key race is checked against the same provider and requirement before returning conflict", () => {
+  const assignment = source("services/provider-unlock/provider-manual-assignment-service.js");
+
+  const raceBlock = assignment.match(/if \(error\?\.code === 11000\)[\s\S]*?throw error;/)?.[0] || "";
+  assert.match(raceBlock, /ProviderLeadUnlock\.findOne\(\{/);
+  assert.match(raceBlock, /enquiryId,/);
+  assert.match(raceBlock, /providerId: canonicalProviderId/);
+  assert.match(raceBlock, /PROVIDER_ALREADY_ASSIGNED/);
+  assert.doesNotMatch(raceBlock, /systemEventService\.dispatch/);
+});
+
+test("previously assigned providers remain excluded from manual reassignment selection", () => {
+  const nearby = source("services/enquiry/nearby-provider-service.js");
+
+  assert.match(nearby, /const previouslyAssigned = assignedProviderIds\.has\(provider\.providerId\)/);
+  assert.match(nearby, /if \(previouslyAssigned\) manualAssignmentReason = "previously_assigned"/);
+  assert.match(nearby, /manualAssignmentEligible: assignmentMode[\s\S]*&& !manualAssignmentReason/);
 });
