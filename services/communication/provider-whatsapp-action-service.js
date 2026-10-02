@@ -315,7 +315,7 @@ function failureMessage(result = {}) {
   if (status === "lead_unavailable") {
     return "This enquiry has already been assigned to another provider and is no longer available.";
   }
-  return "We could not open this enquiry from WhatsApp. Please try again in the Provider Portal or contact Findoly support.";
+  return "This enquiry has already been assigned to another provider and is no longer available.";
 }
 
 function responseMessage(result) {
