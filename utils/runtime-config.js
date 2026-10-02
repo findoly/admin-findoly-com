@@ -193,7 +193,7 @@ function validateRuntimeConfig(env = process.env) {
     const internalEmailEnabled = env.INTERNAL_ALERT_EMAIL_ENABLED === undefined
       || ["1", "true", "yes", "on"].includes(String(env.INTERNAL_ALERT_EMAIL_ENABLED || "").trim().toLowerCase());
     if (localEmailDelivery && (providerEmailEnabled || internalEmailEnabled) && !present(env.SES_FROM_EMAIL)) {
-      errors.push("SES_FROM_EMAIL is required when local email delivery is enabled in production");
+      warnings.push("SES_FROM_EMAIL is required for local email delivery; provider and internal emails will fail until it is configured");
     }
 
     if (!validHttpUrl(env.CRM_PROVIDER_ACTION_API_URL, { httpsOnly: true })) {
