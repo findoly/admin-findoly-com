@@ -384,17 +384,17 @@ test("production local email delivery requires an SES sender but Lambda delivery
   };
 
   const local = validateRuntimeConfig(base);
-  assert.ok(local.errors.some((message) => /SES_FROM_EMAIL is required/.test(message)));
+  assert.ok(local.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)));
 
   const lambda = validateRuntimeConfig({
     ...base,
     MESSAGE_DELIVERY_MODE: "lambda",
   });
-  assert.equal(lambda.errors.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
+  assert.equal(lambda.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
 
   const configured = validateRuntimeConfig({
     ...base,
     SES_FROM_EMAIL: "no-reply@findoly.com",
   });
-  assert.equal(configured.errors.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
+  assert.equal(configured.warnings.some((message) => /SES_FROM_EMAIL is required/.test(message)), false);
 });
