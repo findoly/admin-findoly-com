@@ -210,7 +210,7 @@ async function getRequirementReport(filters = {}, now = new Date()) {
                     {
                       $and: [
                         { $gte: ["$unlockedAt", MANAGED_PROVIDER_OUTCOME_CUTOFF] },
-                        { $eq: [{ $ifNull: ["$providerSaleOutcome", ""] }, ""] },
+                        { $not: [{ $in: [{ $ifNull: ["$providerSaleOutcome", ""] }, ["confirmed", "not_confirmed"]] }] },
                       ],
                     },
                     1,
