@@ -9,6 +9,7 @@ const Agent = require("../../models/Agent");
 const ProviderJoinRequest = require("../../models/ProviderJoinRequest");
 const communicationService = require("./communication-service");
 const defaultTemplateService = require("./default-template-service");
+const { providerCreditRevertedTemplate } = require("./provider-credit-reverted-template");
 
 const INTERNAL_EMAIL_EVENTS = new Set([
   "lead_created",
@@ -16,6 +17,7 @@ const INTERNAL_EMAIL_EVENTS = new Set([
   "agent_created",
   "provider_join_request_submitted",
   "provider_created",
+  "provider_credit_reverted",
 ]);
 
 const PROVIDER_EMAIL_EVENTS = new Set([
@@ -24,9 +26,11 @@ const PROVIDER_EMAIL_EVENTS = new Set([
   "provider_feedback_updated",
   "provider_status_updated",
   "provider_outcome_updated",
+  "provider_credit_reverted",
 ]);
 
 const SYSTEM_TEMPLATES = Object.freeze({
+  provider_credit_reverted: providerCreditRevertedTemplate,
   provider_lead_unlocked: {
     name: "findoly_provider_lead_unlocked",
     displayName: "Provider lead unlocked",
@@ -237,6 +241,9 @@ function variablesFor(context) {
   const reason = clean(context.reason || unlock.providerLeadReason || "Not provided");
   const note = clean(context.note || context.outcomeNote || context.providerSaleOutcomeNote || unlock.providerLeadNote || unlock.providerSaleOutcomeNote || "Not provided");
   const creditsUsed = Number(context.creditsUsed ?? context.effectiveLeadCostCredits ?? unlock.chargedCredits ?? 0);
+  const creditsReverted = Number(context.creditsReverted ?? context.refundedCredits ?? unlock.creditRefundedCredits ?? 0);
+  const balanceBefore = Number(context.balanceBeforeCredits ?? 0);
+  const balanceAfter = Number(context.balanceAfterCredits ?? 0);
   const providerDisplayName = providerName(provider, unlock, context);
   const agentName = clean(agent.name || agent.businessName || lead.agentName || lead.agentBusinessName || "Partner");
   const requestName = clean(joinRequest.name || joinRequest.businessName || context.providerName || "Provider");
@@ -269,6 +276,12 @@ function variablesFor(context) {
     status: clean(provider.status || agent.status || joinRequest.status || context.status || lead.status || ""),
     created_by: clean(context.createdBy || context.actor || lead.statusUpdatedBy || "CRM"),
     credits_used: Number.isFinite(creditsUsed) ? String(creditsUsed) : "0",
+    credits_reverted: Number.isFinite(creditsReverted) ? String(creditsReverted) : "0",
+    balance_before: Number.isFinite(balanceBefore) ? String(balanceBefore) : "0",
+    balance_after: Number.isFinite(balanceAfter) ? String(balanceAfter) : "0",
+    refund_transaction_id: clean(context.refundTransactionId || unlock.creditRefundTransactionId || ""),
+    refund_reason: clean(context.refundReason || unlock.creditRefundNote || "Not Confirmed review approved"),
+    reviewed_by: clean(context.reviewedBy || unlock.creditRefundedBy || context.actor || "CRM"),
     unlock_method: clean(context.unlockMethod || unlock.unlockMethod || "credits").replace(/_/g, " "),
     outcome,
     activity_status: activityStatus,
@@ -297,13 +310,21 @@ async function ensureProviderEmailTemplate(event) {
         language: "en_US",
         subject: templateDefinition.subject,
         body: templateDefinition.body,
-        bodyHtml: "",
+        bodyHtml: templateDefinition.bodyHtml || "",
         createdBy: "system",
       },
     },
     { upsert: true },
   );
-  return CommunicationTemplate.findOne({ channel: "email", name: templateDefinition.name, language: "en_US" }).lean();
+  let template = await CommunicationTemplate.findOne({ channel: "email", name: templateDefinition.name, language: "en_US" }).lean();
+  if (templateDefinition.bodyHtml && template && !String(template.bodyHtml || "").trim()) {
+    await CommunicationTemplate.updateOne(
+      { templateId: template.templateId },
+      { $set: { bodyHtml: templateDefinition.bodyHtml, updatedBy: "system" } },
+    );
+    template = { ...template, bodyHtml: templateDefinition.bodyHtml };
+  }
+  return template;
 }
 
 function internalEntityReference(event, context) {
@@ -311,6 +332,7 @@ function internalEntityReference(event, context) {
   if (event === "agent_created") return context.agentId || context.agent?.agentId || "partner";
   if (event === "provider_join_request_submitted") return context.providerJoinRequestId || context.providerJoinRequest?.providerJoinRequestId || "provider-request";
   if (event === "provider_created") return context.providerId || context.provider?.providerId || "provider";
+  if (event === "provider_credit_reverted") return context.providerLeadUnlockId || context.enquiryId || "provider-credit-reverted";
   return event;
 }
 
@@ -330,7 +352,9 @@ async function sendInternalEmail(event, context, variables, actor, options = {})
   }
   if (!rule.emailTemplateId) return { channel: "email", skipped: true, reason: "Internal email template is not selected" };
 
-  const recipient = clean(process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com").toLowerCase();
+  const recipient = event === "provider_credit_reverted"
+    ? "alert@findoly.com"
+    : clean(process.env.INTERNAL_ALERT_EMAIL || "alert@findoly.com").toLowerCase();
   const reference = internalEntityReference(event, context);
   const idempotencyKey = options.test
     ? `internal-email-test:${token(event)}:${Date.now()}`
@@ -425,7 +449,9 @@ async function sendProviderEmail(event, context, variables, actor) {
       ? "provider_manual_assignment"
       : event === "provider_lead_unlocked"
         ? "provider_lead_access_confirmation"
-        : "provider_status_update_confirmation",
+        : event === "provider_credit_reverted"
+          ? "provider_credit_reverted"
+          : "provider_status_update_confirmation",
     trigger: event,
     automatic: true,
     enquiryId: context.enquiryId || "",
@@ -435,14 +461,14 @@ async function sendProviderEmail(event, context, variables, actor) {
     metadata: { event, providerLeadUnlockId: context.providerLeadUnlockId || "", source: context.source || "provider-portal" },
   };
   const terminalFailureStatuses = new Set(["failed", "bounced", "complained", "rejected"]);
-  const shouldRetryAssignmentEmail = event === "provider_lead_assigned";
+  const shouldRetryProviderEmail = ["provider_lead_assigned", "provider_credit_reverted"].includes(event);
   let communication;
   let retried = false;
 
   try {
     communication = await communicationService.send(payload, actor || "system-event");
   } catch (error) {
-    if (!shouldRetryAssignmentEmail || !error?.communicationId) throw error;
+    if (!shouldRetryProviderEmail || !error?.communicationId) throw error;
     retried = true;
     communication = await communicationService.retry(
       error.communicationId,
@@ -452,7 +478,7 @@ async function sendProviderEmail(event, context, variables, actor) {
   }
 
   if (
-    shouldRetryAssignmentEmail
+    shouldRetryProviderEmail
     && !retried
     && terminalFailureStatuses.has(String(communication?.status || "").toLowerCase())
     && communication?.communicationId

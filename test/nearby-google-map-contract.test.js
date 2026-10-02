@@ -28,7 +28,7 @@ test("nearby map visualizes the same lead and provider payload used by the table
   assert.match(view, /data-nearby-coverage-canvas/);
   assert.match(view, /window\.__findolyNearbyProviderMapData = mapPayload/);
   assert.match(view, /new CustomEvent\('nearby-providers:loaded', \{ detail: mapPayload \}\)/);
-  assert.match(view, /nearby-coverage-map\.js\?v=20260907-1/);
+  assert.match(view, /nearby-coverage-map\.js\?v=20261003-1/);
   assert.match(map, /window\.addEventListener\('nearby-providers:loaded'/);
   assert.match(map, /payload\?\.lead/);
   assert.match(map, /payload\?\.providers/);
@@ -69,4 +69,21 @@ test("map gracefully handles missing coordinates and missing Google Maps configu
   assert.match(map, /Google Maps is not configured for this CRM environment/);
   assert.match(map, /The provider table remains fully available/);
   assert.match(map, /Check the browser API key and allowed referrers/);
+});
+
+
+test("nearby map opens at a 10 km viewport without changing assignment radius logic", () => {
+  const map = source("public/js/nearby-coverage-map.js");
+  const view = source("views/enquiry/nearby-providers.ejs");
+  const service = source("services/enquiry/nearby-provider-service.js");
+
+  assert.match(map, /const DEFAULT_VIEW_RADIUS_KM = 10/);
+  assert.match(map, /radius: DEFAULT_VIEW_RADIUS_KM \* 1000/);
+  assert.match(map, /fitMap\(customer\)/);
+  assert.doesNotMatch(map, /fitBounds\(circleBounds/);
+  assert.match(view, /approximately a 10 km view/);
+  assert.match(view, /Circle = 100 km manual-assignment radius/);
+
+  assert.match(service, /const MANUAL_ASSIGNMENT_RADIUS_KM = 100/);
+  assert.match(service, /distanceKm > radiusKm/);
 });

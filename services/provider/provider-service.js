@@ -22,8 +22,10 @@ const {
 const { geocodePincode } = require("../location/geocoding-service");
 const { buildSearchAlternatives, prefixRegex } = require("../../utils/search-query");
 const accountRegistrationService = require("../communication/account-registration-service");
+const systemEventService = require("../communication/system-event-service");
 const catalogService = require("../catalog/catalog-service");
 const { withTransaction } = require("../../utils/transaction");
+const { creditsFromPaise } = require("../../utils/credits");
 const { assertContactsAvailable, syncEntityContacts } = require("../contact-identity/contact-identity-service");
 const providerCreditService = require("./provider-credit-service");
 const assignmentService = require("../provider-unlock/provider-assignment-service");
@@ -821,13 +823,47 @@ async function reviewProviderOutcome(providerId, providerLeadUnlockId, input = {
     };
   }
 
-  return {
+  const response = {
     provider: await get(result.providerId),
     unlock: await ProviderLeadUnlock.findOne({ providerLeadUnlockId: unlockId }).lean(),
     reviewAction: result.reviewAction,
     creditAction: result.creditAction,
     refund: result.refund,
   };
+
+  if (result.creditAction === "refund" && result.refund?.transaction) {
+    const transaction = result.refund.transaction;
+    const balanceBeforeCredits = Number.isFinite(Number(transaction.balanceBeforeCredits))
+      ? Number(transaction.balanceBeforeCredits)
+      : creditsFromPaise(transaction.balanceBeforePaise);
+    const balanceAfterCredits = Number.isFinite(Number(transaction.balanceAfterCredits))
+      ? Number(transaction.balanceAfterCredits)
+      : creditsFromPaise(transaction.balanceAfterPaise);
+    const refundTransactionId = String(
+      transaction.walletTransactionId || response.unlock?.creditRefundTransactionId || "",
+    ).trim();
+    response.creditRefundEmailDeliveries = await systemEventService.dispatch(
+      "provider_credit_reverted",
+      {
+        providerLeadUnlockId: response.unlock?.providerLeadUnlockId || unlockId,
+        enquiryId: response.unlock?.enquiryId || "",
+        providerId: response.provider?.providerId || result.providerId,
+        eventAt: transaction.createdAt || response.unlock?.creditRefundedAt || new Date().toISOString(),
+        idempotencySuffix: refundTransactionId || response.unlock?.creditRefundedAt || "",
+        creditsReverted: Number(result.refund.refundedCredits ?? response.unlock?.creditRefundedCredits ?? 0),
+        balanceBeforeCredits,
+        balanceAfterCredits,
+        refundTransactionId,
+        refundReason: response.unlock?.creditRefundNote || note,
+        reviewedBy: actorLabel,
+        unlock: response.unlock || {},
+        provider: response.provider || {},
+      },
+      actorLabel,
+    );
+  }
+
+  return response;
 }
 
 module.exports = {

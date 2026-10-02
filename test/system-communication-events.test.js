@@ -39,6 +39,8 @@ test("automatic internal events use email while provider confirmations remain em
   }
   assert.equal(systemEventService.PROVIDER_EMAIL_EVENTS.has("provider_lead_unlocked"), true);
   assert.equal(systemEventService.PROVIDER_EMAIL_EVENTS.has("provider_feedback_updated"), true);
+  assert.equal(systemEventService.PROVIDER_EMAIL_EVENTS.has("provider_credit_reverted"), true);
+  assert.equal(systemEventService.INTERNAL_EMAIL_EVENTS.has("provider_credit_reverted"), true);
   assert.equal(systemEventService.PROVIDER_EMAIL_EVENTS.has("lead_created"), false);
 });
 
@@ -67,4 +69,31 @@ test("internal email variables include operational details without customer cont
   assert.equal(variables.lead_location, "Mumbai, Maharashtra, 400064");
   assert.equal(Object.prototype.hasOwnProperty.call(variables, "customer_mobile"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(variables, "customer_email"), false);
+});
+
+
+test("credit revert variables include returned credits and post-refund balances", () => {
+  const systemEventService = service();
+  const variables = systemEventService.variablesFor({
+    event: "provider_credit_reverted",
+    providerId: "provider-1",
+    providerLeadUnlockId: "unlock-1",
+    enquiryId: "lead-1",
+    eventAt: "2026-10-03T12:00:00.000Z",
+    creditsReverted: 25,
+    balanceBeforeCredits: 75,
+    balanceAfterCredits: 100,
+    refundTransactionId: "refund-1",
+    refundReason: "Not Confirmed review",
+    reviewedBy: "ops@findoly.com",
+    provider: { name: "Provider" },
+    lead: { requirementTitle: "Requirement" },
+  });
+
+  assert.equal(variables.credits_reverted, "25");
+  assert.equal(variables.balance_before, "75");
+  assert.equal(variables.balance_after, "100");
+  assert.equal(variables.refund_transaction_id, "refund-1");
+  assert.equal(variables.refund_reason, "Not Confirmed review");
+  assert.equal(variables.reviewed_by, "ops@findoly.com");
 });

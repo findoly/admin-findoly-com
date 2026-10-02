@@ -3,6 +3,7 @@
 const CommunicationTemplate = require("../../models/CommunicationTemplate");
 const CommunicationRule = require("../../models/CommunicationRule");
 const { parameterDefinitions } = require("./gupshup-template-service");
+const { internalCreditRevertedDefinition } = require("./provider-credit-reverted-template");
 
 const EMAIL_TEMPLATE_NAME = "findoly_provider_account_created_email";
 const WHATSAPP_TEMPLATE_NAME = "findoly_provider_account_created";
@@ -149,7 +150,16 @@ async function ensureTemplate(definition) {
     language: definition.language,
   };
   let current = await CommunicationTemplate.findOne(query).lean();
-  if (current) return current;
+  if (current) {
+    if (definition.bodyHtml && !String(current.bodyHtml || "").trim()) {
+      await CommunicationTemplate.updateOne(
+        { templateId: current.templateId },
+        { $set: { bodyHtml: definition.bodyHtml, updatedBy: "system" } },
+      );
+      current = { ...current, bodyHtml: definition.bodyHtml };
+    }
+    return current;
+  }
   try {
     const created = await CommunicationTemplate.create({
       ...definition,
@@ -345,6 +355,7 @@ const INTERNAL_ALERT_DEFINITIONS = Object.freeze([
       "Created at: {{registration_date}}",
     ].join("\n"),
   },
+  internalCreditRevertedDefinition,
 ]);
 
 async function ensureInternalAlertTemplatesAndRules() {
@@ -358,7 +369,7 @@ async function ensureInternalAlertTemplatesAndRules() {
       language: "en_US",
       subject: definition.subject,
       body: definition.body,
-      bodyHtml: "",
+      bodyHtml: definition.bodyHtml || "",
       footer: "",
       sampleVariables: [...new Set(
         Array.from(

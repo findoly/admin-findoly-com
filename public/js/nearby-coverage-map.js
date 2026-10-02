@@ -6,6 +6,8 @@
   let infoWindow = null;
   let AdvancedMarkerElement = null;
   let PinElement = null;
+  const DEFAULT_VIEW_RADIUS_KM = 10;
+
   let radiusCircle = null;
   let customerMarker = null;
   let providerMarkers = [];
@@ -211,20 +213,19 @@
     return lat === null || lng === null ? null : { lat, lng };
   }
 
-  function fitMap(customer, radiusKm, providerPositions) {
+  function fitMap(customer) {
     if (!map || !window.google?.maps) return;
-    if (radiusCircle && typeof radiusCircle.getBounds === 'function') {
-      const circleBounds = radiusCircle.getBounds();
-      if (circleBounds) {
-        map.fitBounds(circleBounds, 40);
-        return;
-      }
+    const viewportCircle = new google.maps.Circle({
+      center: customer,
+      radius: DEFAULT_VIEW_RADIUS_KM * 1000,
+    });
+    const bounds = viewportCircle.getBounds();
+    if (bounds) {
+      map.fitBounds(bounds, 40);
+      return;
     }
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend(customer);
-    providerPositions.forEach((position) => bounds.extend(position));
-    map.fitBounds(bounds, 40);
-    if (!providerPositions.length) map.setZoom(radiusKm <= 5 ? 13 : radiusKm <= 20 ? 11 : 9);
+    map.setCenter(customer);
+    map.setZoom(12);
   }
 
   function initializeMap() {
@@ -344,7 +345,7 @@
 
     setCount(providerMarkers.length);
     setMessage('');
-    fitMap(customer, radiusKm, positions);
+    fitMap(customer);
   }
 
   window.addEventListener('nearby-providers:loaded', (event) => {
