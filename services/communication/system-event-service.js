@@ -310,7 +310,7 @@ async function ensureProviderEmailTemplate(event) {
         language: "en_US",
         subject: templateDefinition.subject,
         body: templateDefinition.body,
-        bodyHtml: "",
+        bodyHtml: templateDefinition.bodyHtml || "",
         createdBy: "system",
       },
     },
