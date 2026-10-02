@@ -186,3 +186,19 @@ test("original unlock debit is preserved and refund is represented as a separate
   assert.match(creditService, /originalWalletTransactionId/);
   assert.doesNotMatch(creditService, /deleteOne\([\s\S]*lead_unlock/);
 });
+
+
+test("Not Confirmed reviews have no default refund filter", () => {
+  const view = source("views/provider-unlock/not-confirmed.ejs");
+
+  const initialFilters = view.match(/filters:\s*\{[\s\S]*?\},\s*pagination:/)?.[0] || "";
+  const resetFilters = view.match(/reset\(\)\s*\{[\s\S]*?this\.search\(\);/)?.[0] || "";
+
+  assert.match(initialFilters, /refundStatus: ''/);
+  assert.doesNotMatch(initialFilters, /refundStatus: 'pending_review'/);
+  assert.match(resetFilters, /refundStatus: ''/);
+  assert.doesNotMatch(resetFilters, /refundStatus: 'pending_review'/);
+  assert.match(view, /<option value="pending_review">Pending review<\/option>/);
+  assert.match(view, /<option value="">All Not Confirmed<\/option>/);
+  assert.match(view, /if \(this\.filters\.refundStatus\) q\.set\('refundStatus', this\.filters\.refundStatus\)/);
+});
