@@ -461,14 +461,14 @@ async function sendProviderEmail(event, context, variables, actor) {
     metadata: { event, providerLeadUnlockId: context.providerLeadUnlockId || "", source: context.source || "provider-portal" },
   };
   const terminalFailureStatuses = new Set(["failed", "bounced", "complained", "rejected"]);
-  const shouldRetryAssignmentEmail = event === "provider_lead_assigned";
+  const shouldRetryProviderEmail = ["provider_lead_assigned", "provider_credit_reverted"].includes(event);
   let communication;
   let retried = false;
 
   try {
     communication = await communicationService.send(payload, actor || "system-event");
   } catch (error) {
-    if (!shouldRetryAssignmentEmail || !error?.communicationId) throw error;
+    if (!shouldRetryProviderEmail || !error?.communicationId) throw error;
     retried = true;
     communication = await communicationService.retry(
       error.communicationId,
@@ -478,7 +478,7 @@ async function sendProviderEmail(event, context, variables, actor) {
   }
 
   if (
-    shouldRetryAssignmentEmail
+    shouldRetryProviderEmail
     && !retried
     && terminalFailureStatuses.has(String(communication?.status || "").toLowerCase())
     && communication?.communicationId
